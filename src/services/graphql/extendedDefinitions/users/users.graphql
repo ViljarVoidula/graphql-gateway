@@ -1,0 +1,21 @@
+type userDetails {
+  id: ID!
+  name: String
+  profession: String
+}
+
+type Query {
+  findUsersDetails: [userDetails]
+  getUserDetails(id: ID!): userDetails
+}
+
+input userData {
+  name: String
+  profession: String
+}
+
+type Mutation {
+  addUserDetails(data: userData): userDetails
+  patchUserDetails(id: ID!, data: userData): userDetails
+  removeUserDetails(id: ID!): userDetails
+}
