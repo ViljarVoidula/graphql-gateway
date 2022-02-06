@@ -23,7 +23,7 @@
 - yarn
 - yarn dev
 - yarn generate - to refresh types based on graphql schema
-- yarn 
+- yarn
 
 # Usecase
 
@@ -36,15 +36,14 @@ mutation{
   }
 }
 ```
-- validate schema was added 
 
+- validate schema was added
 
-
+```
 {
   character(id: 3) {
     id
     name
   }
 }
-
-
+```
