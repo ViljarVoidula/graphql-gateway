@@ -24,6 +24,8 @@ const extendedResolvers = Object.keys(definitions).map(
   (key) => definitions[key]['s.schema.ts']['default'].resolvers
 );
 
+debugger;
+
 const topic = 'NEW_ENDPOINT';
 const pubsub = new PubSub();
 

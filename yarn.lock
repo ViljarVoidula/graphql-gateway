@@ -516,6 +516,11 @@
     ts-node "^9"
     tslib "^2"
 
+"@feathersjs/hooks@^0.7.3":
+  version "0.7.3"
+  resolved "https://registry.yarnpkg.com/@feathersjs/hooks/-/hooks-0.7.3.tgz#ecc9dadf4ebd36225ffa54afe5df89beec0a6cc2"
+  integrity sha512-IKM3kA9qE5pPmsHu6WiykUTEV8DZPuMMh3oWwydkk3XDAFzYNrzLRfRgi3zch9aXkeOHGAuWyxs6/vbVkQnqkw==
+
 "@graphql-codegen/cli@^2.5.0":
   version "2.5.0"
   resolved "https://registry.yarnpkg.com/@graphql-codegen/cli/-/cli-2.5.0.tgz#a8d3be7b15159d2549af8f76bebba708231727b2"

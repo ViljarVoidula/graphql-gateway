@@ -1,10 +1,9 @@
 import { UserDetails } from '../../../types/types';
-import { Service } from '../../base.service';
-
+import { Service } from '../base.service';
+import ResolverFactory from '../../../utils/resolverFactory';
 let storedUsers: Array<UserDetails> = [];
 
 const userService = new Service(__dirname + '/users.graphql');
-
 /*
   User service setup
 */
@@ -16,14 +15,36 @@ userService
   .addQuery('findUserData', async function () {
     return storedUsers;
   })
-  .addQuery('getUserData', async function (id: string) {
-    if (Number(id)) {
-      const [response] = storedUsers.filter((el) => el.id === id);
-      return response;
-    } else {
-      throw new Error(`Could not find user ${id}`);
-    }
-  })
+  .addQuery(
+    'getUserData',
+    ResolverFactory(
+      async function (_: any, { id }: any, _ctx: any) {
+        if (Number(id)) {
+          const [response] = storedUsers.filter((el) => el.id === id);
+          return response;
+        } else {
+          throw new Error(`Could not find user ${id}`);
+        }
+      },
+      {
+        before: [
+          (ctx: any) => {
+            console.info('running before the resolver side-effects');
+          },
+        ],
+        after: [
+          (ctx: any) => {
+            console.info('running after the resolver side-effects');
+          },
+        ],
+        error: [
+          (ctx: any) => {
+            console.error('handle errors, rollback or  do a magic trick');
+          },
+        ],
+      }
+    )
+  )
   .addMutation('addUserData', async function (_root: any, data: UserDetails) {
     const id = storedUsers.length + 1;
     const user = {
@@ -43,6 +64,7 @@ userService
     };
     return storedUsers[Number(id)];
   })
+
   .addMutation('removeUserData', async function (id: string) {
     let response = { ...storedUsers[Number(id)] };
     storedUsers.splice(Number(id), 1);

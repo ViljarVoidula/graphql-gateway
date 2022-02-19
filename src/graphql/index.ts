@@ -29,9 +29,6 @@ const loader = new SchemaLoader({
       url: 'https://graphqlpokemon.favware.tech/',
       // setting sdlQuery
       sdlQuery: getIntrospectionQuery(),
-      merge: {
-        
-      }
     },
   ],
 
