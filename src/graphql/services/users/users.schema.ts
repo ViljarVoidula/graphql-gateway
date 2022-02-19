@@ -33,6 +33,7 @@ userService
           throw new Error(`Could not find user ${id}`);
         }
       },
+      // example of optional side-effect handler with hooks
       {
         before: [
           (ctx: any) => {
