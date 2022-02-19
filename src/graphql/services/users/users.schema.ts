@@ -45,31 +45,40 @@ userService
       }
     )
   )
-  .addMutation('addUserData', async function (_root: any, data: UserDetails) {
-    const id = storedUsers.length + 1;
-    const user = {
-      id: id.toString(),
-      name: data?.name ?? 'John',
-      profession: data?.profession ?? 'Wizard',
-    };
-    storedUsers.push(user);
+  .addMutation(
+    'addUserData',
+    ResolverFactory(async function (_root: any, data: UserDetails) {
+      const id = storedUsers.length + 1;
+      const user = {
+        id: id.toString(),
+        name: data?.name ?? 'John',
+        profession: data?.profession ?? 'Wizard',
+      };
+      storedUsers.push(user);
 
-    return user;
-  })
-  .addMutation('patchUserData', async function (id: string, data: UserDetails) {
-    storedUsers[Number(id)] = {
-      id,
-      ...(data.name ? { name: data.name } : {}),
-      ...(data.profession ? { name: data.profession } : {}),
-    };
-    return storedUsers[Number(id)];
-  })
+      return user;
+    })
+  )
+  .addMutation(
+    'patchUserData',
+    ResolverFactory(async function (id: string, data: UserDetails) {
+      storedUsers[Number(id)] = {
+        id,
+        ...(data.name ? { name: data.name } : {}),
+        ...(data.profession ? { name: data.profession } : {}),
+      };
+      return storedUsers[Number(id)];
+    })
+  )
 
-  .addMutation('removeUserData', async function (id: string) {
-    let response = { ...storedUsers[Number(id)] };
-    storedUsers.splice(Number(id), 1);
+  .addMutation(
+    'removeUserData',
+    ResolverFactory(async function (id: string) {
+      let response = { ...storedUsers[Number(id)] };
+      storedUsers.splice(Number(id), 1);
 
-    return response;
-  });
+      return response;
+    })
+  );
 
 export default userService;
