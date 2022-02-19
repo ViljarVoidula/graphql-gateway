@@ -9,12 +9,19 @@ const userService = new Service(__dirname + '/users.graphql');
 */
 
 userService
-  .addFieldToType('UserData', 'pokemonStatus', async function () {
-    return 'dead';
-  })
-  .addQuery('findUserData', async function () {
-    return storedUsers;
-  })
+  .addFieldToType(
+    'UserData',
+    'pokemonStatus',
+    ResolverFactory(async function () {
+      return 'dead';
+    })
+  )
+  .addQuery(
+    'findUserData',
+    ResolverFactory(async function () {
+      return storedUsers;
+    })
+  )
   .addQuery(
     'getUserData',
     ResolverFactory(
