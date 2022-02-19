@@ -1,6 +1,6 @@
 import fs from 'fs';
 import { makeExecutableSchema } from '@graphql-tools/schema';
-import { Endpoint } from '../../types';
+import { Endpoint } from '../types';
 import { PubSub } from 'graphql-subscriptions';
 
 import requireAll from 'require-all';
@@ -8,7 +8,7 @@ import requireAll from 'require-all';
 const { mergeResolvers, mergeTypeDefs } = require('@graphql-tools/merge');
 
 const definitions = requireAll({
-  dirname: __dirname + '/extendedDefinitions',
+  dirname: __dirname + '/services',
   filter: /\w\.?schema.ts$/,
   recursive: true,
 });
@@ -17,11 +17,11 @@ const rootSchema = fs.readFileSync(`${__dirname}/schema.graphql`, {
   encoding: 'utf8',
 });
 
-const extendedSchema = Object.keys(definitions).map(
-  (key) => definitions[key]['s.schema.ts'][key].typeDef
-);
+const extendedSchema = Object.keys(definitions).map((key) => {
+  return definitions[key]['s.schema.ts']['default'].typeDef;
+});
 const extendedResolvers = Object.keys(definitions).map(
-  (key) => definitions[key]['s.schema.ts'][key].resolvers
+  (key) => definitions[key]['s.schema.ts']['default'].resolvers
 );
 
 const topic = 'NEW_ENDPOINT';

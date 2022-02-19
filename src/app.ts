@@ -1,5 +1,5 @@
 import express from 'express';
-import services from './services';
+import graphql from './graphql';
 import { App } from './types';
 
 const app: App = express();
@@ -8,6 +8,6 @@ const app: App = express();
  */
 
 // init services currently /graphql
-services(app);
+graphql(app);
 
 export default app;

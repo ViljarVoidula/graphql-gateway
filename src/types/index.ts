@@ -24,6 +24,7 @@ declare namespace Gateway {
     sdl?: string | Source;
     prefix?: string;
     sdlQuery?: string;
+    merge?: any;
   }
 
   interface LoaderContext {

@@ -9,10 +9,10 @@ import {
   getIntrospectionQuery,
 } from 'graphql';
 
-import SchemaLoader from '../../utils/schemaLoader';
-import RemoteExecutor from '../../utils/remoteExecutor';
+import SchemaLoader from '../utils/schemaLoader';
+import RemoteExecutor from '../utils/remoteExecutor';
 import buildMainSchema from './schema';
-import { App } from '../../types';
+import { App } from '../types';
 
 import { useServer } from 'graphql-ws/lib/use/ws';
 
@@ -29,8 +29,12 @@ const loader = new SchemaLoader({
       url: 'https://graphqlpokemon.favware.tech/',
       // setting sdlQuery
       sdlQuery: getIntrospectionQuery(),
+      merge: {
+        
+      }
     },
   ],
+
   buildSchema: (loadedEndpoints: any) => {
     const subschemas = loadedEndpoints.map(
       ({

@@ -1,0 +1,22 @@
+type UserData {
+  id: ID!
+  name: String
+  profession: String
+  pokemonStatus: String
+}
+
+type Query {
+  findUserData: [UserData]
+  getUserData(id: ID!): UserData
+}
+
+input UserDataInput {
+  name: String
+  profession: String
+}
+
+type Mutation {
+  addUserData(data: UserDataInput): UserData
+  patchUserData(id: ID!, data: UserDataInput): UserData
+  removeUserData(id: ID!): UserData
+}
