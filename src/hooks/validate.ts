@@ -4,7 +4,7 @@ import { InputValidationError } from '../utils/errors';
 const ajv = new Ajv();
 
 export default function (schema: Object) {
-  return (context: any) => {
+  return async (context: any) => {
     const [_, { data = {} }] = context?.arguments;
 
     assert.ok(Object.keys(data).length, 'No data in context to validate');
@@ -16,5 +16,6 @@ export default function (schema: Object) {
         ...(data as {}),
       });
     }
+    return context;
   };
 }

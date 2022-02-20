@@ -50,7 +50,7 @@ userService
   .addMutation(
     'addUserData',
     ResolverFactory(
-      async function (_root: any, data: UserDetails) {
+      async function (_root: any, { data }: any) {
         const id = storedUsers.length + 1;
         const user = {
           id: id.toString(),
@@ -73,7 +73,6 @@ userService
         ],
         error: [
           (ctx: any) => {
-            debugger;
             console.error('handle errors, rollback or do a magic trick');
           },
         ],
