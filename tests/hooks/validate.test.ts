@@ -19,7 +19,7 @@ describe('"src/hooks/validate.ts" test', async function () {
     });
   });
 
-  it('Hook throws input validation error if data does not match schema', async function () {
+  it('hook throws input validation error if data does not match schema', async function () {
     await assert.rejects(
       validate({
         type: 'object',
@@ -33,7 +33,7 @@ describe('"src/hooks/validate.ts" test', async function () {
     );
   });
 
-  it('Hook execution returns context ', async function () {
+  it('hook execution returns context ', async function () {
     context = { arguments: [0, { data: { key: 'test' } }] };
 
     const result = await validate({

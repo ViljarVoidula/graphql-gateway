@@ -33,4 +33,33 @@ describe('app tests ', async function () {
 
     assert.ok(response.data.__schema, 'Graphql returns schema');
   });
+
+  it('can query pokemon from external stitched api ', async function () {
+    const query = `{
+      getPokemon(pokemon: syclant){
+        sprite
+        species
+    
+      }
+    }`;
+
+    const { data: response } = await axios.post(
+      'http://localhost:4001/graphql?',
+      {
+        query,
+      }
+    );
+    assert.deepStrictEqual(
+      {
+        getPokemon: {
+          sprite: 'https://play.pokemonshowdown.com/sprites/gen5/syclant.png',
+          species: 'syclant',
+        },
+      },
+      response.data,
+      'Could not get Pokemon value from remote schema'
+    );
+
+    // assert.ok(response.data.__schema, 'Graphql returns schema');
+  });
 });
