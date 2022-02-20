@@ -28,14 +28,13 @@ const loader = new SchemaLoader({
         url: string;
         transforms: Array<Function>;
       }) => {
-        const { executor, subscriber } = new RemoteExecutor({
+        const { executor } = new RemoteExecutor({
           url,
         });
 
         return {
           schema: buildSchema(sdl),
           executor,
-          subscriber,
           batch: true,
           transforms,
         };
@@ -43,7 +42,6 @@ const loader = new SchemaLoader({
     );
 
     subschemas.push(buildMainSchema(loader));
-
     return stitchSchemas({
       subschemaConfigTransforms: [stitchingDirectivesTransformer],
       subschemas,
