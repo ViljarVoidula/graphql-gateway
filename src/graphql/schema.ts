@@ -9,7 +9,7 @@ const { mergeResolvers, mergeTypeDefs } = require('@graphql-tools/merge');
 
 const definitions = requireAll({
   dirname: __dirname + '/services',
-  filter: /\w\.?schema.ts$/,
+  filter: /\w\.?service.ts$/,
   recursive: true,
 });
 
@@ -18,10 +18,10 @@ const rootSchema = fs.readFileSync(`${__dirname}/schema.graphql`, {
 });
 
 const extendedSchema = Object.keys(definitions).map((key) => {
-  return definitions[key]['s.schema.ts']['default'].typeDef;
+  return definitions[key]['s.service.ts']['default'].typeDef;
 });
 const extendedResolvers = Object.keys(definitions).map(
-  (key) => definitions[key]['s.schema.ts']['default'].resolvers
+  (key) => definitions[key]['s.service.ts']['default'].resolvers
 );
 
 debugger;

@@ -9,7 +9,6 @@ export default function ResolverFactory(
   fn: any,
   _hooks?: { before?: Array<any>; after?: Array<any>; error?: Array<any> }
 ) {
-  debugger;
   return hooks(
     fn,
     middleware([

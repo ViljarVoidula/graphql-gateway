@@ -2,35 +2,20 @@ import { stitchingDirectives } from '@graphql-tools/stitching-directives';
 import { stitchSchemas } from '@graphql-tools/stitch';
 
 import { graphqlHTTP } from 'express-graphql';
-import {
-  buildSchema,
-  GraphQLSchema,
-  Source,
-  getIntrospectionQuery,
-} from 'graphql';
+import { buildSchema, GraphQLSchema, Source } from 'graphql';
 
 import SchemaLoader from '../utils/schemaLoader';
 import RemoteExecutor from '../utils/remoteExecutor';
 import buildMainSchema from './schema';
 import { App } from '../types';
-
 import { useServer } from 'graphql-ws/lib/use/ws';
+import config from 'config';
 
 const { stitchingDirectivesTransformer } = stitchingDirectives();
 
 const loader = new SchemaLoader({
   // add transforms to subschemas if conflicting values
-  endpoints: [
-    {
-      url: 'http://localhost:4001/graphql',
-      prefix: 'ns2',
-    },
-    {
-      url: 'https://graphqlpokemon.favware.tech/',
-      // setting sdlQuery
-      sdlQuery: getIntrospectionQuery(),
-    },
-  ],
+  endpoints: config?.get('endpoints') ?? [],
 
   buildSchema: (loadedEndpoints: any) => {
     const subschemas = loadedEndpoints.map(
@@ -73,6 +58,17 @@ export default function (app: App) {
       graphqlHTTP(() => ({
         schema: loader.schema as GraphQLSchema,
         graphiql: true,
+        customFormatErrorFn: (error) => {
+          // catch graphql errors
+          let returnValue = {
+            message: error.message,
+            path: error.path,
+            locations: error.locations,
+            extensions: error.extensions,
+            ...error.originalError,
+          };
+          return returnValue as Error;
+        },
       }))
     );
     // Hack to spin up WS for Subscriptions
