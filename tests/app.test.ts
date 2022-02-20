@@ -59,7 +59,103 @@ describe('app tests ', async function () {
       response.data,
       'Could not get Pokemon value from remote schema'
     );
+  });
 
-    // assert.ok(response.data.__schema, 'Graphql returns schema');
+  it('can add user to gateway api ', async function () {
+    const query = `mutation {
+      addUserData(data: {name: "teet", profession: "Wizard"}) {
+        id
+        name
+        profession
+        pokemonStatus
+      }
+    }
+    `;
+
+    const { data: response } = await axios.post(
+      'http://localhost:4001/graphql?',
+      {
+        query,
+      }
+    );
+    assert.deepStrictEqual(
+      {
+        id: '1',
+        name: 'teet',
+        profession: 'Wizard',
+        pokemonStatus: 'dead',
+      },
+      response.data.addUserData,
+      'Could not add user via mutation'
+    );
+  });
+
+  it('can fetch user from gateway api ', async function () {
+    const query = `{
+      getUserData(id: 1) {
+        id
+      }
+    }    
+    `;
+
+    const { data: response } = await axios.post(
+      'http://localhost:4001/graphql?',
+      {
+        query,
+      }
+    );
+    assert.deepStrictEqual(
+      {
+        id: '1',
+      },
+      response.data.getUserData,
+      'Could not fetch a user via query'
+    );
+  });
+
+  it('can fetch all users from gateway api ', async function () {
+    const query = `{
+      findUserData {
+        id
+      }
+    }`;
+
+    const { data: response } = await axios.post(
+      'http://localhost:4001/graphql?',
+      {
+        query,
+      }
+    );
+
+    assert.deepStrictEqual(
+      response.data.findUserData[0],
+      {
+        id: '1',
+      },
+      'Could not fetch users via query'
+    );
+  });
+
+  it('can remove a user from gateway api ', async function () {
+    const query = `mutation{
+      removeUserData(id: 1){
+        id
+      }
+    }`;
+
+    const { data: response } = await axios.post(
+      'http://localhost:4001/graphql?',
+      {
+        query,
+      }
+    );
+
+    assert.deepStrictEqual(
+      response.data.removeUserData,
+      {
+        id: '1',
+      },
+      'Could not remove user via query'
+    );
   });
 });

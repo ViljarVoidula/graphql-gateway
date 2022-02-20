@@ -6,6 +6,7 @@ import {
   getIntrospectionQuery,
 } from 'graphql';
 import { Endpoint, LoaderContext } from '../types';
+
 const { RenameTypes, RenameRootFields } = require('@graphql-tools/wrap');
 
 export default class SchemaLoader {

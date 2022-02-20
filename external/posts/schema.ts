@@ -34,7 +34,6 @@ export default makeExecutableSchema({
         };
         posts.push(newPost);
         pubsub.publish(topic, { newPost });
-        debugger;
         return newPost;
       },
     },

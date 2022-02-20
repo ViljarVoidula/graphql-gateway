@@ -93,9 +93,9 @@ userService
 
   .addMutation(
     'removeUserData',
-    ResolverFactory(async function (id: string) {
-      let response = { ...storedUsers[Number(id)] };
-      storedUsers.splice(Number(id), 1);
+    ResolverFactory(async function (_root: any, { id }: any) {
+      let response = storedUsers[Number(id) - 1];
+      storedUsers = storedUsers.splice(Number(id), 1);
 
       return response;
     })
