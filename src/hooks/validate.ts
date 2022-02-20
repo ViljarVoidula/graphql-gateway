@@ -6,7 +6,7 @@ const ajv = new Ajv();
 export default function (schema: Object) {
   return (context: any) => {
     const [_, { data = {} }] = context?.arguments;
-    schema = undefined;
+
     assert.ok(Object.keys(data).length, 'No data in context to validate');
     const validate = ajv.compile(schema);
 
