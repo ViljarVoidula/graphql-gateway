@@ -8,29 +8,10 @@ type Query {
   endpoints: [Endpoint!]!
 }
 
-type RegisterEndpointResult {
-  endpoint: Endpoint
-  success: Boolean!
-}
-
-type UnregisterEndpointResult {
-  success: Boolean!
-}
-
 type ReloadAllEndpointsResult {
   success: Boolean!
 }
 
 type Mutation {
-  registerEndpoint(
-    url: String!
-    prefix: String
-    sdlQuery: String
-  ): RegisterEndpointResult!
-  unregisterEndpoint(url: String!): UnregisterEndpointResult!
   reloadAllEndpoints: ReloadAllEndpointsResult!
-}
-
-type Subscription {
-  registerEndpoint: [RegisterEndpointResult!]
 }

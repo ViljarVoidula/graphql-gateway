@@ -22,6 +22,7 @@ describe('App tests ', async function () {
 
   it('Can run introspection query', async function () {
     const query = await getIntrospectionQuery();
+
     const { data: response } = await axios.post(
       'http://localhost:4001/graphql?',
       {

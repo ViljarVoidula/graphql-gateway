@@ -6,7 +6,7 @@
   "scripts": {
     "start:external": "ts-node ./external/posts/index.ts",
     "generate": "graphql-codegen",
-    "test": "ts-mocha",
+    "test": "mocha",
     "dev": "nodemon src/index.ts"
   },
   "dependencies": {
@@ -45,7 +45,6 @@
     "chai": "^4.3.6",
     "mocha": "^9.2.0",
     "nodemon": "^2.0.15",
-    "ts-mocha": "^9.0.2",
     "ts-node": "^10.4.0",
     "typescript": "^4.5.5"
   }
