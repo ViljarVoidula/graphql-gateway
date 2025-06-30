@@ -1,8 +1,0 @@
-{
-  "pollingInterval": 10000,
-  "endpoints": [
-    {
-      "url": "https://graphqlpokemon.favware.tech/"
-    }
-  ]
-}
