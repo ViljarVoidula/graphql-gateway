@@ -1,5 +1,5 @@
 import { buildClientSchema, getIntrospectionQuery, GraphQLSchema, printSchema, parse, IntrospectionQuery, ExecutionResult } from 'graphql';
-import { buildHTTPExecutor } from '@graphql-tools/executor-http';
+import { buildHMACExecutor } from './utils/hmacExecutor';
 import { isAsyncIterable } from '@graphql-tools/utils';
 
 interface LoadedEndpoint {
@@ -25,7 +25,7 @@ export class SchemaLoader {
         try {
           console.debug(`Fetching SDL from ${url}`);
           const introspectionQuery = getIntrospectionQuery();
-          const executor = buildHTTPExecutor({ endpoint: url, timeout: 1500 });
+          const executor = buildHMACExecutor({ endpoint: url, timeout: 1500, enableHMAC: false });
           const maybeResult = await executor({ document: parse(introspectionQuery) });
           let result: ExecutionResult<IntrospectionQuery>;
           if (isAsyncIterable(maybeResult)) {
@@ -37,6 +37,7 @@ export class SchemaLoader {
           }
           const data = result.data;
           if (!data || !data.__schema) {
+            
             throw new Error(`Invalid SDL response from ${url}`);
           }
           
