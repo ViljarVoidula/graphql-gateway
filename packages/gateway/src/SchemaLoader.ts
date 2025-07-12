@@ -7,10 +7,25 @@ interface LoadedEndpoint {
   sdl: string;
 }
 
+interface EndpointCache {
+  endpoints: string[];
+  lastUpdated: number;
+}
+
+// Cache for endpoint loading with TTL
+export const endpointCache = new WeakMap<SchemaLoader, EndpointCache>();
+const ENDPOINT_CACHE_TTL = 2 * 60 * 1000; // 2 minutes for endpoints
+
+// Schema cache for individual endpoints
+export const schemaCache = new Map<string, { sdl: string, lastUpdated: number }>();
+const SCHEMA_CACHE_TTL = 10 * 60 * 1000; // 10 minutes for individual schemas
+
 export class SchemaLoader {
   public schema: GraphQLSchema | null = null;
   public loadedEndpoints: LoadedEndpoint[] = [];
   private intervalId: NodeJS.Timeout | null = null;
+
+  private endpointLoader?: () => Promise<string[]>;
 
   constructor(
     private buildSchema: (endpoints: LoadedEndpoint[]) => GraphQLSchema,
@@ -18,10 +33,23 @@ export class SchemaLoader {
   ) {}
 
   async reload() {
+    // Load endpoints dynamically if a loader is set
+    const endpoints = await this.loadEndpoints();
+    
     const loadedEndpoints: LoadedEndpoint[] = [];
     await Promise.all(
-      this.endpoints.map(async url => {
+      endpoints.map(async url => {
         console.debug(`Loading schema from ${url}`);
+        
+        // Check schema cache first
+        const now = Date.now();
+        const cachedSchema = schemaCache.get(url);
+        if (cachedSchema && (now - cachedSchema.lastUpdated) < SCHEMA_CACHE_TTL) {
+          console.debug(`Using cached schema for ${url}`);
+          loadedEndpoints.push({ url, sdl: cachedSchema.sdl });
+          return;
+        }
+        
         try {
           console.debug(`Fetching SDL from ${url}`);
           const introspectionQuery = getIntrospectionQuery();
@@ -37,15 +65,24 @@ export class SchemaLoader {
           }
           const data = result.data;
           if (!data || !data.__schema) {
-            
             throw new Error(`Invalid SDL response from ${url}`);
           }
           
           const sdl = printSchema(buildClientSchema(data));
           loadedEndpoints.push({ url, sdl });
+          
+          // Update schema cache
+          schemaCache.set(url, { sdl, lastUpdated: now });
         } catch (err) {
           console.error(`Failed to load schema from ${url}:`, err);
-          // drop the schema, or return the last cached version, etc...
+          
+          // Try to use cached schema even if expired
+          if (cachedSchema) {
+            console.warn(`Using expired cached schema for ${url}`);
+            loadedEndpoints.push({ url, sdl: cachedSchema.sdl });
+          } else {
+            console.warn(`No cached schema available for ${url}, skipping`);
+          }
         }
       }),
     );
@@ -63,6 +100,10 @@ export class SchemaLoader {
     this.intervalId = setTimeout(async () => {
       console.debug(`Refreshing schema every ${interval}ms`);
       await this.reload();
+      
+      // Clean up expired cache entries periodically
+      this.cleanupExpiredCache();
+      
       this.intervalId = null;
       this.autoRefresh(interval);
     }, interval);
@@ -72,6 +113,63 @@ export class SchemaLoader {
     if (this.intervalId != null) {
       clearInterval(this.intervalId);
       this.intervalId = null;
+    }
+  }
+
+  setEndpointLoader(loader: () => Promise<string[]>) {
+    this.endpointLoader = loader;
+  }
+
+  async loadEndpoints(): Promise<string[]> {
+    const now = Date.now();
+    
+    // Check cache first
+    const cached = endpointCache.get(this);
+    if (cached && (now - cached.lastUpdated) < ENDPOINT_CACHE_TTL) {
+      console.debug('Using cached endpoints from SchemaLoader');
+      return cached.endpoints;
+    }
+
+    if (this.endpointLoader) {
+      try {
+        const endpoints = await this.endpointLoader();
+        this.endpoints = endpoints;
+        
+        // Update cache on successful load
+        endpointCache.set(this, {
+          endpoints,
+          lastUpdated: now
+        });
+        
+        console.debug(`Loaded ${endpoints.length} endpoints dynamically (cached)`);
+        return endpoints;
+      } catch (error) {
+        console.error('Failed to load endpoints dynamically:', error);
+        
+        // Return cached endpoints if available, even if expired
+        if (cached) {
+          console.warn('Endpoint loader failed, using cached endpoints');
+          return cached.endpoints;
+        }
+        debugger
+        // Fallback to static endpoints
+        console.warn('No cached endpoints available, using static endpoints');
+        return this.endpoints;
+      }
+    }
+    debugger
+    return this.endpoints;
+  }
+
+  cleanupExpiredCache() {
+    const now = Date.now();
+    
+    // Clean up expired schema cache entries
+    for (const [url, cache] of schemaCache.entries()) {
+      if (now - cache.lastUpdated > SCHEMA_CACHE_TTL * 2) { // Keep expired entries for 2x TTL
+        schemaCache.delete(url);
+        console.debug(`Cleaned up expired schema cache for ${url}`);
+      }
     }
   }
 }

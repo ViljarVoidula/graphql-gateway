@@ -98,7 +98,10 @@ export function buildHMACExecutor(options: HMACExecutorOptions) {
         headers,
       };
 
-      return fetch(url, updatedOptions);
+      return fetch(url, updatedOptions).catch((error) => {
+        console.error(`Fetch error for ${url}:`, error);
+        throw new Error(`Failed to fetch from ${url}: ${error.message}`);
+      })
     }
   });
 }

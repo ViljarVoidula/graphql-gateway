@@ -44,8 +44,9 @@ const legacyTypeDefs = `
     instructions: String!
   }
 
-  extend type Query {
+  type Query {
     endpoints: [Endpoint!]!
+    serviceKeys(url: String): [ServiceKeyInfo!]!
     keyStats: KeyStats!
   }
 
@@ -70,10 +71,23 @@ const legacyTypeDefs = `
     success: Boolean!
   }
 
-  extend type Mutation {
+  type RotateKeyResult {
+    oldKeyId: String
+    newKey: HMACKeyResult!
+    success: Boolean!
+  }
+
+  type RevokeKeyResult {
+    keyId: String!
+    success: Boolean!
+  }
+
+  type Mutation {
     registerEndpoint(url: String!): registerEndpointResult!
     removeEndpoint(url: String!): RemoveEndpointResult!
     reloadAllEndpoints: ReloadAllEndpointsResult!
+    rotateServiceKey(url: String!): RotateKeyResult!
+    revokeServiceKey(keyId: String!): RevokeKeyResult!
     generateServiceKey(url: String!): HMACKeyResult!
   }
 `;
@@ -96,6 +110,16 @@ const legacyResolvers = {
   },
   Query: {
     endpoints: () => [],  // Will be populated by schema loader
+    serviceKeys: (_root, { url }) => {
+      if (url) {
+        return keyManager.getServiceKeys(url);
+      }
+      // Get all services and their keys
+      const allServices = keyManager.getServices();
+      return allServices.flatMap(serviceUrl => 
+        keyManager.getServiceKeys(serviceUrl)
+      );
+    },
     keyStats: () => keyManager.getStats(),
   },
   Mutation: {
@@ -112,6 +136,16 @@ const legacyResolvers = {
     reloadAllEndpoints: () => {
       // This is now deprecated, should use the new service registry
       console.warn('reloadAllEndpoints is deprecated');
+      return { success: false };
+    },
+    rotateServiceKey: (_root, { url }) => {
+      // This is now deprecated, should use the new service registry
+      console.warn('rotateServiceKey is deprecated, use the new service registry');
+      return { success: false };
+    },
+    revokeServiceKey: (_root, { keyId }) => {
+      // This is now deprecated, should use the new service registry
+      console.warn('revokeServiceKey is deprecated, use the new service registry');
       return { success: false };
     },
     generateServiceKey: (_root, { url }) => {
