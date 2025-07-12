@@ -104,3 +104,7 @@ dist
 .tern-port
 
 .vscode/**
+packages/services/records/target
+packages/shared/mongodb-migrator/target
+notes/
+packages/gateway/.env.local

@@ -1,0 +1,105 @@
+volumes:
+  postgres_data:
+    name: postgres_data
+  minio:
+    name: minio_data
+  redis:
+    name: redis_data
+  mongo-data:
+    name: mongo_data
+  mongo-config:
+    name: mongo_config
+
+networks:
+  gateway_net:
+    name: gateway_net
+    driver: bridge
+  
+
+services:
+  postgres:
+    image: bitnami/postgresql:17.5.0
+    container_name: postgres
+    restart: always
+    ports:
+      - 10432:5432
+    shm_size: 2gb
+    environment:
+      POSTGRES_PASSWORD: password
+      POSTGRES_USER: postgres
+      DB_EXTENSION: "uuid-ossp"
+      POSTGRES_DB: gateway
+      POSTGRESQL_MAX_CONNECTIONS: 250
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - gateway_net
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - 22181:2181 # Changed from 2181:2181 to 22181:2181
+    networks:
+      - gateway_net
+  mongo:
+    image: mongo:8.0 
+    container_name: mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: password
+    volumes:
+      - mongo-data:/data/db # Persist MongoDB data
+      - mongo-config:/data/configdb # Persist MongoDB configuration
+    networks:
+      - gateway_net
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - zookeeper
+    ports:
+      - 9092:9092
+      - 29092:29092
+    environment:
+      KAFKA_PROCESS_ROLES: broker # Added this line
+      KAFKA_BROKER_ID: 1
+      CLUSTER_ID: test-cluster # Added this line
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - gateway_net
+  redis:
+    container_name: gateway-redis
+    image: redis:7.4.1-alpine
+    restart: always
+    ports:
+      - "26379:6379" # Changed from 16379 to 26379
+    volumes:
+      - redis:/data
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_DISABLE_COMMANDS=FLUSHDB,FLUSHALL
+    networks:
+      - gateway_net
+  
+  # records-service:
+  #   build: ./packages/rust-services/records
+  #   container_name: records-service
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     MONGODB_URI: mongodb://root:password@mongodb:27017/records?authSource=admin
+  #     DATABASE_NAME: records
+  #     SERVER_PORT: 8080
+  #     RUST_LOG: info
+  #   depends_on:
+  #     - mongo
+  #   networks:
+  #     - gateway_net
