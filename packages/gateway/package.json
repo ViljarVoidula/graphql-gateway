@@ -4,7 +4,9 @@
   "license": "MIT",
   "main": "index.js",
   "scripts": {
-    "start-gateway": "ts-node-dev src/index.ts"
+    "start-gateway": "ts-node-dev src/index.ts",
+    "test": "node --test --require ts-node/register src/SchemaLoader.test.ts src/utils/hmacExecutor.test.ts src/security/hmac.test.ts src/security/keyManager.test.ts",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-include='src/**/*.ts' --test-coverage-exclude='src/**/*.test.ts' --require ts-node/register src/SchemaLoader.test.ts src/utils/hmacExecutor.test.ts src/security/hmac.test.ts src/security/keyManager.test.ts"
   },
   "dependencies": {
     "@escape.tech/graphql-armor": "3.1.6",
@@ -38,6 +40,7 @@
   "devDependencies": {
     "@envelop/types": "^5.2.1",
     "@types/bcrypt": "^5.0.2",
+    "prettier": "^3.6.2",
     "ts-node": "^10.9.1",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.0.0"
