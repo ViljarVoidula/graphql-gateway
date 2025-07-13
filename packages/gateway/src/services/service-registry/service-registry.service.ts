@@ -249,16 +249,21 @@ export class ServiceRegistryService {
     // Generate a unique key ID
     const keyId = `sk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    // Generate a secure secret key
-    const secretKey = Buffer.from(
-      Array.from({ length: 32 }, () => Math.floor(Math.random() * 256))
-    ).toString('hex');
-
+    // Generate or get the secret key from keyManager
+    const serviceKey = keyManager.generateKey(url);
+    
     return {
       keyId,
-      secretKey,
-      instructions: `Use this key to authenticate requests to ${url}. Keep it secure!`
+      secretKey: serviceKey.secretKey,
+      instructions: `Service key generated for: ${url}. Store this securely - it won't be shown again.`
     };
+  }
+
+  async getExternallyAccessibleServices(): Promise<ServiceEntity[]> {
+    return this.serviceRepository.find({
+      where: { externally_accessible: true, status: ServiceStatus.ACTIVE },
+      relations: ['owner']
+    });
   }
 }
 
@@ -276,20 +281,20 @@ export class ServiceCacheManager {
   }
   
   static invalidateServiceCache() {
-    console.log('Invalidating service endpoint cache');
+    console.debug('Invalidating service endpoint cache');
     this.serviceEndpointCache.clear();
     
     // Also clear schema cache to force re-introspection
     const { schemaCache } = require('../../SchemaLoader');
     if (schemaCache) {
       schemaCache.clear();
-      console.log('Cleared schema cache');
+      console.debug('Cleared schema cache');
     }
   }
   
   static async triggerGatewayReload() {
     if (this.schemaLoader) {
-      console.log('Triggering gateway schema reload');
+      console.debug('Triggering gateway schema reload');
       await this.schemaLoader.reload();
     }
   }

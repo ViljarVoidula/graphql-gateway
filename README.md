@@ -1,3 +1,4 @@
+
 # GraphQL Gateway Project
 
 A comprehensive GraphQL gateway system with microservices architecture and robust database migration support.
@@ -88,18 +89,18 @@ The diagram below shows a potential architecture that separates external API int
    │                     │
    ▼                     ▼
 ┌─────────────────┐   ┌──────────────────┐   ┌────────────────────┐
-│ Identity Service│   │ Records Service  │   │ Categories Service │
-│ (TypeScript/JS) │   │ (Rust)           │   │ (Go)               │
-└────────┬────────┘   └────────┬─────────┘   └──────────┬─────────┘
-         │                     │                        │
-         ▼                     ▼                        ▼
-┌────────┴────────┐   ┌────────┴─────────┐   ┌──────────┴─────────┐
-│      TiDB       │   │     MongoDB      │   │     PostgreSQL     │
-└─────────────────┘   └──────────────────┘   └────────────────────┘
-         │                     │ (Events)               │
-         └────────────┬────────┴──────────┬─────────────┘
-                      │                  │
-                      ▼                  ▼
+│ Records Service │   │ Categories Service │
+│   (Rust)        │   │ (Go)               │
+└────────┬────────┘   └──────────┬─────────┘
+         │                        │
+         ▼                        ▼
+┌────────┴─────────┐   ┌──────────┴─────────┐
+│     MongoDB      │   │     PostgreSQL     │
+└──────────────────┘   └────────────────────┘
+         │ (Events)               │
+         └────────────┬───────────┘
+                      │
+                      ▼
             ┌──────────────────────────────────┐
             │       Kafka / NATS (Event Bus)   │
             └─────────────────┬────────────────┘
@@ -118,7 +119,6 @@ The diagram below shows a potential architecture that separates external API int
 
 2.  **Service Layer (Polyglot Microservices)**
     Each service is a self-contained unit with a clear business responsibility and its own database. They expose GraphQL schemas that the Gateway consumes.
-    -   **Identity Service (TypeScript/Feathers.js)**: Manages user accounts, authentication (e.g., JWT), and authorization rules.
     -   **Records Service (Rust)**: Handles the core business logic for creating and managing records, optimized for performance and safety.
     -   **Categories Service (Go)**: Manages data taxonomies or categories, built for high-concurrency reads.
 

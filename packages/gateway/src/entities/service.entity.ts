@@ -54,6 +54,11 @@ export class Service {
   @Column({ default: true })
   enableBatching: boolean;
 
+  @Field()
+  @Column({ default: false })
+  @Index()
+  externally_accessible: boolean; // Gateway admins control this
+
   @Field(() => User)
   @ManyToOne(() => User, { nullable: false })
   @JoinColumn({ name: 'ownerId' })

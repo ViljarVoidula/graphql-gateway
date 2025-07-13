@@ -89,7 +89,7 @@ export class SchemaLoader {
 
     this.loadedEndpoints = loadedEndpoints;
     this.schema = this.buildSchema(this.loadedEndpoints);
-    console.log(
+    console.debug(
       `gateway reload ${new Date().toLocaleString()}, endpoints: ${this.loadedEndpoints.length}`,
     );
     return this.schema;
