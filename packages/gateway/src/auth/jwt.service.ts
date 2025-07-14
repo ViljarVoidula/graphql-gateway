@@ -1,5 +1,6 @@
 import * as jwt from 'jsonwebtoken';
 import { Service } from 'typedi';
+import { log } from '../utils/logger';
 
 export interface JWTPayload {
   userId: string;
@@ -68,7 +69,7 @@ export class JWTService {
         tokenType: 'Bearer'
       };
     } catch (error) {
-      console.error('Token generation failed:', error);
+      log.error('Token generation failed:', error);
       throw new Error('Failed to generate tokens');
     }
   }
@@ -81,7 +82,7 @@ export class JWTService {
       }) as JWTPayload;
       return payload;
     } catch (error) {
-      console.error('JWT verification failed:', error);
+      log.error('JWT verification failed:', error);
       return null;
     }
   }
@@ -94,7 +95,7 @@ export class JWTService {
       }) as { userId: string; sessionId: string };
       return payload;
     } catch (error) {
-      console.error('Refresh token verification failed:', error);
+      log.error('Refresh token verification failed:', error);
       return null;
     }
   }

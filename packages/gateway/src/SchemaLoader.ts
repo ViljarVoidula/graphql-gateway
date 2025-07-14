@@ -1,6 +1,7 @@
 import { buildClientSchema, getIntrospectionQuery, GraphQLSchema, printSchema, parse, IntrospectionQuery, ExecutionResult } from 'graphql';
 import { buildHMACExecutor } from './utils/hmacExecutor';
 import { isAsyncIterable } from '@graphql-tools/utils';
+import { log } from './utils/logger';
 
 interface LoadedEndpoint {
   url: string;
@@ -39,19 +40,19 @@ export class SchemaLoader {
     const loadedEndpoints: LoadedEndpoint[] = [];
     await Promise.all(
       endpoints.map(async url => {
-        console.debug(`Loading schema from ${url}`);
+        log.debug(`Loading schema from ${url}`);
         
         // Check schema cache first
         const now = Date.now();
         const cachedSchema = schemaCache.get(url);
         if (cachedSchema && (now - cachedSchema.lastUpdated) < SCHEMA_CACHE_TTL) {
-          console.debug(`Using cached schema for ${url}`);
+          log.debug(`Using cached schema for ${url}`);
           loadedEndpoints.push({ url, sdl: cachedSchema.sdl });
           return;
         }
         
         try {
-          console.debug(`Fetching SDL from ${url}`);
+          log.debug(`Fetching SDL from ${url}`);
           const introspectionQuery = getIntrospectionQuery();
           const executor = buildHMACExecutor({ endpoint: url, timeout: 1500, enableHMAC: false });
           const maybeResult = await executor({ document: parse(introspectionQuery) });
@@ -74,14 +75,14 @@ export class SchemaLoader {
           // Update schema cache
           schemaCache.set(url, { sdl, lastUpdated: now });
         } catch (err) {
-          console.error(`Failed to load schema from ${url}:`, err);
+          log.error(`Failed to load schema from ${url}:`, err);
           
           // Try to use cached schema even if expired
           if (cachedSchema) {
-            console.warn(`Using expired cached schema for ${url}`);
+            log.warn(`Using expired cached schema for ${url}`);
             loadedEndpoints.push({ url, sdl: cachedSchema.sdl });
           } else {
-            console.warn(`No cached schema available for ${url}, skipping`);
+            log.warn(`No cached schema available for ${url}, skipping`);
           }
         }
       }),
@@ -89,7 +90,7 @@ export class SchemaLoader {
 
     this.loadedEndpoints = loadedEndpoints;
     this.schema = this.buildSchema(this.loadedEndpoints);
-    console.debug(
+    log.debug(
       `gateway reload ${new Date().toLocaleString()}, endpoints: ${this.loadedEndpoints.length}`,
     );
     return this.schema;
@@ -98,7 +99,7 @@ export class SchemaLoader {
   autoRefresh(interval = 3000) {
     this.stopAutoRefresh();
     this.intervalId = setTimeout(async () => {
-      console.debug(`Refreshing schema every ${interval}ms`);
+      log.debug(`Refreshing schema every ${interval}ms`);
       await this.reload();
       
       // Clean up expired cache entries periodically
@@ -126,7 +127,7 @@ export class SchemaLoader {
     // Check cache first
     const cached = endpointCache.get(this);
     if (cached && (now - cached.lastUpdated) < ENDPOINT_CACHE_TTL) {
-      console.debug('Using cached endpoints from SchemaLoader');
+      log.debug('Using cached endpoints from SchemaLoader');
       return cached.endpoints;
     }
 
@@ -141,19 +142,19 @@ export class SchemaLoader {
           lastUpdated: now
         });
         
-        console.debug(`Loaded ${endpoints.length} endpoints dynamically (cached)`);
+        log.debug(`Loaded ${endpoints.length} endpoints dynamically (cached)`);
         return endpoints;
       } catch (error) {
-        console.error('Failed to load endpoints dynamically:', error);
+        log.error('Failed to load endpoints dynamically:', error);
         
         // Return cached endpoints if available, even if expired
         if (cached) {
-          console.warn('Endpoint loader failed, using cached endpoints');
+          log.warn('Endpoint loader failed, using cached endpoints');
           return cached.endpoints;
         }
         debugger
         // Fallback to static endpoints
-        console.warn('No cached endpoints available, using static endpoints');
+        log.warn('No cached endpoints available, using static endpoints');
         return this.endpoints;
       }
     }
@@ -168,7 +169,7 @@ export class SchemaLoader {
     for (const [url, cache] of schemaCache.entries()) {
       if (now - cache.lastUpdated > SCHEMA_CACHE_TTL * 2) { // Keep expired entries for 2x TTL
         schemaCache.delete(url);
-        console.debug(`Cleaned up expired schema cache for ${url}`);
+        log.debug(`Cleaned up expired schema cache for ${url}`);
       }
     }
   }

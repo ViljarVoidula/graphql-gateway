@@ -1,6 +1,7 @@
 import { startServer } from './gateway';
+import { log } from './utils/logger';
 
 startServer().catch(e => {
-  console.error(e);
+  log.error(e);
   process.exit(1);
 });

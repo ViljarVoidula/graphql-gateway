@@ -1,5 +1,6 @@
 import { createClient } from 'redis';
 import { YogaInitialContext } from 'graphql-yoga';
+import { log } from '../utils/logger';
 
 export interface SessionData {
   userId: string;
@@ -31,9 +32,9 @@ export const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 export async function initializeRedis() {
   try {
     await redisClient.connect();
-    console.debug('Redis connected for session storage');
+    log.debug('Redis connected for session storage');
   } catch (error) {
-    console.error('Failed to connect to Redis:', error);
+    log.error('Failed to connect to Redis:', error);
     throw error;
   }
 }
@@ -73,7 +74,7 @@ export async function getSession(sessionId: string): Promise<SessionData | null>
       lastActivity: new Date(parsed.lastActivity)
     };
   } catch (error) {
-    console.error('Error getting session:', error);
+    log.error('Error getting session:', error);
     return null;
   }
 }
@@ -105,7 +106,7 @@ export async function deleteAllUserSessions(userId: string): Promise<void> {
           pipeline.del(key);
         }
       } catch (error) {
-        console.error('Error parsing session data:', error);
+        log.error('Error parsing session data:', error);
       }
     }
   }
@@ -115,5 +116,5 @@ export async function deleteAllUserSessions(userId: string): Promise<void> {
 
 export async function cleanupExpiredSessions(): Promise<void> {
   // Redis automatically handles expiration, but we can implement additional cleanup if needed
-  console.debug('Session cleanup completed');
+  log.debug('Session cleanup completed');
 }

@@ -11,6 +11,7 @@ import { Session } from "../../entities/session.entity";
 import { JWTService } from "../../auth/jwt.service";
 import { AuthResponse, RefreshTokenResponse } from "../../auth/auth.types";
 import { RefreshTokenInput } from "../../auth/refresh-token.input";
+import { log } from "../../utils/logger";
 
 @Service()
 @Resolver(User)
@@ -172,7 +173,7 @@ export class UserResolver {
 
       return true;
     } catch (error) {
-      console.error('Logout error:', error);
+      log.error('Logout error:', error);
       return false;
     }
   }
@@ -199,7 +200,7 @@ export class UserResolver {
 
       return true;
     } catch (error) {
-      console.error('Logout all error:', error);
+      log.error('Logout all error:', error);
       return false;
     }
   }

@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { log } from '../utils/logger';
 
 export interface HMACRequest {
   method: string;
@@ -41,7 +42,7 @@ export class HMACUtils {
     // Check timestamp to prevent replay attacks
     const now = Date.now();
     if (Math.abs(now - request.timestamp) > timeoutMs) {
-      console.warn(`HMAC timestamp verification failed. Request time: ${request.timestamp}, Current time: ${now}`);
+      log.warn(`HMAC timestamp verification failed. Request time: ${request.timestamp}, Current time: ${now}`);
       return false;
     }
 

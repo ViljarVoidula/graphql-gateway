@@ -44,7 +44,8 @@
     "type-graphql": "2.0.0-rc.2",
     "typedi": "0.10.0",
     "typeorm": "0.3.25",
-    "wait-on": "8.0.0"
+    "wait-on": "8.0.0",
+    "winston": "^3.17.0"
   },
   "devDependencies": {
     "@envelop/types": "5.2.1",
