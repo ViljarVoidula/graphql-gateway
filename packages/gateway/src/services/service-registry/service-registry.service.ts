@@ -4,6 +4,7 @@ import { Service as ServiceEntity, ServiceStatus } from '../../entities/service.
 import { ServiceKey, ServiceKeyStatus } from '../../entities/service-key.entity';
 import { User } from '../users/user.entity';
 import { keyManager } from '../../security/keyManager';
+import { log } from '../../utils/logger';
 
 @Service()
 export class ServiceRegistryService {
@@ -54,10 +55,10 @@ export class ServiceRegistryService {
     timeout?: number;
     enableBatching?: boolean;
   }): Promise<{ service: ServiceEntity; hmacKey?: any }> {
-    debugger
+    
     // Verify owner exists
     const owner = await this.userRepository.findOne({ where: { id: data.ownerId } });
-    debugger
+    
     if (!owner) {
       throw new Error('Owner not found');
     }
@@ -69,7 +70,7 @@ export class ServiceRegistryService {
     });
 
     const savedService = await this.serviceRepository.save(service);
-    debugger
+    
     let hmacKey = null;
     if (data.enableHMAC !== false) {
       // Generate HMAC key
@@ -100,7 +101,7 @@ export class ServiceRegistryService {
     
     // Trigger gateway reload asynchronously (don't wait for it)
     ServiceCacheManager.triggerGatewayReload().catch(error => {
-      console.error('Failed to trigger gateway reload:', error);
+      log.error('Failed to trigger gateway reload:', error);
     });
     
     return { service: serviceWithOwner, hmacKey };
@@ -125,7 +126,7 @@ export class ServiceRegistryService {
     // Invalidate cache and trigger gateway reload
     ServiceCacheManager.invalidateServiceCache();
     ServiceCacheManager.triggerGatewayReload().catch(error => {
-      console.error('Failed to trigger gateway reload:', error);
+      log.error('Failed to trigger gateway reload:', error);
     });
     
     return this.getServiceById(id);
@@ -158,7 +159,7 @@ export class ServiceRegistryService {
     // Invalidate cache and trigger gateway reload
     ServiceCacheManager.invalidateServiceCache();
     ServiceCacheManager.triggerGatewayReload().catch(error => {
-      console.error('Failed to trigger gateway reload:', error);
+      log.error('Failed to trigger gateway reload:', error);
     });
     
     return true;
@@ -281,20 +282,20 @@ export class ServiceCacheManager {
   }
   
   static invalidateServiceCache() {
-    console.debug('Invalidating service endpoint cache');
+    log.debug('Invalidating service endpoint cache');
     this.serviceEndpointCache.clear();
     
     // Also clear schema cache to force re-introspection
     const { schemaCache } = require('../../SchemaLoader');
     if (schemaCache) {
       schemaCache.clear();
-      console.debug('Cleared schema cache');
+      log.debug('Cleared schema cache');
     }
   }
   
   static async triggerGatewayReload() {
     if (this.schemaLoader) {
-      console.debug('Triggering gateway schema reload');
+      log.debug('Triggering gateway schema reload');
       await this.schemaLoader.reload();
     }
   }

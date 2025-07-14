@@ -15,6 +15,8 @@ export const dataSource = new TypeORM.DataSource({
   cache: process.env.NODE_ENV !== 'test', // Disable caching in tests for speed
   logging: process.env.NODE_ENV === 'test' ? false : (process.env.NODE_ENV === 'development' ? "all" : ["error"]),
   entities: [User, Session, Service, ServiceKey, Application, ApiKey],
+  migrations: ["src/migrations/*.ts"],
+  migrationsRun: process.env.NODE_ENV === 'production', // Auto-run migrations in production
   logger: "advanced-console",
   // Optimizations for tests
   ...(process.env.NODE_ENV === 'test' && {

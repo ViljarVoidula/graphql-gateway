@@ -18,6 +18,7 @@ import { Service } from './entities/service.entity';
 import { ServiceKey } from './entities/service-key.entity';
 import { SessionService } from './services/session.service';
 import { ServiceRegistryService, ServiceCacheManager } from './services/service-registry/service-registry.service';
+import { log } from './utils/logger';
 import "reflect-metadata";
 
 const { stitchingDirectivesTransformer } = stitchingDirectives();
@@ -33,7 +34,10 @@ async function loadServicesFromDatabase(): Promise<string[]> {
   // Check cache first
   const cached = serviceEndpointCache.get(cacheKey);
   if (cached && (now - cached.lastUpdated) < CACHE_TTL) {
-    console.debug('Using cached service endpoints');
+    log.debug('Using cached service endpoints', {
+      operation: 'loadServicesFromDatabase',
+      metadata: { source: 'cache', endpointCount: cached.endpoints.length }
+    });
     return cached.endpoints;
   }
   
@@ -48,19 +52,32 @@ async function loadServicesFromDatabase(): Promise<string[]> {
       lastUpdated: now
     });
     
-    console.debug(`Loaded ${endpoints.length} services from database (cached)`);
+    log.debug('Loaded services from database', {
+      operation: 'loadServicesFromDatabase',
+      metadata: { source: 'database', endpointCount: endpoints.length, cached: true }
+    });
     return endpoints;
   } catch (error) {
-    console.error('Failed to load services from database:', error);
+    log.error('Failed to load services from database', {
+      operation: 'loadServicesFromDatabase',
+      error: error instanceof Error ? error : new Error(String(error)),
+      metadata: { source: 'database' }
+    });
     
     // Return cached endpoints if available, even if expired
     if (cached) {
-      console.warn('Database unavailable, using cached service endpoints');
+      log.warn('Database unavailable, using cached service endpoints', {
+        operation: 'loadServicesFromDatabase',
+        metadata: { source: 'cache', fallback: true, endpointCount: cached.endpoints.length }
+      });
       return cached.endpoints;
     }
     
     // No cache available, return empty array
-    console.warn('No cached services available, returning empty array');
+    log.warn('No cached services available, returning empty array', {
+      operation: 'loadServicesFromDatabase',
+      metadata: { source: 'fallback', endpointCount: 0 }
+    });
     return [];
   }
 }
@@ -73,7 +90,10 @@ function cleanupServiceCache() {
   
   if (cached && (now - cached.lastUpdated) > CACHE_TTL * 2) { // Keep expired entries for 2x TTL
     serviceEndpointCache.delete(cacheKey);
-    console.debug('Cleaned up expired service cache');
+    log.debug('Cleaned up expired service cache', {
+      operation: 'cleanupServiceCache',
+      metadata: { source: 'cache' }
+    });
   }
 }
 
@@ -133,18 +153,62 @@ export async function startServer() {
   // Initialize dataSource before creating schema
   try {
     await dataSource.initialize();
-    console.debug('Database connection initialized successfully');
+    log.info('Database connection initialized successfully', {
+      operation: 'startServer',
+      metadata: { component: 'database' }
+    });
   } catch (error) {
-    console.error('Failed to initialize database connection:', error);
+    log.error('Failed to initialize database connection', {
+      operation: 'startServer',
+      error: error instanceof Error ? error : new Error(String(error)),
+      metadata: { component: 'database' }
+    });
     throw error;
+  }
+
+  // Run migrations automatically in development and production
+  if (process.env.NODE_ENV !== 'test') {
+    try {
+      const pendingMigrations = await dataSource.showMigrations();
+      if (pendingMigrations) {
+        log.info('Running pending migrations', {
+          operation: 'startServer',
+          metadata: { component: 'migrations' }
+        });
+        await dataSource.runMigrations();
+        log.info('Migrations completed successfully', {
+          operation: 'startServer',
+          metadata: { component: 'migrations', status: 'completed' }
+        });
+      } else {
+        log.info('No pending migrations', {
+          operation: 'startServer',
+          metadata: { component: 'migrations', status: 'up-to-date' }
+        });
+      }
+    } catch (error) {
+      log.error('Failed to run migrations', {
+        operation: 'startServer',
+        error: error instanceof Error ? error : new Error(String(error)),
+        metadata: { component: 'migrations' }
+      });
+      throw error;
+    }
   }
 
   // Initialize Redis for sessions
   try {
     await initializeRedis();
-    console.debug('Redis initialized for session storage');
+    log.info('Redis initialized for session storage', {
+      operation: 'startServer',
+      metadata: { component: 'redis' }
+    });
   } catch (error) {
-    console.error('Failed to initialize Redis:', error);
+    log.error('Failed to initialize Redis', {
+      operation: 'startServer',
+      error: error instanceof Error ? error : new Error(String(error)),
+      metadata: { component: 'redis' }
+    });
     throw error;
   }
 
@@ -161,9 +225,16 @@ export async function startServer() {
   try {
     const serviceRegistryService = Container.get(ServiceRegistryService);
     await serviceRegistryService.loadServicesIntoKeyManager();
-    console.debug('Loaded existing services into key manager');
+    log.info('Loaded existing services into key manager', {
+      operation: 'startServer',
+      metadata: { component: 'keyManager' }
+    });
   } catch (error) {
-    console.error('Failed to load services into key manager:', error);
+    log.error('Failed to load services into key manager', {
+      operation: 'startServer',
+      error: error instanceof Error ? error : new Error(String(error)),
+      metadata: { component: 'keyManager' }
+    });
   }
 
   // Load services from database and set them on the loader
@@ -176,9 +247,9 @@ export async function startServer() {
     ServiceCacheManager.setSchemaLoader(loader);
     ServiceCacheManager.setServiceCache(serviceEndpointCache);
     
-    console.debug(`Loaded ${serviceEndpoints.length} services from database:`, serviceEndpoints);
+    log.debug(`Loaded ${serviceEndpoints.length} services from database:`, serviceEndpoints);
   } catch (error) {
-    console.error('Failed to load services from database:', error);
+    log.error('Failed to load services from database:', error);
   }
 
   // Start periodic cleanup of expired keys and cache
@@ -200,11 +271,11 @@ export async function startServer() {
   // sleep 2s
   await loader.reload();
   await new Promise<void>(resolve => server.listen(4000, resolve));
-  console.debug('Gateway started on http://localhost:4000');
-  console.debug(`HMAC key cleanup will run every ${KEY_CLEANUP_INTERVAL} ms`);
+  log.debug('Gateway started on http://localhost:4000');
+  log.debug(`HMAC key cleanup will run every ${KEY_CLEANUP_INTERVAL} ms`);
 
   await loader.autoRefresh(REFERSH_INTERVAL);
-  console.debug(`Gateway schema will refresh every ${REFERSH_INTERVAL} ms`);
+  log.debug(`Gateway schema will refresh every ${REFERSH_INTERVAL} ms`);
   
   // Store cleanup intervals for stopping later
   (server as any).keyCleanupInterval = cleanupInterval;
@@ -227,7 +298,7 @@ export async function stopServer() {
   // Close database connection
   if (dataSource.isInitialized) {
     await dataSource.destroy();
-    console.debug('Database connection closed');
+    log.debug('Database connection closed');
   }
   
   await new Promise(resolve => server.close(resolve));

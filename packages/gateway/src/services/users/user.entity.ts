@@ -58,13 +58,30 @@ export class User {
   @OneToMany(() => Service, service => service.owner)
   ownedServices: Service[];
 
+  private passwordChanged = false;
+  private originalPassword?: string;
+
   @BeforeInsert()
-  @BeforeUpdate()
-  async hashPassword() {
+  async hashPasswordOnInsert() {
     if (this.password) {
       const saltRounds = 12;
       this.password = await bcrypt.hash(this.password, saltRounds);
     }
+  }
+
+  @BeforeUpdate()
+  async hashPasswordOnUpdate() {
+    // Only hash if password was explicitly changed via setPassword method
+    if (this.password && this.passwordChanged) {
+      const saltRounds = 12;
+      this.password = await bcrypt.hash(this.password, saltRounds);
+      this.passwordChanged = false;
+    }
+  }
+
+  setPassword(newPassword: string) {
+    this.password = newPassword;
+    this.passwordChanged = true;
   }
 
   async comparePassword(plainTextPassword: string): Promise<boolean> {

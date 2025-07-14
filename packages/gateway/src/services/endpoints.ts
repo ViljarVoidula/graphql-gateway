@@ -22,106 +22,6 @@ const { authZDirectiveTransformer } = authZDirective();
 // Memoization cache for schema creation
 const schemaCache = new WeakMap();
 
-// Legacy endpoint types for backward compatibility
-const legacyTypeDefs = `
-  type Endpoint {
-    url: String!
-    sdl: String
-    hmacKey: ServiceKeyInfo
-  }
-
-  type ServiceKeyInfo {
-    url: String!
-    keyId: String!
-    createdAt: String!
-    expiresAt: String
-    status: String!
-  }
-
-  type HMACKeyResult {
-    keyId: String!
-    secretKey: String!
-    instructions: String!
-  }
-
-  extend type Query {
-    endpoints: [Endpoint!]!
-    keyStats: KeyStats!
-  }
-
-  type KeyStats {
-    totalKeys: Int!
-    activeKeys: Int!
-    revokedKeys: Int!
-    services: Int!
-  }
-
-  type registerEndpointResult {
-    endpoint: Endpoint
-    hmacKey: HMACKeyResult
-    success: Boolean!
-  }
-
-  type RemoveEndpointResult {
-    success: Boolean!
-  }
-
-  type ReloadAllEndpointsResult {
-    success: Boolean!
-  }
-
-  extend type Mutation {
-    registerEndpoint(url: String!): registerEndpointResult!
-    removeEndpoint(url: String!): RemoveEndpointResult!
-    reloadAllEndpoints: ReloadAllEndpointsResult!
-    generateServiceKey(url: String!): HMACKeyResult!
-  }
-`;
-
-// Legacy resolvers for backward compatibility
-const legacyResolvers = {
-  Endpoint: {
-    hmacKey: (endpoint) => {
-      const activeKey = keyManager.getActiveKey(endpoint.url);
-      if (!activeKey) return null;
-      
-      return {
-        url: endpoint.url,
-        keyId: activeKey.keyId,
-        createdAt: activeKey.createdAt.toISOString(),
-        expiresAt: activeKey.expiresAt?.toISOString() || null,
-        status: activeKey.status,
-      };
-    },
-  },
-  Query: {
-    endpoints: () => [],  // Will be populated by schema loader
-    keyStats: () => keyManager.getStats(),
-  },
-  Mutation: {
-    registerEndpoint: (_root, { url }) => {
-      // This is now deprecated, should use the new service registry
-      console.warn('registerEndpoint is deprecated, use registerService instead');
-      return { success: false };
-    },
-    removeEndpoint: (_root, { url }) => {
-      // This is now deprecated, should use the new service registry
-      console.warn('removeEndpoint is deprecated, use removeService instead');
-      return { success: false };
-    },
-    reloadAllEndpoints: () => {
-      // This is now deprecated, should use the new service registry
-      console.warn('reloadAllEndpoints is deprecated');
-      return { success: false };
-    },
-    generateServiceKey: (_root, { url }) => {
-      // This is now deprecated, should use the new service registry
-      console.warn('generateServiceKey is deprecated, use the new service registry');
-      return { success: false };
-    },
-  },
-};
-
 export function makeEndpointsSchema(loader: SchemaLoader) {
   // Check if we already have a cached schema for this loader
   if (schemaCache.has(loader)) {
@@ -141,10 +41,9 @@ export function makeEndpointsSchema(loader: SchemaLoader) {
   
   const schema = {
     schema: authZDirectiveTransformer(createSchema({
-      typeDefs: mergeTypeDefs([coreTypefs, legacyTypeDefs, authZDirectiveTypeDefs]),
+      typeDefs: mergeTypeDefs([coreTypefs, authZDirectiveTypeDefs]),
       resolvers: mergeResolvers([
         coreResolvers,
-        legacyResolvers
       ])
     })),
   };

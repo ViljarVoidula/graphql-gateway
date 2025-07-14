@@ -2,6 +2,7 @@ import { buildHTTPExecutor } from '@graphql-tools/executor-http';
 import { ExecutionRequest } from '@graphql-tools/utils';
 import { HMACUtils } from '../security/hmac';
 import { keyManager } from '../security/keyManager';
+import { log } from './logger';
 
 export interface HMACExecutorOptions {
   endpoint: string;
@@ -82,13 +83,13 @@ export function buildHMACExecutor(options: HMACExecutorOptions) {
             // Add HMAC headers
             Object.assign(headers, hmacHeaders);
             
-            console.debug(`Added HMAC signature for request to ${endpoint}, keyId: ${serviceKey.keyId}`);
+            log.debug(`Added HMAC signature for request to ${endpoint}, keyId: ${serviceKey.keyId}`);
           } catch (error) {
-            console.error(`Failed to generate HMAC signature for ${endpoint}:`, error);
+            log.error(`Failed to generate HMAC signature for ${endpoint}:`, error);
             // Continue without HMAC if signing fails
           }
         } else {
-          console.warn(`No active HMAC key found for service: ${endpoint}`);
+          log.warn(`No active HMAC key found for service: ${endpoint}`);
         }
       }
 
@@ -99,7 +100,7 @@ export function buildHMACExecutor(options: HMACExecutorOptions) {
       };
 
       return fetch(url, updatedOptions).catch((error) => {
-        console.error(`Fetch error for ${url}:`, error);
+        log.error(`Fetch error for ${url}:`, error);
         throw new Error(`Failed to fetch from ${url}: ${error.message}`);
       })
     }
@@ -188,7 +189,7 @@ export function createHMACValidationMiddleware(options: {
       
       next();
     } catch (error) {
-      console.error('HMAC validation error:', error);
+      log.error('HMAC validation error:', error);
       
       if (required) {
         return res.status(500).json({ 

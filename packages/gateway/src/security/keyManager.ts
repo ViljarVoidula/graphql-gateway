@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { log } from '../utils/logger';
 
 export interface ServiceKey {
   keyId: string;
@@ -42,7 +43,7 @@ export class KeyManager {
     }
     this.serviceKeys.get(serviceUrl)!.push(keyId);
 
-    console.debug(`Generated new HMAC key for service: ${serviceUrl}, keyId: ${keyId}`);
+    log.debug(`Generated new HMAC key for service: ${serviceUrl}, keyId: ${keyId}`);
     return key;
   }
 
@@ -81,7 +82,7 @@ export class KeyManager {
     }
 
     key.status = 'revoked';
-    console.debug(`Revoked HMAC key: ${keyId}`);
+    log.debug(`Revoked HMAC key: ${keyId}`);
     return true;
   }
 
@@ -106,7 +107,7 @@ export class KeyManager {
       key.expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
     });
 
-    console.debug(`Rotated HMAC key for service: ${serviceUrl}, new keyId: ${newKey.keyId}`);
+    log.debug(`Rotated HMAC key for service: ${serviceUrl}, new keyId: ${newKey.keyId}`);
     return newKey;
   }
 
@@ -142,7 +143,7 @@ export class KeyManager {
     });
 
     this.serviceKeys.delete(serviceUrl);
-    console.debug(`Removed service and all keys: ${serviceUrl}`);
+    log.debug(`Removed service and all keys: ${serviceUrl}`);
     return true;
   }
 
@@ -174,7 +175,7 @@ export class KeyManager {
     }
 
     if (cleanedCount > 0) {
-      console.debug(`Cleaned up ${cleanedCount} expired HMAC keys`);
+      log.debug(`Cleaned up ${cleanedCount} expired HMAC keys`);
     }
 
     return cleanedCount;
