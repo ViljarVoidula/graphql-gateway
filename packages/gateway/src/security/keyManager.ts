@@ -42,7 +42,7 @@ export class KeyManager {
     }
     this.serviceKeys.get(serviceUrl)!.push(keyId);
 
-    console.log(`Generated new HMAC key for service: ${serviceUrl}, keyId: ${keyId}`);
+    console.debug(`Generated new HMAC key for service: ${serviceUrl}, keyId: ${keyId}`);
     return key;
   }
 
@@ -81,7 +81,7 @@ export class KeyManager {
     }
 
     key.status = 'revoked';
-    console.log(`Revoked HMAC key: ${keyId}`);
+    console.debug(`Revoked HMAC key: ${keyId}`);
     return true;
   }
 
@@ -106,7 +106,7 @@ export class KeyManager {
       key.expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
     });
 
-    console.log(`Rotated HMAC key for service: ${serviceUrl}, new keyId: ${newKey.keyId}`);
+    console.debug(`Rotated HMAC key for service: ${serviceUrl}, new keyId: ${newKey.keyId}`);
     return newKey;
   }
 
@@ -142,7 +142,7 @@ export class KeyManager {
     });
 
     this.serviceKeys.delete(serviceUrl);
-    console.log(`Removed service and all keys: ${serviceUrl}`);
+    console.debug(`Removed service and all keys: ${serviceUrl}`);
     return true;
   }
 
@@ -174,7 +174,7 @@ export class KeyManager {
     }
 
     if (cleanedCount > 0) {
-      console.log(`Cleaned up ${cleanedCount} expired HMAC keys`);
+      console.debug(`Cleaned up ${cleanedCount} expired HMAC keys`);
     }
 
     return cleanedCount;

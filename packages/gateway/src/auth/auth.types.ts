@@ -1,5 +1,7 @@
 import { ObjectType, Field } from 'type-graphql';
 import { User } from '../services/users/user.entity';
+import { Application } from '../entities/application.entity';
+import { ApiKey } from '../entities/api-key.entity';
 
 @ObjectType()
 export class AuthTokens {
@@ -35,4 +37,13 @@ export class RefreshTokenResponse {
 
   @Field()
   user!: User;
+}
+
+export interface ExtendedYogaContext {
+  user?: { id: string; permissions: string[] } | null;
+  application?: Application;
+  apiKey?: ApiKey;
+  authType?: 'session' | 'api-key' | null;
+  session?: any;
+  sessionId?: string | null;
 }

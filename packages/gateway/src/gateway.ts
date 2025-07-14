@@ -133,7 +133,7 @@ export async function startServer() {
   // Initialize dataSource before creating schema
   try {
     await dataSource.initialize();
-    console.log('Database connection initialized successfully');
+    console.debug('Database connection initialized successfully');
   } catch (error) {
     console.error('Failed to initialize database connection:', error);
     throw error;
@@ -142,7 +142,7 @@ export async function startServer() {
   // Initialize Redis for sessions
   try {
     await initializeRedis();
-    console.log('Redis initialized for session storage');
+    console.debug('Redis initialized for session storage');
   } catch (error) {
     console.error('Failed to initialize Redis:', error);
     throw error;
@@ -161,7 +161,7 @@ export async function startServer() {
   try {
     const serviceRegistryService = Container.get(ServiceRegistryService);
     await serviceRegistryService.loadServicesIntoKeyManager();
-    console.log('Loaded existing services into key manager');
+    console.debug('Loaded existing services into key manager');
   } catch (error) {
     console.error('Failed to load services into key manager:', error);
   }
@@ -176,7 +176,7 @@ export async function startServer() {
     ServiceCacheManager.setSchemaLoader(loader);
     ServiceCacheManager.setServiceCache(serviceEndpointCache);
     
-    console.log(`Loaded ${serviceEndpoints.length} services from database:`, serviceEndpoints);
+    console.debug(`Loaded ${serviceEndpoints.length} services from database:`, serviceEndpoints);
   } catch (error) {
     console.error('Failed to load services from database:', error);
   }
@@ -200,11 +200,11 @@ export async function startServer() {
   // sleep 2s
   await loader.reload();
   await new Promise<void>(resolve => server.listen(4000, resolve));
-  console.log('Gateway started on http://localhost:4000');
-  console.log(`HMAC key cleanup will run every ${KEY_CLEANUP_INTERVAL} ms`);
+  console.debug('Gateway started on http://localhost:4000');
+  console.debug(`HMAC key cleanup will run every ${KEY_CLEANUP_INTERVAL} ms`);
 
   await loader.autoRefresh(REFERSH_INTERVAL);
-  console.log(`Gateway schema will refresh every ${REFERSH_INTERVAL} ms`);
+  console.debug(`Gateway schema will refresh every ${REFERSH_INTERVAL} ms`);
   
   // Store cleanup intervals for stopping later
   (server as any).keyCleanupInterval = cleanupInterval;
@@ -227,7 +227,7 @@ export async function stopServer() {
   // Close database connection
   if (dataSource.isInitialized) {
     await dataSource.destroy();
-    console.log('Database connection closed');
+    console.debug('Database connection closed');
   }
   
   await new Promise(resolve => server.close(resolve));

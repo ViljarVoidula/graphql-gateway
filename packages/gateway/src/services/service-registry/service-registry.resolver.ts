@@ -1,4 +1,4 @@
-import { Resolver, Query, Mutation, Arg, Ctx, ID, InputType, Field, ObjectType } from 'type-graphql';
+import { Resolver, Query, Mutation, Arg, Ctx, ID, InputType, Field, ObjectType, Directive } from 'type-graphql';
 import { Service } from 'typedi';
 import { Service as ServiceEntity, ServiceStatus } from '../../entities/service.entity';
 import { ServiceKey } from '../../entities/service-key.entity';
@@ -224,6 +224,25 @@ export class ServiceRegistryResolver {
   ): Promise<boolean> {
     const service = await this.serviceRegistryService.updateService(serviceId, {
       ownerId: newOwnerId
+    });
+    
+    return !!service;
+  }
+
+  @Query(() => [ServiceEntity])
+  @Directive('@authz(rules: ["isAuthenticated"])')
+  async externallyAccessibleServices(): Promise<ServiceEntity[]> {
+    return this.serviceRegistryService.getExternallyAccessibleServices();
+  }
+
+  @Mutation(() => Boolean)
+  @Directive('@authz(rules: ["isAdmin"])')
+  async setServiceExternallyAccessible(
+    @Arg('serviceId', () => ID) serviceId: string,
+    @Arg('externally_accessible') externally_accessible: boolean
+  ): Promise<boolean> {
+    const service = await this.serviceRegistryService.updateService(serviceId, {
+      externally_accessible
     });
     
     return !!service;

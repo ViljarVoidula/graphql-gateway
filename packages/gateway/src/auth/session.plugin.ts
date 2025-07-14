@@ -1,6 +1,7 @@
 import { Plugin } from '@envelop/types';
 import { getSession, updateSessionActivity, SESSION_COOKIE_NAME, YogaContext } from './session.config';
 import { JWTService } from './jwt.service';
+import { ApiKeyService } from './api-key.service';
 import { Container } from 'typedi';
 
 export const useSession = (): Plugin => {
@@ -9,9 +10,29 @@ export const useSession = (): Plugin => {
       // Access the request from the context
       const request = (context as any).request;
       const jwtService = Container.get(JWTService);
+      const apiKeyService = Container.get(ApiKeyService);
       
       let sessionId: string | null = null;
       let sessionData = null;
+      let apiKeyContext = null;
+
+      // Try API Key authentication first (X-API-Key header)
+      const apiKeyHeader = request?.headers?.get('x-api-key');
+      if (apiKeyHeader) {
+        apiKeyContext = await apiKeyService.validateApiKey(apiKeyHeader);
+        if (apiKeyContext) {
+          // Extend context with API key authentication
+          extendContext({
+            session: null,
+            user: apiKeyContext.user,
+            application: apiKeyContext.application,
+            apiKey: apiKeyContext.apiKeyEntity,
+            sessionId: null,
+            authType: 'api-key',
+          });
+          return;
+        }
+      }
 
       // Try JWT authentication first (Authorization header)
       const authHeader = request?.headers?.get('authorization');
@@ -50,7 +71,7 @@ export const useSession = (): Plugin => {
         await updateSessionActivity(sessionId);
       }
       
-      // Extend context with session and user data
+      // Extend context with session/JWT data
       extendContext({
         session: sessionData,
         user: sessionData?.isAuthenticated ? {
@@ -58,7 +79,10 @@ export const useSession = (): Plugin => {
           email: sessionData.email,
           permissions: sessionData.permissions || []
         } : null,
-        sessionId
+        application: null,
+        apiKey: null,
+        sessionId,
+        authType: sessionData?.isAuthenticated ? 'session' : null,
       });
     }
   };

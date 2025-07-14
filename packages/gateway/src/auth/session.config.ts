@@ -31,7 +31,7 @@ export const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 export async function initializeRedis() {
   try {
     await redisClient.connect();
-    console.log('Redis connected for session storage');
+    console.debug('Redis connected for session storage');
   } catch (error) {
     console.error('Failed to connect to Redis:', error);
     throw error;
@@ -115,5 +115,5 @@ export async function deleteAllUserSessions(userId: string): Promise<void> {
 
 export async function cleanupExpiredSessions(): Promise<void> {
   // Redis automatically handles expiration, but we can implement additional cleanup if needed
-  console.log('Session cleanup completed');
+  console.debug('Session cleanup completed');
 }
