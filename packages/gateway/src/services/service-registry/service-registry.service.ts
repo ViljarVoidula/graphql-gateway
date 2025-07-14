@@ -54,10 +54,10 @@ export class ServiceRegistryService {
     timeout?: number;
     enableBatching?: boolean;
   }): Promise<{ service: ServiceEntity; hmacKey?: any }> {
-    debugger
+    
     // Verify owner exists
     const owner = await this.userRepository.findOne({ where: { id: data.ownerId } });
-    debugger
+    
     if (!owner) {
       throw new Error('Owner not found');
     }
@@ -69,7 +69,7 @@ export class ServiceRegistryService {
     });
 
     const savedService = await this.serviceRepository.save(service);
-    debugger
+    
     let hmacKey = null;
     if (data.enableHMAC !== false) {
       // Generate HMAC key

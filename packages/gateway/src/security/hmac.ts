@@ -48,8 +48,8 @@ export class HMACUtils {
     // Verify signature
     const expectedSignature = this.generateSignature(request, secretKey);
     return crypto.timingSafeEqual(
-      Buffer.from(signature, 'hex'),
-      Buffer.from(expectedSignature, 'hex')
+      new Uint8Array(Buffer.from(signature, 'hex')),
+      new Uint8Array(Buffer.from(expectedSignature, 'hex'))
     );
   }
 

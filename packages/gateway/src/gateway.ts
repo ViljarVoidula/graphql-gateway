@@ -139,6 +139,23 @@ export async function startServer() {
     throw error;
   }
 
+  // Run migrations automatically in development and production
+  if (process.env.NODE_ENV !== 'test') {
+    try {
+      const pendingMigrations = await dataSource.showMigrations();
+      if (pendingMigrations) {
+        console.log('Running pending migrations...');
+        await dataSource.runMigrations();
+        console.log('✅ Migrations completed successfully');
+      } else {
+        console.log('No pending migrations');
+      }
+    } catch (error) {
+      console.error('Failed to run migrations:', error);
+      throw error;
+    }
+  }
+
   // Initialize Redis for sessions
   try {
     await initializeRedis();

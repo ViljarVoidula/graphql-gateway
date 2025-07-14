@@ -49,9 +49,10 @@ export class UserResolver {
       }
 
       const user = this.userRepository.create({
-        ...data,
+        email: data.email,
         permissions: ['user'] // Default permission
       });
+      user.setPassword(data.password);
       const savedUser = await this.userRepository.save(user);
       return savedUser;
     } catch (error) {
@@ -67,6 +68,7 @@ export class UserResolver {
     try {
       const user = await this.userRepository.findOneBy({ email: data.email });
       if (!user) {
+        debugger
         throw new GraphQLError("Invalid email or password");
       }
 
@@ -81,6 +83,7 @@ export class UserResolver {
           user.lockedUntil = new Date(Date.now() + 30 * 60 * 1000);
         }
         await this.userRepository.save(user);
+        debugger
         throw new GraphQLError("Invalid email or password");
       }
 

@@ -135,12 +135,18 @@ export class ServiceRegistryResolver {
   }
 
   @Mutation(() => ServiceRegistrationResult)
+  @Directive('@authz(rules: ["isAdmin"])')
   async registerService(
     @Arg('input') input: RegisterServiceInput,
     @Ctx() ctx: YogaContext
   ): Promise<ServiceRegistrationResult> {
     if (!ctx.user) {
       throw new Error('User not authenticated');
+    }
+
+    // Only admins can register services
+    if (!ctx.user.permissions?.includes('admin')) {
+      throw new Error('Only administrators can register new services');
     }
 
     // Use current user as owner if not specified, or check admin permissions if specified
@@ -218,10 +224,17 @@ export class ServiceRegistryResolver {
   }
 
   @Mutation(() => Boolean)
+  @Directive('@authz(rules: ["isAdmin"])')
   async transferServiceOwnership(
     @Arg('serviceId', () => ID) serviceId: string,
-    @Arg('newOwnerId', () => ID) newOwnerId: string
+    @Arg('newOwnerId', () => ID) newOwnerId: string,
+    @Ctx() ctx: YogaContext
   ): Promise<boolean> {
+    // Only admins can transfer service ownership
+    if (!ctx.user?.permissions?.includes('admin')) {
+      throw new Error('Only administrators can transfer service ownership');
+    }
+
     const service = await this.serviceRegistryService.updateService(serviceId, {
       ownerId: newOwnerId
     });
