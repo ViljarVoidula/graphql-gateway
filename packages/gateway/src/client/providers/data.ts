@@ -1,4 +1,5 @@
 import { DataProvider } from '@refinedev/core';
+import { authenticatedFetch } from '../utils/auth';
 
 const API_URL = '/graphql';
 
@@ -6,17 +7,8 @@ export const dataProvider: DataProvider = {
   getApiUrl: () => API_URL,
 
   getList: async ({ resource, pagination, filters, sorters, meta }) => {
-    const token = localStorage.getItem('accessToken');
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-
     let query = '';
-    
+
     if (resource === 'users') {
       query = `
         query GetUsers {
@@ -28,6 +20,16 @@ export const dataProvider: DataProvider = {
             createdAt
             failedLoginAttempts
             lockedUntil
+            sessions {
+              id
+              userId
+              isActive
+              expiresAt
+              createdAt
+              ipAddress
+              userAgent
+              lastActivity
+            }
           }
         }
       `;
@@ -45,11 +47,13 @@ export const dataProvider: DataProvider = {
       `;
     }
 
-    const response = await fetch(API_URL, {
+    const response = await authenticatedFetch(API_URL, {
       method: 'POST',
-      headers,
+      headers: {
+        'Content-Type': 'application/json'
+      },
       credentials: 'include',
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query })
     });
 
     const result = await response.json();
@@ -58,26 +62,17 @@ export const dataProvider: DataProvider = {
       throw new Error(result.errors[0].message);
     }
 
-    const data = result.data[resource] || result.data.myServices || [];
+    const data = result.data[resource] || result.data.myServices || result.data.sessions || [];
 
     return {
       data,
-      total: data.length,
+      total: data.length
     };
   },
 
   getOne: async ({ resource, id, meta }) => {
-    const token = localStorage.getItem('accessToken');
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-
     let query = '';
-    
+
     if (resource === 'users') {
       query = `
         query GetUser($id: String!) {
@@ -106,14 +101,16 @@ export const dataProvider: DataProvider = {
       `;
     }
 
-    const response = await fetch(API_URL, {
+    const response = await authenticatedFetch(API_URL, {
       method: 'POST',
-      headers,
+      headers: {
+        'Content-Type': 'application/json'
+      },
       credentials: 'include',
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         query,
         variables: { id }
-      }),
+      })
     });
 
     const result = await response.json();
@@ -125,7 +122,7 @@ export const dataProvider: DataProvider = {
     const data = result.data.user || result.data.service;
 
     return {
-      data,
+      data
     };
   },
 
@@ -159,5 +156,5 @@ export const dataProvider: DataProvider = {
 
   custom: async ({ url, method, filters, sorters, payload, query, headers, meta }) => {
     throw new Error('Custom operation not implemented');
-  },
+  }
 };

@@ -4,17 +4,28 @@ import { Authenticated, Refine } from '@refinedev/core';
 import { RefineKbar, RefineKbarProvider } from '@refinedev/kbar';
 import { ErrorComponent, Layout, notificationProvider } from '@refinedev/mantine';
 import routerProvider from '@refinedev/react-router-v6';
+import { useEffect } from 'react';
 import { BrowserRouter, Outlet, Route, Routes } from 'react-router-dom';
 
 import { Dashboard } from './pages/dashboard';
 import { Login } from './pages/login';
 import { ServiceList } from './pages/services';
 import { SessionList } from './pages/sessions';
+import { SessionSettings } from './pages/settings';
 import { UserList } from './pages/users';
 import { authProvider } from './providers/auth';
 import { dataProvider } from './providers/data';
+import { setupTokenRefreshTimer } from './utils/auth';
 
 function App() {
+  useEffect(() => {
+    // Setup automatic token refresh timer
+    const cleanup = setupTokenRefreshTimer();
+
+    // Cleanup on unmount
+    return cleanup;
+  }, []);
+
   return (
     <BrowserRouter>
       <RefineKbarProvider>
@@ -60,6 +71,14 @@ function App() {
                   meta: {
                     canDelete: true
                   }
+                },
+                {
+                  name: 'settings',
+                  list: '/settings',
+                  meta: {
+                    label: 'Settings',
+                    icon: '⚙️'
+                  }
                 }
               ]}
               options={{
@@ -82,6 +101,7 @@ function App() {
                   <Route path="/users" element={<UserList />} />
                   <Route path="/services" element={<ServiceList />} />
                   <Route path="/sessions" element={<SessionList />} />
+                  <Route path="/settings" element={<SessionSettings />} />
                 </Route>
                 <Route path="/login" element={<Login />} />
                 <Route path="*" element={<ErrorComponent />} />

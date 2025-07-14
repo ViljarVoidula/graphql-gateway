@@ -1,4 +1,5 @@
 import { AuthProvider } from '@refinedev/core';
+import { authenticatedFetch, clearAuthData, setAutoRefreshEnabled } from '../utils/auth';
 
 export const authProvider: AuthProvider = {
   login: async ({ email, password }) => {
@@ -6,7 +7,7 @@ export const authProvider: AuthProvider = {
       const response = await fetch('/graphql', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
         credentials: 'include',
         body: JSON.stringify({
@@ -21,13 +22,15 @@ export const authProvider: AuthProvider = {
                 tokens {
                   accessToken
                   refreshToken
+                  expiresIn
+                  tokenType
                 }
                 sessionId
               }
             }
           `,
-          variables: { email, password },
-        }),
+          variables: { email, password }
+        })
       });
 
       const result = await response.json();
@@ -37,8 +40,8 @@ export const authProvider: AuthProvider = {
           success: false,
           error: {
             message: result.errors[0]?.message || 'Login failed',
-            name: 'Login Error',
-          },
+            name: 'Login Error'
+          }
         };
       }
 
@@ -49,10 +52,17 @@ export const authProvider: AuthProvider = {
         localStorage.setItem('accessToken', loginData.tokens.accessToken);
         localStorage.setItem('refreshToken', loginData.tokens.refreshToken);
         localStorage.setItem('user', JSON.stringify(loginData.user));
-        
+
+        // Calculate and store token expiry time
+        const expiryTime = Date.now() + loginData.tokens.expiresIn * 1000;
+        localStorage.setItem('tokenExpiry', expiryTime.toString());
+
+        // Enable auto-refresh by default for new sessions
+        setAutoRefreshEnabled(true);
+
         return {
           success: true,
-          redirectTo: '/',
+          redirectTo: '/'
         };
       }
 
@@ -60,27 +70,26 @@ export const authProvider: AuthProvider = {
         success: false,
         error: {
           message: 'Login failed',
-          name: 'Login Error',
-        },
+          name: 'Login Error'
+        }
       };
     } catch (error) {
       return {
         success: false,
         error: {
           message: error instanceof Error ? error.message : 'Login failed',
-          name: 'Login Error',
-        },
+          name: 'Login Error'
+        }
       };
     }
   },
 
   logout: async () => {
     try {
-      await fetch('/graphql', {
+      await authenticatedFetch('/graphql', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+          'Content-Type': 'application/json'
         },
         credentials: 'include',
         body: JSON.stringify({
@@ -88,20 +97,18 @@ export const authProvider: AuthProvider = {
             mutation Logout {
               logout
             }
-          `,
-        }),
+          `
+        })
       });
     } catch (error) {
       console.error('Logout error:', error);
     }
 
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
+    clearAuthData();
 
     return {
       success: true,
-      redirectTo: '/login',
+      redirectTo: '/login'
     };
   },
 
@@ -110,16 +117,15 @@ export const authProvider: AuthProvider = {
     if (!token) {
       return {
         authenticated: false,
-        redirectTo: '/login',
+        redirectTo: '/login'
       };
     }
 
     try {
-      const response = await fetch('/graphql', {
+      const response = await authenticatedFetch('/graphql', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
         },
         credentials: 'include',
         body: JSON.stringify({
@@ -131,8 +137,8 @@ export const authProvider: AuthProvider = {
                 permissions
               }
             }
-          `,
-        }),
+          `
+        })
       });
 
       const result = await response.json();
@@ -142,16 +148,14 @@ export const authProvider: AuthProvider = {
       }
 
       return {
-        authenticated: true,
+        authenticated: true
       };
     } catch (error) {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('user');
+      clearAuthData();
 
       return {
         authenticated: false,
-        redirectTo: '/login',
+        redirectTo: '/login'
       };
     }
   },
@@ -175,10 +179,10 @@ export const authProvider: AuthProvider = {
     if (error.statusCode === 401) {
       return {
         logout: true,
-        redirectTo: '/login',
+        redirectTo: '/login'
       };
     }
 
     return { error };
-  },
+  }
 };
