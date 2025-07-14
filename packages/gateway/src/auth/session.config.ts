@@ -1,5 +1,5 @@
-import { createClient } from 'redis';
 import { YogaInitialContext } from 'graphql-yoga';
+import { createClient } from 'redis';
 import { log } from '../utils/logger';
 
 export interface SessionData {
@@ -22,7 +22,7 @@ export interface YogaContext extends YogaInitialContext {
 }
 
 // Redis client for session storage
-export const redisClient = createClient({
+export const redisClient: any = createClient({
   url: process.env.REDIS_URL || 'redis://localhost:6379'
 });
 
@@ -51,7 +51,7 @@ export async function saveSession(sessionId: string, data: SessionData): Promise
     loginTime: data.loginTime.toISOString(),
     lastActivity: data.lastActivity.toISOString()
   });
-  
+
   await redisClient.setEx(
     sessionKey,
     SESSION_DURATION / 1000, // Redis expects seconds
@@ -63,9 +63,9 @@ export async function getSession(sessionId: string): Promise<SessionData | null>
   try {
     const sessionKey = `session:${sessionId}`;
     const data = await redisClient.get(sessionKey);
-    
+
     if (!data) return null;
-    
+
     const dataString = typeof data === 'string' ? data : data.toString();
     const parsed = JSON.parse(dataString);
     return {
@@ -95,7 +95,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
 export async function deleteAllUserSessions(userId: string): Promise<void> {
   const keys = await redisClient.keys('session:*');
   const pipeline = redisClient.multi();
-  
+
   for (const key of keys) {
     const sessionData = await redisClient.get(key);
     if (sessionData) {
@@ -110,7 +110,7 @@ export async function deleteAllUserSessions(userId: string): Promise<void> {
       }
     }
   }
-  
+
   await pipeline.exec();
 }
 

@@ -1,0 +1,40 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "sourceMap": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "lib": ["esnext"],
+    "types": ["node"],
+    "skipLibCheck": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@/entities/*": ["./src/entities/*"],
+      "@/services/*": ["./src/services/*"],
+      "@/auth/*": ["./src/auth/*"],
+      "@/db/*": ["./src/db/*"],
+      "@/utils/*": ["./src/utils/*"]
+    },
+    "outDir": "./dist/server",
+    "rootDir": "./src"
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "src/client/**/*",
+    "node_modules",
+    "dist/**/*",
+    "src/**/*.test.ts"
+  ]
+}

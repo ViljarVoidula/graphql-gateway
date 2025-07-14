@@ -19,6 +19,8 @@ import { ServiceKey } from './entities/service-key.entity';
 import { SessionService } from './services/session.service';
 import { ServiceRegistryService, ServiceCacheManager } from './services/service-registry/service-registry.service';
 import { log } from './utils/logger';
+import * as fs from 'fs';
+import * as path from 'path';
 import "reflect-metadata";
 
 const { stitchingDirectivesTransformer } = stitchingDirectives();
@@ -218,10 +220,57 @@ server.on('request', async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     const health = await checkHealth();
     res.end(JSON.stringify(health));
-  } else {
-    res.writeHead(404);
-    res.end();
+    return;
   }
+  
+  // Serve admin UI
+  if (req.url === '/admin' || req.url?.startsWith('/admin/')) {
+    const adminHtmlPath = path.join(__dirname, '..', 'dist', 'client', 'index.html');
+    const fallbackHtmlPath = path.join(__dirname, 'client', 'fallback.html');
+    
+    if (fs.existsSync(adminHtmlPath)) {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(fs.readFileSync(adminHtmlPath, 'utf-8'));
+      return;
+    } else if (fs.existsSync(fallbackHtmlPath)) {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(fs.readFileSync(fallbackHtmlPath, 'utf-8'));
+      return;
+    } else {
+      // Ultimate fallback
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>GraphQL Gateway Admin</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 2rem; text-align: center; }
+            .container { max-width: 600px; margin: 0 auto; }
+            .message { padding: 1rem; background: #f0f0f0; border-radius: 5px; margin: 1rem 0; }
+            .btn { padding: 0.5rem 1rem; background: #007bff; color: white; text-decoration: none; border-radius: 4px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>GraphQL Gateway Admin</h1>
+            <div class="message">
+              <h3>Admin UI Setup Required</h3>
+              <p>Run <code>npm run build:admin</code> to build the admin interface.</p>
+              <p>Or run <code>npm run dev:admin</code> for development mode.</p>
+            </div>
+            <a href="/graphql" class="btn">Access GraphQL Playground</a>
+            <a href="/health" class="btn" style="margin-left: 0.5rem;">Check Health</a>
+          </div>
+        </body>
+        </html>
+      `);
+      return;
+    }
+  }
+  
+  // Handle other routes normally
+  return;
 });
 
 export async function startServer() {
@@ -328,7 +377,11 @@ export async function startServer() {
     
     log.debug(`Loaded ${serviceEndpoints.length} services from database:`, serviceEndpoints);
   } catch (error) {
-    log.error('Failed to load services from database:', error);
+    log.error('Failed to load services from database', {
+      operation: 'loadServicesFromDatabase',
+      error: error instanceof Error ? error : new Error(String(error)),
+      metadata: { source: 'database' }
+    });
   }
 
   // Start periodic cleanup of expired keys and cache

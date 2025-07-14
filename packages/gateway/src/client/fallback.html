@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GraphQL Gateway Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+        
+        .header {
+            background: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .card {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .card h2 {
+            color: #2c3e50;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+        
+        .card h3 {
+            color: #34495e;
+            margin-bottom: 0.5rem;
+            font-size: 1.2rem;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #3498db;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-label {
+            color: #7f8c8d;
+            font-size: 0.9rem;
+        }
+        
+        .nav {
+            background: #2c3e50;
+            padding: 1rem 2rem;
+        }
+        
+        .nav ul {
+            list-style: none;
+            display: flex;
+            gap: 2rem;
+        }
+        
+        .nav a {
+            color: white;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        
+        .nav a:hover {
+            background-color: #34495e;
+        }
+        
+        .table {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .table th,
+        .table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .badge.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .badge.warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .badge.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 0.9rem;
+            transition: background-color 0.3s;
+        }
+        
+        .btn.primary {
+            background: #3498db;
+            color: white;
+        }
+        
+        .btn.primary:hover {
+            background: #2980b9;
+        }
+        
+        .btn.danger {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .btn.danger:hover {
+            background: #c0392b;
+        }
+        
+        .alert {
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+        }
+        
+        .alert.info {
+            background: #cce5ff;
+            color: #0056b3;
+            border: 1px solid #b3d9ff;
+        }
+        
+        .alert.warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #7f8c8d;
+        }
+        
+        .error {
+            text-align: center;
+            padding: 2rem;
+            color: #e74c3c;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>GraphQL Gateway Admin</h1>
+    </div>
+    
+    <div class="nav">
+        <ul>
+            <li><a href="/admin">Dashboard</a></li>
+            <li><a href="/admin/users">Users</a></li>
+            <li><a href="/admin/services">Services</a></li>
+            <li><a href="/admin/sessions">Sessions</a></li>
+            <li><a href="/graphql">GraphQL</a></li>
+        </ul>
+    </div>
+    
+    <div class="container">
+        <div class="alert info">
+            <strong>Getting Started:</strong> This is a basic admin interface for the GraphQL Gateway. 
+            To get the full React-based admin UI, run <code>npm run build:admin</code> to build the complete interface.
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="users-count">0</div>
+                <div class="stat-label">Total Users</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="services-count">0</div>
+                <div class="stat-label">Total Services</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="sessions-count">0</div>
+                <div class="stat-label">Active Sessions</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="health-score">100%</div>
+                <div class="stat-label">Health Score</div>
+            </div>
+        </div>
+        
+        <div class="dashboard">
+            <div class="card">
+                <h2>Quick Actions</h2>
+                <p style="margin-bottom: 1rem;">Common administrative tasks:</p>
+                <a href="/graphql" class="btn primary">Open GraphQL Playground</a>
+                <a href="/health" class="btn primary" style="margin-left: 0.5rem;">Check Health</a>
+            </div>
+            
+            <div class="card">
+                <h2>System Status</h2>
+                <div id="system-status">
+                    <p>Loading system status...</p>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>Recent Activity</h2>
+                <p>Gateway activity and monitoring information will appear here.</p>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>Development Setup</h2>
+            <h3>To enable the full admin interface:</h3>
+            <ol style="margin-left: 2rem; margin-top: 1rem;">
+                <li>Install dependencies: <code>npm install</code></li>
+                <li>Build the admin UI: <code>npm run build:admin</code></li>
+                <li>Restart the gateway server</li>
+                <li>Access the full admin interface at <code>/admin</code></li>
+            </ol>
+            
+            <h3 style="margin-top: 1.5rem;">For development with hot reload:</h3>
+            <ol style="margin-left: 2rem; margin-top: 1rem;">
+                <li>Start the gateway: <code>npm start</code></li>
+                <li>In another terminal: <code>npm run dev:admin</code></li>
+                <li>Access at <code>http://localhost:3002</code></li>
+            </ol>
+        </div>
+    </div>
+    
+    <script>
+        // Basic functionality to load stats
+        async function loadStats() {
+            try {
+                const response = await fetch('/health');
+                const health = await response.json();
+                
+                document.getElementById('system-status').innerHTML = `
+                    <div class="badge ${health.status === 'healthy' ? 'success' : 'warning'}">${health.status}</div>
+                    <p style="margin-top: 0.5rem;">Database: <span class="badge ${health.components.database.status === 'healthy' ? 'success' : 'error'}">${health.components.database.status}</span></p>
+                    <p>Redis: <span class="badge ${health.components.redis.status === 'healthy' ? 'success' : 'error'}">${health.components.redis.status}</span></p>
+                    <p>Services: <span class="badge ${health.components.services.status === 'healthy' ? 'success' : 'error'}">${health.components.services.status}</span> (${health.components.services.count})</p>
+                `;
+                
+                document.getElementById('services-count').textContent = health.components.services.count || 0;
+                
+                // Calculate health score
+                const healthScore = health.status === 'healthy' ? 100 : 
+                                  health.status === 'degraded' ? 75 : 50;
+                document.getElementById('health-score').textContent = healthScore + '%';
+                
+            } catch (error) {
+                document.getElementById('system-status').innerHTML = `
+                    <div class="badge error">Error loading status</div>
+                    <p style="margin-top: 0.5rem;">Could not connect to gateway API</p>
+                `;
+            }
+        }
+        
+        // Load stats on page load
+        loadStats();
+        
+        // Refresh stats every 30 seconds
+        setInterval(loadStats, 30000);
+    </script>
+</body>
+</html>
