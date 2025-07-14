@@ -3,6 +3,7 @@ import { ExecutionRequest } from '@graphql-tools/utils';
 import { HMACUtils } from '../security/hmac';
 import { keyManager } from '../security/keyManager';
 import { log } from './logger';
+import { GraphQLError } from 'graphql';
 
 export interface HMACExecutorOptions {
   endpoint: string;
@@ -26,40 +27,44 @@ export function buildHMACExecutor(options: HMACExecutorOptions) {
       // Start with existing headers
       const headers: Record<string, string> = {};
       
-      // Properly merge existing headers
-      if (req.headers) {
+      // Properly merge existing headers, but exclude Content-Length to avoid mismatches
+      if (requestOptions.headers) {
         if (Array.isArray(requestOptions.headers)) {
-          req.headers.forEach(([key, value]) => {
-            headers[key] = value;
+          requestOptions.headers.forEach(([key, value]) => {
+            if (key.toLowerCase() !== 'content-length') {
+              headers[key] = value;
+            }
           });
         } else {
-          Object.entries(req.headers).forEach(([key, value]) => {
-            if (typeof value === 'string') {
+          Object.entries(requestOptions.headers).forEach(([key, value]) => {
+            if (typeof value === 'string' && key.toLowerCase() !== 'content-length') {
               headers[key] = value;
             }
           });
         }
       }
 
-      // Add existing header passthrough logic
-      if (req.headers?.authorization) {
-        headers['Authorization'] = req.headers.authorization;
+      // Add existing header passthrough logic from context request
+      const contextHeaders = context?.req?.headers || {};
+      
+      if (contextHeaders.authorization) {
+        headers['Authorization'] = contextHeaders.authorization;
       }
 
-      if (req.headers?.cookie) {
-        headers['Cookie'] = req.headers.cookie;
+      if (contextHeaders.cookie) {
+        headers['Cookie'] = contextHeaders.cookie;
       }
 
-      if (req.headers?.['x-request-id']) {
-        headers['x-request-id'] = req.headers['x-request-id'];
+      if (contextHeaders['x-request-id']) {
+        headers['x-request-id'] = contextHeaders['x-request-id'];
       }
 
-      if (req.headers?.['x-correlation-id']) {
-        headers['x-correlation-id'] = req.headers['x-correlation-id'];
+      if (contextHeaders['x-correlation-id']) {
+        headers['x-correlation-id'] = contextHeaders['x-correlation-id'];
       }
 
-      if (req.headers?.traceparent) {
-        headers['traceparent'] = req.headers.traceparent;
+      if (contextHeaders.traceparent) {
+        headers['traceparent'] = contextHeaders.traceparent;
       }
 
       // Add HMAC signing if enabled
@@ -67,8 +72,8 @@ export function buildHMACExecutor(options: HMACExecutorOptions) {
         const serviceKey = keyManager.getActiveKey(endpoint);
         if (serviceKey) {
           try {
-            const method = req.method || 'POST';
-            const body = req.body ? String(req.body) : undefined;
+            const method = requestOptions.method || 'POST';
+            const body = requestOptions.body ? String(requestOptions.body) : undefined;
             
             const hmacHeaders = HMACUtils.createHeaders(
               {
@@ -90,6 +95,12 @@ export function buildHMACExecutor(options: HMACExecutorOptions) {
           }
         } else {
           log.warn(`No active HMAC key found for service: ${endpoint}`);
+          // throw new GraphQLError(`No active HMAC key found for service: ${endpoint}`, {
+          //   extensions: {
+          //     code: 'HMAC_KEY_NOT_FOUND',
+          //     service: endpoint 
+          //   }
+          // });
         }
       }
 
@@ -99,10 +110,18 @@ export function buildHMACExecutor(options: HMACExecutorOptions) {
         headers,
       };
 
+      // Debug logging
+      log.debug(`Making request to ${url}`, {
+        method: updatedOptions.method,
+        hasBody: !!updatedOptions.body,
+        bodyLength: updatedOptions.body ? String(updatedOptions.body).length : 0,
+        headers: Object.keys(updatedOptions.headers || {})
+      });
+
       return fetch(url, updatedOptions).catch((error) => {
         log.error(`Fetch error for ${url}:`, error);
         throw new Error(`Failed to fetch from ${url}: ${error.message}`);
-      })
+      });
     }
   });
 }

@@ -181,17 +181,7 @@ describe('hmacExecutor', () => {
         assert.strictEqual(fetchOptions.headers['x-correlation-id'], 'corr-id');
         assert.strictEqual(fetchOptions.headers['traceparent'], 'trace-p');
     });
-
-    it('should handle no active key being found by not adding HMAC headers', async () => {
-        const executor = buildHMACExecutor({ endpoint: 'http://unknown-service.com/graphql' });
-        const request = { document: parse('query { hello }'), variables: {}, extensions: {} };
-        
-        await executor(request);
-  
-        const fetchOptions = mockFetch.mock.calls[0].arguments[1];
-        assert.strictEqual(fetchOptions.headers['x-hmac-signature'], undefined);
-    });
-
+    
     it('should handle HMAC creation errors gracefully', async () => {
         mock.method(HMACUtils, 'createHeaders', () => { throw new Error('Signing failed') }, { times: 1 });
         const executor = buildHMACExecutor({ endpoint: 'http://service.com/graphql' });

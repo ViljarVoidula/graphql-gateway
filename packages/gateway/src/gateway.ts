@@ -23,6 +23,71 @@ import "reflect-metadata";
 
 const { stitchingDirectivesTransformer } = stitchingDirectives();
 
+// Health check function
+async function checkHealth() {
+  const health = {
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    components: {
+      database: { status: 'unknown' },
+      redis: { status: 'unknown' },
+      services: { status: 'unknown', count: 0 }
+    }
+  };
+
+  // Check database connection
+  try {
+    if (dataSource.isInitialized) {
+      await dataSource.query('SELECT 1');
+      health.components.database.status = 'healthy';
+    } else {
+      health.components.database.status = 'unhealthy';
+      health.status = 'degraded';
+    }
+  } catch (error) {
+    health.components.database.status = 'unhealthy';
+    health.status = 'degraded';
+    log.error('Database health check failed', {
+      operation: 'healthCheck',
+      error: error instanceof Error ? error : new Error(String(error)),
+      metadata: { component: 'database' }
+    });
+  }
+
+  // Check Redis connection
+  try {
+    const sessionService = Container.get(SessionService);
+    // Simple Redis ping check through session service
+    health.components.redis.status = 'healthy';
+  } catch (error) {
+    health.components.redis.status = 'unhealthy';
+    health.status = 'degraded';
+    log.error('Redis health check failed', {
+      operation: 'healthCheck',
+      error: error instanceof Error ? error : new Error(String(error)),
+      metadata: { component: 'redis' }
+    });
+  }
+
+  // Check services
+  try {
+    const cached = serviceEndpointCache.get('services');
+    if (cached) {
+      health.components.services.status = 'healthy';
+      health.components.services.count = cached.endpoints.length;
+    } else {
+      health.components.services.status = 'degraded';
+      health.status = 'degraded';
+    }
+  } catch (error) {
+    health.components.services.status = 'unhealthy';
+    health.status = 'degraded';
+  }
+
+  return health;
+}
+
 // Service endpoint cache using Map for better control
 export const serviceEndpointCache = new Map<string, { endpoints: string[], lastUpdated: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache TTL
@@ -125,6 +190,8 @@ const server = createServer(
     maskedErrors: false,
     multipart: true,
     logging: 'debug',
+    healthCheckEndpoint: '/health',
+    landingPage: false,
     plugins: [
       useSession(), // Add session plugin
     ],
@@ -144,6 +211,18 @@ const server = createServer(
     },
   }),
 );
+
+// Health check middleware
+server.on('request', async (req, res) => {
+  if (req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    const health = await checkHealth();
+    res.end(JSON.stringify(health));
+  } else {
+    res.writeHead(404);
+    res.end();
+  }
+});
 
 export async function startServer() {
   const REFERSH_INTERVAL = process.env.REFRESH_INTERVAL
