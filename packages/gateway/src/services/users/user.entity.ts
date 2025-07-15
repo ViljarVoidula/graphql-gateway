@@ -56,10 +56,9 @@ export class User {
 
   @Field(() => [Service])
   @OneToMany(() => Service, service => service.owner)
-  ownedServices: Service[];
+  ownedServices!: Service[];
 
   private passwordChanged = false;
-  private originalPassword?: string;
 
   @BeforeInsert()
   async hashPasswordOnInsert() {

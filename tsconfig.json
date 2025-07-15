@@ -6,10 +6,23 @@
     "sourceMap": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "lib": ["esnext", "DOM"],
+    "lib": ["esnext"],
     "types": ["node"],
     "skipLibCheck": true,
     "emitDecoratorMetadata": true,
-    "experimentalDecorators": true
-  }
+    "experimentalDecorators": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true
+  },
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/gateway"
+    }
+  ]
 }
