@@ -77,11 +77,6 @@ export const SessionStatus: React.FC = () => {
     return Math.max(0, Math.min(100, (minutes / maxMinutes) * 100));
   };
 
-  // Always show the component, even if loading
-  const hasTokens = localStorage.getItem('accessToken') && localStorage.getItem('refreshToken');
-
-  console.log('SessionStatus: Rendering with timeToExpiry:', timeToExpiry, 'hasTokens:', hasTokens, 'isLoading:', isLoading);
-
   // Compact header version
   const trigger = (
     <Group spacing="xs" style={{ cursor: 'pointer' }}>

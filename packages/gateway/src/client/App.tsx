@@ -2,11 +2,13 @@ import { Global, MantineProvider } from '@mantine/core';
 import { NotificationsProvider } from '@mantine/notifications';
 import { Authenticated, Refine } from '@refinedev/core';
 import { RefineKbar, RefineKbarProvider } from '@refinedev/kbar';
-import { ErrorComponent, Layout, notificationProvider } from '@refinedev/mantine';
+import { ErrorComponent, notificationProvider } from '@refinedev/mantine';
 import routerProvider from '@refinedev/react-router-v6';
+import { IconAdjustments, IconFingerprint, IconServer, IconUserCircle } from '@tabler/icons-react';
 import { useEffect } from 'react';
 import { BrowserRouter, Outlet, Route, Routes } from 'react-router-dom';
 
+import { CustomLayout } from './components/CustomLayout';
 import { Dashboard } from './pages/dashboard';
 import { Login } from './pages/login';
 import { ServiceList } from './pages/services';
@@ -37,7 +39,11 @@ function App() {
           withGlobalStyles
           withNormalizeCSS
         >
-          <Global styles={{ body: { WebkitFontSmoothing: 'auto' } }} />
+          <Global
+            styles={{
+              body: { WebkitFontSmoothing: 'auto' }
+            }}
+          />
           <NotificationsProvider position="top-right">
             <Refine
               routerProvider={routerProvider}
@@ -52,7 +58,9 @@ function App() {
                   create: '/users/create',
                   edit: '/users/:id/edit',
                   meta: {
-                    canDelete: true
+                    canDelete: true,
+                    icon: <IconUserCircle size={18} />,
+                    label: 'Users'
                   }
                 },
                 {
@@ -62,14 +70,18 @@ function App() {
                   create: '/services/create',
                   edit: '/services/:id/edit',
                   meta: {
-                    canDelete: true
+                    canDelete: true,
+                    icon: <IconServer size={18} />,
+                    label: 'Services'
                   }
                 },
                 {
                   name: 'sessions',
                   list: '/sessions',
                   meta: {
-                    canDelete: true
+                    canDelete: true,
+                    icon: <IconFingerprint size={18} />,
+                    label: 'Sessions'
                   }
                 },
                 {
@@ -77,7 +89,7 @@ function App() {
                   list: '/settings',
                   meta: {
                     label: 'Settings',
-                    icon: '⚙️'
+                    icon: <IconAdjustments size={18} />
                   }
                 }
               ]}
@@ -91,9 +103,9 @@ function App() {
                 <Route
                   element={
                     <Authenticated key="authenticated-routes" fallback={<Login />}>
-                      <Layout>
+                      <CustomLayout>
                         <Outlet />
-                      </Layout>
+                      </CustomLayout>
                     </Authenticated>
                   }
                 >

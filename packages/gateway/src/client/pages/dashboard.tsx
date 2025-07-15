@@ -4,7 +4,6 @@ import { IconActivity, IconKey, IconSettings, IconUsers } from '@tabler/icons-re
 import gql from 'graphql-tag';
 import React from 'react';
 import { AutoRefreshWelcome } from '../components/AutoRefreshWelcome';
-import { SessionStatus } from '../components/SessionStatus';
 import { TokenRefreshNotification } from '../components/TokenRefreshNotification';
 
 interface DashboardStats {
@@ -115,7 +114,6 @@ export const Dashboard: React.FC = () => {
     <Stack spacing="lg">
       <Group position="apart" align="center">
         <Title order={1}>Gateway Dashboard</Title>
-        <SessionStatus />
       </Group>
 
       <SimpleGrid cols={4} spacing="lg">
