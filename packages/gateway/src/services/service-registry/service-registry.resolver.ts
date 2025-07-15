@@ -1,9 +1,9 @@
-import { Resolver, Query, Mutation, Arg, Ctx, ID, InputType, Field, ObjectType, Directive } from 'type-graphql';
+import { Arg, Ctx, Directive, Field, ID, InputType, Mutation, ObjectType, Query, Resolver } from 'type-graphql';
 import { Service } from 'typedi';
-import { Service as ServiceEntity, ServiceStatus } from '../../entities/service.entity';
-import { ServiceKey } from '../../entities/service-key.entity';
-import { ServiceRegistryService } from './service-registry.service';
 import { YogaContext } from '../../auth/session.config';
+import { ServiceKey } from '../../entities/service-key.entity';
+import { Service as ServiceEntity, ServiceStatus } from '../../entities/service.entity';
+import { ServiceRegistryService } from './service-registry.service';
 
 @ObjectType()
 class HMACKeyResult {
@@ -98,9 +98,7 @@ class UpdateServiceInput {
 @Service()
 @Resolver(() => ServiceEntity)
 export class ServiceRegistryResolver {
-  constructor(
-    private serviceRegistryService: ServiceRegistryService
-  ) {}
+  constructor(private serviceRegistryService: ServiceRegistryService) {}
 
   @Query(() => [ServiceEntity])
   async services(): Promise<ServiceEntity[]> {
@@ -119,18 +117,15 @@ export class ServiceRegistryResolver {
   }
 
   @Query(() => [ServiceKey])
-  async serviceKeys(
-    @Arg('serviceId', () => ID) serviceId: string,
-    @Ctx() ctx: YogaContext
-  ): Promise<ServiceKey[]> {
+  async serviceKeys(@Arg('serviceId', () => ID) serviceId: string, @Ctx() ctx: YogaContext): Promise<ServiceKey[]> {
     // Check if user owns the service or is admin
     const service = await this.serviceRegistryService.getServiceById(serviceId);
     if (!service) throw new Error('Service not found');
-    
+
     if (service.ownerId !== ctx.user?.id && !ctx.user?.permissions?.includes('admin')) {
       throw new Error('Not authorized to view keys for this service');
     }
-    
+
     return this.serviceRegistryService.getServiceKeys(serviceId);
   }
 
@@ -145,7 +140,7 @@ export class ServiceRegistryResolver {
 
     // Use current user as owner if not specified, or check admin permissions if specified
     const ownerId = input.ownerId || ctx.user.id;
-    
+
     // If user is trying to assign to someone else, they need admin permissions
     if (input.ownerId && input.ownerId !== ctx.user.id && !ctx.user.permissions?.includes('admin')) {
       throw new Error('Not authorized to create services for other users');
@@ -157,7 +152,7 @@ export class ServiceRegistryResolver {
     };
 
     const { service, hmacKey } = await this.serviceRegistryService.registerService(serviceData);
-    
+
     // Trigger schema reload
     if ((ctx as any).schemaLoader) {
       await (ctx as any).schemaLoader.reload();
@@ -177,7 +172,7 @@ export class ServiceRegistryResolver {
     @Ctx() ctx: YogaContext
   ): Promise<boolean> {
     const service = await this.serviceRegistryService.updateService(id, input, ctx.user?.id);
-    
+
     if ((ctx as any).schemaLoader) {
       await (ctx as any).schemaLoader.reload();
     }
@@ -186,12 +181,9 @@ export class ServiceRegistryResolver {
   }
 
   @Mutation(() => Boolean)
-  async removeService(
-    @Arg('id', () => ID) id: string,
-    @Ctx() ctx: YogaContext
-  ): Promise<boolean> {
+  async removeService(@Arg('id', () => ID) id: string, @Ctx() ctx: YogaContext): Promise<boolean> {
     const success = await this.serviceRegistryService.removeService(id, ctx.user?.id);
-    
+
     if (success && (ctx as any).schemaLoader) {
       await (ctx as any).schemaLoader.reload();
     }
@@ -205,7 +197,7 @@ export class ServiceRegistryResolver {
     @Ctx() ctx: YogaContext
   ): Promise<ServiceKeyRotationResult> {
     const result = await this.serviceRegistryService.rotateServiceKey(serviceId, ctx.user?.id);
-    
+
     return {
       ...result,
       success: true
@@ -232,7 +224,7 @@ export class ServiceRegistryResolver {
     const service = await this.serviceRegistryService.updateService(serviceId, {
       ownerId: newOwnerId
     });
-    
+
     return !!service;
   }
 
@@ -251,7 +243,7 @@ export class ServiceRegistryResolver {
     const service = await this.serviceRegistryService.updateService(serviceId, {
       externally_accessible
     });
-    
+
     return !!service;
   }
 }

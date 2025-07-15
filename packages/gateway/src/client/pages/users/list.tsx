@@ -20,55 +20,42 @@ import { IconAlertCircle, IconEdit, IconEye, IconPlus, IconRefresh, IconSearch, 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
-export const ServiceList: React.FC = () => {
+export const UserList: React.FC = () => {
   const navigate = useNavigate();
   const [searchValue, setSearchValue] = React.useState('');
-  const [serviceToDelete, setServiceToDelete] = React.useState<any>(null);
+  const [userToDelete, setUserToDelete] = React.useState<any>(null);
 
   const { data, isLoading, isError, error, refetch } = useList({
-    resource: 'services'
+    resource: 'users'
   });
 
-  const { mutate: deleteService, isLoading: isDeleting } = useDelete();
+  const { mutate: deleteUser, isLoading: isDeleting } = useDelete();
 
-  const services = data?.data || [];
+  const users = data?.data || [];
 
-  const filteredServices = services.filter((service: any) => service.name.toLowerCase().includes(searchValue.toLowerCase()));
+  const filteredUsers = users.filter((user: any) => user.email.toLowerCase().includes(searchValue.toLowerCase()));
 
-  const getStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'active':
-        return 'green';
-      case 'inactive':
-        return 'red';
-      case 'maintenance':
-        return 'yellow';
-      default:
-        return 'gray';
-    }
-  };
-
-  const handleDeleteService = (service: any) => {
-    setServiceToDelete(service);
+  const handleDeleteUser = (user: any) => {
+    setUserToDelete(user);
   };
 
   const confirmDelete = () => {
-    if (!serviceToDelete) return;
+    if (!userToDelete) return;
 
-    deleteService(
+    deleteUser(
       {
-        resource: 'services',
-        id: serviceToDelete.id
+        resource: 'users',
+        id: userToDelete.id
       },
       {
         onSuccess: () => {
-          setServiceToDelete(null);
+          setUserToDelete(null);
           refetch();
         },
         onError: (error) => {
           showNotification({
             title: 'Error',
-            message: error.message || 'Failed to delete service',
+            message: error.message || 'Failed to delete user',
             color: 'red',
             icon: <IconAlertCircle />
           });
@@ -81,21 +68,21 @@ export const ServiceList: React.FC = () => {
     <>
       <Stack spacing="lg">
         <Group position="apart">
-          <Title order={2}>Services</Title>
-          <Button leftIcon={<IconPlus size={16} />} onClick={() => navigate('/services/create')}>
-            Register Service
+          <Title order={2}>Users</Title>
+          <Button leftIcon={<IconPlus size={16} />} onClick={() => navigate('/users/create')}>
+            Create User
           </Button>
         </Group>
 
         {isError && (
           <Alert icon={<IconAlertCircle size={16} />} color="red">
-            {error?.message || 'Failed to load services'}
+            {error?.message || 'Failed to load users'}
           </Alert>
         )}
 
         <Group position="apart">
           <TextInput
-            placeholder="Search services by name..."
+            placeholder="Search users by email..."
             icon={<IconSearch size={16} />}
             value={searchValue}
             onChange={(event) => setSearchValue(event.target.value)}
@@ -111,80 +98,90 @@ export const ServiceList: React.FC = () => {
           <Table striped highlightOnHover>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>URL</th>
+                <th>Email</th>
+                <th>Permissions</th>
                 <th>Status</th>
-                <th>HMAC</th>
                 <th>Created</th>
+                <th>Login Attempts</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredServices.length === 0 ? (
+              {filteredUsers.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>
-                    <Text color="dimmed">{isLoading ? 'Loading...' : 'No services found'}</Text>
+                    <Text color="dimmed">{isLoading ? 'Loading...' : 'No users found'}</Text>
                   </td>
                 </tr>
               ) : (
-                filteredServices.map((service: any) => (
-                  <tr key={service.id}>
+                filteredUsers.map((user: any) => (
+                  <tr key={user.id}>
                     <td>
                       <div>
                         <Text size="sm" weight={500}>
-                          {service.name}
+                          {user.email}
                         </Text>
-                        {service.description && (
-                          <Text size="xs" color="dimmed">
-                            {service.description}
-                          </Text>
-                        )}
+                        <Text size="xs" color="dimmed">
+                          ID: {user.id}
+                        </Text>
                       </div>
                     </td>
                     <td>
-                      <Text size="sm" color="blue" style={{ fontFamily: 'monospace' }}>
-                        {service.url}
-                      </Text>
+                      <Group spacing="xs">
+                        {user.permissions?.length > 0 ? (
+                          user.permissions.map((permission: string) => (
+                            <Badge key={permission} size="sm" variant="light">
+                              {permission}
+                            </Badge>
+                          ))
+                        ) : (
+                          <Text size="sm" color="dimmed">
+                            No permissions
+                          </Text>
+                        )}
+                      </Group>
                     </td>
                     <td>
-                      <Badge color={getStatusColor(service.status)} variant="light" size="sm">
-                        {service.status || 'Unknown'}
-                      </Badge>
-                    </td>
-                    <td>
-                      <Badge color={service.enableHMAC ? 'green' : 'red'} variant="light" size="sm">
-                        {service.enableHMAC ? 'Enabled' : 'Disabled'}
-                      </Badge>
+                      <Group spacing="xs">
+                        <Badge color={user.isEmailVerified ? 'green' : 'yellow'} variant="light">
+                          {user.isEmailVerified ? 'Verified' : 'Unverified'}
+                        </Badge>
+                        {user.lockedUntil && new Date(user.lockedUntil) > new Date() && (
+                          <Badge color="red" variant="light">
+                            Locked
+                          </Badge>
+                        )}
+                      </Group>
                     </td>
                     <td>
                       <Text size="sm" color="dimmed">
-                        {service.createdAt ? new Date(service.createdAt).toLocaleDateString() : 'N/A'}
+                        {new Date(user.createdAt).toLocaleDateString()}
                       </Text>
+                    </td>
+                    <td>
+                      <Badge color={user.failedLoginAttempts > 0 ? 'red' : 'green'} variant="light">
+                        {user.failedLoginAttempts || 0}
+                      </Badge>
                     </td>
                     <td>
                       <Group spacing="xs">
                         <Tooltip label="View Details">
-                          <ActionIcon
-                            color="blue"
-                            variant="light"
-                            size="sm"
-                            onClick={() => navigate(`/services/${service.id}`)}
-                          >
+                          <ActionIcon color="blue" variant="light" size="sm" onClick={() => navigate(`/users/${user.id}`)}>
                             <IconEye size={14} />
                           </ActionIcon>
                         </Tooltip>
-                        <Tooltip label="Edit Service">
+                        <Tooltip label="Edit User">
                           <ActionIcon
                             color="orange"
                             variant="light"
                             size="sm"
-                            onClick={() => navigate(`/services/${service.id}/edit`)}
+                            onClick={() => navigate(`/users/${user.id}/edit`)}
                           >
                             <IconEdit size={14} />
                           </ActionIcon>
                         </Tooltip>
-                        <Tooltip label="Delete Service">
-                          <ActionIcon color="red" variant="light" size="sm" onClick={() => handleDeleteService(service)}>
+                        <Tooltip label="Delete User">
+                          <ActionIcon color="red" variant="light" size="sm" onClick={() => handleDeleteUser(user)}>
                             <IconTrash size={14} />
                           </ActionIcon>
                         </Tooltip>
@@ -197,34 +194,34 @@ export const ServiceList: React.FC = () => {
           </Table>
         </Paper>
 
-        {services.length > 0 && (
+        {users.length > 0 && (
           <Group position="center">
             <Text size="sm" color="dimmed">
-              Showing {filteredServices.length} of {services.length} services
+              Showing {filteredUsers.length} of {users.length} users
             </Text>
           </Group>
         )}
       </Stack>
 
       {/* Delete Confirmation Modal */}
-      <Modal opened={!!serviceToDelete} onClose={() => setServiceToDelete(null)} title="Delete Service" size="md">
+      <Modal opened={!!userToDelete} onClose={() => setUserToDelete(null)} title="Delete User" size="md">
         <Stack spacing="md">
           <Alert icon={<IconAlertCircle />} color="red">
-            Are you sure you want to delete this service? This action cannot be undone.
+            Are you sure you want to delete this user? This action cannot be undone and will invalidate all their sessions.
           </Alert>
 
-          {serviceToDelete && (
+          {userToDelete && (
             <Text size="sm">
-              Service: <strong>{serviceToDelete.name}</strong>
+              User: <strong>{userToDelete.email}</strong>
             </Text>
           )}
 
           <Group position="right">
-            <Button variant="light" onClick={() => setServiceToDelete(null)}>
+            <Button variant="light" onClick={() => setUserToDelete(null)}>
               Cancel
             </Button>
             <Button color="red" onClick={confirmDelete} loading={isDeleting}>
-              Delete Service
+              Delete User
             </Button>
           </Group>
         </Stack>

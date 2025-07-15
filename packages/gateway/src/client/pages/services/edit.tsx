@@ -1,24 +1,24 @@
-import React from 'react';
-import { useUpdate, useOne } from '@refinedev/core';
 import {
+  Alert,
+  Badge,
+  Button,
+  Divider,
+  Group,
+  LoadingOverlay,
+  NumberInput,
   Paper,
+  Stack,
+  Switch,
+  Text,
   TextInput,
   Textarea,
-  NumberInput,
-  Switch,
-  Button,
-  Group,
-  Stack,
-  Title,
-  Alert,
-  LoadingOverlay,
-  Divider,
-  Text,
-  Badge,
+  Title
 } from '@mantine/core';
-import { useForm } from 'react-hook-form';
-import { IconAlertCircle, IconCheck, IconArrowLeft } from '@tabler/icons-react';
 import { showNotification } from '@mantine/notifications';
+import { useOne, useUpdate } from '@refinedev/core';
+import { IconAlertCircle, IconArrowLeft } from '@tabler/icons-react';
+import React from 'react';
+import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 
 interface ServiceFormData {
@@ -35,14 +35,24 @@ export const ServiceEdit: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { mutate: updateService, isLoading: isUpdating, error } = useUpdate();
-  const { data: serviceData, isLoading: isLoadingService, error: loadError } = useOne({
+  const {
+    data: serviceData,
+    isLoading: isLoadingService,
+    error: loadError
+  } = useOne({
     resource: 'services',
-    id: id!,
+    id: id!
   });
 
   const service = serviceData?.data;
 
-  const { register, handleSubmit, formState: { errors }, watch, reset } = useForm<ServiceFormData>({
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    watch,
+    reset
+  } = useForm<ServiceFormData>({
     defaultValues: {
       name: '',
       url: '',
@@ -50,8 +60,8 @@ export const ServiceEdit: React.FC = () => {
       version: '',
       enableHMAC: true,
       timeout: 5000,
-      enableBatching: true,
-    },
+      enableBatching: true
+    }
   });
 
   const watchedValues = watch();
@@ -66,7 +76,7 @@ export const ServiceEdit: React.FC = () => {
         version: service.version || '',
         enableHMAC: service.enableHMAC ?? true,
         timeout: service.timeout || 5000,
-        enableBatching: service.enableBatching ?? true,
+        enableBatching: service.enableBatching ?? true
       });
     }
   }, [service, reset]);
@@ -76,16 +86,10 @@ export const ServiceEdit: React.FC = () => {
       {
         resource: 'services',
         id: id!,
-        values,
+        values
       },
       {
         onSuccess: () => {
-          showNotification({
-            title: 'Success',
-            message: 'Service updated successfully',
-            color: 'green',
-            icon: <IconCheck />,
-          });
           navigate('/services');
         },
         onError: (error) => {
@@ -93,9 +97,9 @@ export const ServiceEdit: React.FC = () => {
             title: 'Error',
             message: error.message || 'Failed to update service',
             color: 'red',
-            icon: <IconAlertCircle />,
+            icon: <IconAlertCircle />
           });
-        },
+        }
       }
     );
   };
@@ -125,11 +129,7 @@ export const ServiceEdit: React.FC = () => {
     return (
       <Stack spacing="lg">
         <Group>
-          <Button
-            variant="subtle"
-            leftIcon={<IconArrowLeft size={16} />}
-            onClick={() => navigate('/services')}
-          >
+          <Button variant="subtle" leftIcon={<IconArrowLeft size={16} />} onClick={() => navigate('/services')}>
             Back to Services
           </Button>
           <Title order={2}>Edit Service</Title>
@@ -144,11 +144,7 @@ export const ServiceEdit: React.FC = () => {
   return (
     <Stack spacing="lg">
       <Group>
-        <Button
-          variant="subtle"
-          leftIcon={<IconArrowLeft size={16} />}
-          onClick={() => navigate('/services')}
-        >
+        <Button variant="subtle" leftIcon={<IconArrowLeft size={16} />} onClick={() => navigate('/services')}>
           Back to Services
         </Button>
         <Title order={2}>Edit Service</Title>
@@ -159,7 +155,7 @@ export const ServiceEdit: React.FC = () => {
 
       <Paper withBorder p="xl" style={{ position: 'relative' }}>
         <LoadingOverlay visible={isUpdating} />
-        
+
         <form onSubmit={handleSubmit(onSubmit)}>
           <Stack spacing="md">
             <Group position="apart">
@@ -184,7 +180,7 @@ export const ServiceEdit: React.FC = () => {
               placeholder="https://api.example.com/graphql"
               required
               error={errors.url?.message}
-              {...register('url', { 
+              {...register('url', {
                 required: 'Service URL is required',
                 pattern: {
                   value: /^https?:\/\/[^\s]+$/,
@@ -193,17 +189,9 @@ export const ServiceEdit: React.FC = () => {
               })}
             />
 
-            <Textarea
-              label="Description"
-              placeholder="Brief description of the service"
-              {...register('description')}
-            />
+            <Textarea label="Description" placeholder="Brief description of the service" {...register('description')} />
 
-            <TextInput
-              label="Version"
-              placeholder="e.g., v1.0.0"
-              {...register('version')}
-            />
+            <TextInput label="Version" placeholder="e.g., v1.0.0" {...register('version')} />
 
             <Divider my="md" />
 
@@ -230,7 +218,7 @@ export const ServiceEdit: React.FC = () => {
             />
             <input
               type="hidden"
-              {...register('timeout', { 
+              {...register('timeout', {
                 required: 'Timeout is required',
                 min: { value: 1000, message: 'Timeout must be at least 1000ms' },
                 max: { value: 30000, message: 'Timeout must be at most 30000ms' }

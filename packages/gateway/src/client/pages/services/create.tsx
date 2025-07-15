@@ -1,27 +1,26 @@
-import React from 'react';
-import { useCreate } from '@refinedev/core';
 import {
+  Alert,
+  Box,
+  Button,
+  Code,
+  Divider,
+  Group,
+  LoadingOverlay,
+  Modal,
+  NumberInput,
   Paper,
+  Stack,
+  Switch,
+  Text,
   TextInput,
   Textarea,
-  NumberInput,
-  Switch,
-  Button,
-  Group,
-  Stack,
-  Title,
-  Alert,
-  LoadingOverlay,
-  Divider,
-  Text,
-  Code,
-  Box,
-  Modal,
-  Notification,
+  Title
 } from '@mantine/core';
-import { useForm } from 'react-hook-form';
-import { IconAlertCircle, IconCheck, IconKey, IconArrowLeft } from '@tabler/icons-react';
 import { showNotification } from '@mantine/notifications';
+import { useCreate } from '@refinedev/core';
+import { IconAlertCircle, IconArrowLeft, IconCheck, IconKey } from '@tabler/icons-react';
+import React from 'react';
+import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 
 interface ServiceFormData {
@@ -46,7 +45,12 @@ export const ServiceCreate: React.FC = () => {
   const [hmacKey, setHmacKey] = React.useState<HMACKeyData | null>(null);
   const [showKeyModal, setShowKeyModal] = React.useState(false);
 
-  const { register, handleSubmit, formState: { errors }, watch } = useForm<ServiceFormData>({
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    watch
+  } = useForm<ServiceFormData>({
     defaultValues: {
       name: '',
       url: '',
@@ -54,8 +58,8 @@ export const ServiceCreate: React.FC = () => {
       version: '',
       enableHMAC: true,
       timeout: 5000,
-      enableBatching: true,
-    },
+      enableBatching: true
+    }
   });
 
   const watchedValues = watch();
@@ -64,17 +68,10 @@ export const ServiceCreate: React.FC = () => {
     createService(
       {
         resource: 'services',
-        values,
+        values
       },
       {
         onSuccess: (data) => {
-          showNotification({
-            title: 'Success',
-            message: 'Service created successfully',
-            color: 'green',
-            icon: <IconCheck />,
-          });
-
           // If HMAC is enabled, show the key modal
           if (values.enableHMAC && (data as any).hmacKey) {
             setHmacKey((data as any).hmacKey);
@@ -88,9 +85,9 @@ export const ServiceCreate: React.FC = () => {
             title: 'Error',
             message: error.message || 'Failed to create service',
             color: 'red',
-            icon: <IconAlertCircle />,
+            icon: <IconAlertCircle />
           });
-        },
+        }
       }
     );
   };
@@ -105,11 +102,7 @@ export const ServiceCreate: React.FC = () => {
     <>
       <Stack spacing="lg">
         <Group>
-          <Button
-            variant="subtle"
-            leftIcon={<IconArrowLeft size={16} />}
-            onClick={() => navigate('/services')}
-          >
+          <Button variant="subtle" leftIcon={<IconArrowLeft size={16} />} onClick={() => navigate('/services')}>
             Back to Services
           </Button>
           <Title order={2}>Create New Service</Title>
@@ -117,7 +110,7 @@ export const ServiceCreate: React.FC = () => {
 
         <Paper withBorder p="xl" style={{ position: 'relative' }}>
           <LoadingOverlay visible={isLoading} />
-          
+
           <form onSubmit={handleSubmit(onSubmit)}>
             <Stack spacing="md">
               <TextInput
@@ -133,7 +126,7 @@ export const ServiceCreate: React.FC = () => {
                 placeholder="https://api.example.com/graphql"
                 required
                 error={errors.url?.message}
-                {...register('url', { 
+                {...register('url', {
                   required: 'Service URL is required',
                   pattern: {
                     value: /^https?:\/\/[^\s]+$/,
@@ -142,17 +135,9 @@ export const ServiceCreate: React.FC = () => {
                 })}
               />
 
-              <Textarea
-                label="Description"
-                placeholder="Brief description of the service"
-                {...register('description')}
-              />
+              <Textarea label="Description" placeholder="Brief description of the service" {...register('description')} />
 
-              <TextInput
-                label="Version"
-                placeholder="e.g., v1.0.0"
-                {...register('version')}
-              />
+              <TextInput label="Version" placeholder="e.g., v1.0.0" {...register('version')} />
 
               <Divider my="md" />
 
@@ -179,7 +164,7 @@ export const ServiceCreate: React.FC = () => {
               />
               <input
                 type="hidden"
-                {...register('timeout', { 
+                {...register('timeout', {
                   required: 'Timeout is required',
                   min: { value: 1000, message: 'Timeout must be at least 1000ms' },
                   max: { value: 30000, message: 'Timeout must be at most 30000ms' }
@@ -246,17 +231,15 @@ export const ServiceCreate: React.FC = () => {
 
               <Alert icon={<IconKey />} color="yellow">
                 <Text size="sm">
-                  <strong>Important:</strong> This is the only time you'll see the secret key.
-                  Please store it securely. You can rotate keys later if needed.
+                  <strong>Important:</strong> This is the only time you'll see the secret key. Please store it securely. You can
+                  rotate keys later if needed.
                 </Text>
               </Alert>
             </>
           )}
 
           <Group position="right">
-            <Button onClick={handleKeyModalClose}>
-              Continue to Services
-            </Button>
+            <Button onClick={handleKeyModalClose}>Continue to Services</Button>
           </Group>
         </Stack>
       </Modal>

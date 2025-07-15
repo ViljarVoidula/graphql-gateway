@@ -13,11 +13,14 @@ import { Dashboard } from './pages/dashboard';
 import { Login } from './pages/login';
 import { ServiceList } from './pages/services';
 import { ServiceCreate } from './pages/services/create';
-import { ServiceEdit } from './pages/services/edit';
 import { ServiceDetail } from './pages/services/detail';
+import { ServiceEdit } from './pages/services/edit';
 import { SessionList } from './pages/sessions';
 import { SessionSettings } from './pages/settings';
-import { UserList } from './pages/users';
+import { UserCreate } from './pages/users/create';
+import { UserDetail } from './pages/users/detail';
+import { UserEdit } from './pages/users/edit';
+import { UserList } from './pages/users/list';
 import { authProvider } from './providers/auth';
 import { dataProvider } from './providers/data';
 import { setupTokenRefreshTimer } from './utils/auth';
@@ -114,6 +117,9 @@ function App() {
                 >
                   <Route index element={<Dashboard />} />
                   <Route path="/users" element={<UserList />} />
+                  <Route path="/users/create" element={<UserCreate />} />
+                  <Route path="/users/:id" element={<UserDetail />} />
+                  <Route path="/users/:id/edit" element={<UserEdit />} />
                   <Route path="/services" element={<ServiceList />} />
                   <Route path="/services/create" element={<ServiceCreate />} />
                   <Route path="/services/:id" element={<ServiceDetail />} />

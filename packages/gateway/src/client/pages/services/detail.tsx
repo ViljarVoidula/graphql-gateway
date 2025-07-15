@@ -1,36 +1,35 @@
-import React from 'react';
-import { useOne, useDelete } from '@refinedev/core';
 import {
+  ActionIcon,
+  Alert,
+  Badge,
+  Box,
+  Button,
+  Code,
+  Group,
+  LoadingOverlay,
+  Modal,
   Paper,
   Stack,
-  Title,
-  Group,
-  Button,
-  Badge,
-  Text,
-  Divider,
-  Alert,
-  LoadingOverlay,
   Table,
-  ActionIcon,
-  Modal,
-  Code,
-  Box,
-  Tooltip,
+  Text,
+  Title,
+  Tooltip
 } from '@mantine/core';
-import { 
-  IconArrowLeft, 
-  IconEdit, 
-  IconTrash, 
-  IconRefresh, 
-  IconKey, 
-  IconAlertCircle, 
+import { showNotification } from '@mantine/notifications';
+import { useDelete, useOne } from '@refinedev/core';
+import {
+  IconAlertCircle,
+  IconArrowLeft,
   IconCheck,
   IconCopy,
+  IconEdit,
   IconEye,
   IconEyeOff,
+  IconKey,
+  IconRefresh,
+  IconTrash
 } from '@tabler/icons-react';
-import { showNotification } from '@mantine/notifications';
+import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { authenticatedFetch } from '../../utils/auth';
 
@@ -59,9 +58,13 @@ export const ServiceDetail: React.FC = () => {
   const [isLoadingKeys, setIsLoadingKeys] = React.useState(false);
   const [isRotating, setIsRotating] = React.useState(false);
 
-  const { data: serviceData, isLoading: isLoadingService, error: loadError } = useOne({
+  const {
+    data: serviceData,
+    isLoading: isLoadingService,
+    error: loadError
+  } = useOne({
     resource: 'services',
-    id: id!,
+    id: id!
   });
 
   const { mutate: deleteService, isLoading: isDeleting } = useDelete();
@@ -70,13 +73,13 @@ export const ServiceDetail: React.FC = () => {
 
   const fetchKeys = async () => {
     if (!service?.enableHMAC) return;
-    
+
     setIsLoadingKeys(true);
     try {
       const response = await authenticatedFetch('/graphql', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
         credentials: 'include',
         body: JSON.stringify({
@@ -91,23 +94,23 @@ export const ServiceDetail: React.FC = () => {
               }
             }
           `,
-          variables: { serviceId: id },
-        }),
+          variables: { serviceId: id }
+        })
       });
 
       const result = await response.json();
-      
+
       if (result.errors) {
         throw new Error(result.errors[0].message);
       }
-      
+
       setKeys(result.data.serviceKeys || []);
     } catch (error: any) {
       showNotification({
         title: 'Error',
         message: error.message || 'Failed to fetch keys',
         color: 'red',
-        icon: <IconAlertCircle />,
+        icon: <IconAlertCircle />
       });
     } finally {
       setIsLoadingKeys(false);
@@ -120,7 +123,7 @@ export const ServiceDetail: React.FC = () => {
       const response = await authenticatedFetch('/graphql', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
         credentials: 'include',
         body: JSON.stringify({
@@ -137,23 +140,23 @@ export const ServiceDetail: React.FC = () => {
               }
             }
           `,
-          variables: { serviceId: id },
-        }),
+          variables: { serviceId: id }
+        })
       });
 
       const result = await response.json();
-      
+
       if (result.errors) {
         throw new Error(result.errors[0].message);
       }
-      
+
       showNotification({
         title: 'Success',
         message: 'Service key rotated successfully',
         color: 'green',
-        icon: <IconCheck />,
+        icon: <IconCheck />
       });
-      
+
       setRotatedKey(result.data.rotateServiceKey.newKey);
       setShowKeyModal(true);
       fetchKeys();
@@ -162,7 +165,7 @@ export const ServiceDetail: React.FC = () => {
         title: 'Error',
         message: error.message || 'Failed to rotate key',
         color: 'red',
-        icon: <IconAlertCircle />,
+        icon: <IconAlertCircle />
       });
     } finally {
       setIsRotating(false);
@@ -173,16 +176,10 @@ export const ServiceDetail: React.FC = () => {
     deleteService(
       {
         resource: 'services',
-        id: id!,
+        id: id!
       },
       {
         onSuccess: () => {
-          showNotification({
-            title: 'Success',
-            message: 'Service deleted successfully',
-            color: 'green',
-            icon: <IconCheck />,
-          });
           navigate('/services');
         },
         onError: (error) => {
@@ -190,9 +187,9 @@ export const ServiceDetail: React.FC = () => {
             title: 'Error',
             message: error.message || 'Failed to delete service',
             color: 'red',
-            icon: <IconAlertCircle />,
+            icon: <IconAlertCircle />
           });
-        },
+        }
       }
     );
   };
@@ -220,7 +217,7 @@ export const ServiceDetail: React.FC = () => {
       title: 'Copied',
       message: 'Copied to clipboard',
       color: 'blue',
-      icon: <IconCopy />,
+      icon: <IconCopy />
     });
   };
 
@@ -243,11 +240,7 @@ export const ServiceDetail: React.FC = () => {
     return (
       <Stack spacing="lg">
         <Group>
-          <Button
-            variant="subtle"
-            leftIcon={<IconArrowLeft size={16} />}
-            onClick={() => navigate('/services')}
-          >
+          <Button variant="subtle" leftIcon={<IconArrowLeft size={16} />} onClick={() => navigate('/services')}>
             Back to Services
           </Button>
           <Title order={2}>Service Details</Title>
@@ -264,11 +257,7 @@ export const ServiceDetail: React.FC = () => {
       <Stack spacing="lg">
         <Group position="apart">
           <Group>
-            <Button
-              variant="subtle"
-              leftIcon={<IconArrowLeft size={16} />}
-              onClick={() => navigate('/services')}
-            >
+            <Button variant="subtle" leftIcon={<IconArrowLeft size={16} />} onClick={() => navigate('/services')}>
               Back to Services
             </Button>
             <Title order={2}>{service.name}</Title>
@@ -277,19 +266,10 @@ export const ServiceDetail: React.FC = () => {
             </Badge>
           </Group>
           <Group>
-            <Button
-              variant="light"
-              leftIcon={<IconEdit size={16} />}
-              onClick={() => navigate(`/services/${id}/edit`)}
-            >
+            <Button variant="light" leftIcon={<IconEdit size={16} />} onClick={() => navigate(`/services/${id}/edit`)}>
               Edit
             </Button>
-            <Button
-              variant="light"
-              color="red"
-              leftIcon={<IconTrash size={16} />}
-              onClick={() => setShowDeleteModal(true)}
-            >
+            <Button variant="light" color="red" leftIcon={<IconTrash size={16} />} onClick={() => setShowDeleteModal(true)}>
               Delete
             </Button>
           </Group>
@@ -298,12 +278,18 @@ export const ServiceDetail: React.FC = () => {
         <Paper withBorder p="xl">
           <Stack spacing="md">
             <Group position="apart">
-              <Text size="sm" color="dimmed">Service ID</Text>
-              <Text size="sm" style={{ fontFamily: 'monospace' }}>{service.id}</Text>
+              <Text size="sm" color="dimmed">
+                Service ID
+              </Text>
+              <Text size="sm" style={{ fontFamily: 'monospace' }}>
+                {service.id}
+              </Text>
             </Group>
 
             <Group position="apart">
-              <Text size="sm" color="dimmed">URL</Text>
+              <Text size="sm" color="dimmed">
+                URL
+              </Text>
               <Text size="sm" style={{ fontFamily: 'monospace' }} color="blue">
                 {service.url}
               </Text>
@@ -311,50 +297,66 @@ export const ServiceDetail: React.FC = () => {
 
             {service.description && (
               <Group position="apart">
-                <Text size="sm" color="dimmed">Description</Text>
+                <Text size="sm" color="dimmed">
+                  Description
+                </Text>
                 <Text size="sm">{service.description}</Text>
               </Group>
             )}
 
             {service.version && (
               <Group position="apart">
-                <Text size="sm" color="dimmed">Version</Text>
+                <Text size="sm" color="dimmed">
+                  Version
+                </Text>
                 <Text size="sm">{service.version}</Text>
               </Group>
             )}
 
             <Group position="apart">
-              <Text size="sm" color="dimmed">HMAC Authentication</Text>
+              <Text size="sm" color="dimmed">
+                HMAC Authentication
+              </Text>
               <Badge color={service.enableHMAC ? 'green' : 'red'} variant="light">
                 {service.enableHMAC ? 'Enabled' : 'Disabled'}
               </Badge>
             </Group>
 
             <Group position="apart">
-              <Text size="sm" color="dimmed">Timeout</Text>
+              <Text size="sm" color="dimmed">
+                Timeout
+              </Text>
               <Text size="sm">{service.timeout}ms</Text>
             </Group>
 
             <Group position="apart">
-              <Text size="sm" color="dimmed">Batching</Text>
+              <Text size="sm" color="dimmed">
+                Batching
+              </Text>
               <Badge color={service.enableBatching ? 'green' : 'red'} variant="light">
                 {service.enableBatching ? 'Enabled' : 'Disabled'}
               </Badge>
             </Group>
 
             <Group position="apart">
-              <Text size="sm" color="dimmed">Created</Text>
+              <Text size="sm" color="dimmed">
+                Created
+              </Text>
               <Text size="sm">{new Date(service.createdAt).toLocaleString()}</Text>
             </Group>
 
             <Group position="apart">
-              <Text size="sm" color="dimmed">Updated</Text>
+              <Text size="sm" color="dimmed">
+                Updated
+              </Text>
               <Text size="sm">{new Date(service.updatedAt).toLocaleString()}</Text>
             </Group>
 
             {service.owner && (
               <Group position="apart">
-                <Text size="sm" color="dimmed">Owner</Text>
+                <Text size="sm" color="dimmed">
+                  Owner
+                </Text>
                 <Text size="sm">{service.owner.email}</Text>
               </Group>
             )}
@@ -366,12 +368,7 @@ export const ServiceDetail: React.FC = () => {
             <Stack spacing="md">
               <Group position="apart">
                 <Title order={3}>HMAC Keys</Title>
-                <Button
-                  variant="light"
-                  leftIcon={<IconRefresh size={16} />}
-                  onClick={handleRotateKey}
-                  loading={isRotating}
-                >
+                <Button variant="light" leftIcon={<IconRefresh size={16} />} onClick={handleRotateKey} loading={isRotating}>
                   Rotate Key
                 </Button>
               </Group>
@@ -410,24 +407,15 @@ export const ServiceDetail: React.FC = () => {
                             </Badge>
                           </td>
                           <td>
-                            <Text size="sm">
-                              {new Date(key.createdAt).toLocaleDateString()}
-                            </Text>
+                            <Text size="sm">{new Date(key.createdAt).toLocaleDateString()}</Text>
                           </td>
                           <td>
-                            <Text size="sm">
-                              {key.expiresAt ? new Date(key.expiresAt).toLocaleDateString() : 'Never'}
-                            </Text>
+                            <Text size="sm">{key.expiresAt ? new Date(key.expiresAt).toLocaleDateString() : 'Never'}</Text>
                           </td>
                           <td>
                             <Group spacing="xs">
                               <Tooltip label="Copy Key ID">
-                                <ActionIcon
-                                  color="blue"
-                                  variant="light"
-                                  size="sm"
-                                  onClick={() => copyToClipboard(key.keyId)}
-                                >
+                                <ActionIcon color="blue" variant="light" size="sm" onClick={() => copyToClipboard(key.keyId)}>
                                   <IconCopy size={14} />
                                 </ActionIcon>
                               </Tooltip>
@@ -445,30 +433,21 @@ export const ServiceDetail: React.FC = () => {
       </Stack>
 
       {/* Delete Confirmation Modal */}
-      <Modal
-        opened={showDeleteModal}
-        onClose={() => setShowDeleteModal(false)}
-        title="Delete Service"
-        size="md"
-      >
+      <Modal opened={showDeleteModal} onClose={() => setShowDeleteModal(false)} title="Delete Service" size="md">
         <Stack spacing="md">
           <Alert icon={<IconAlertCircle />} color="red">
             Are you sure you want to delete this service? This action cannot be undone.
           </Alert>
-          
+
           <Text size="sm">
             Service: <strong>{service.name}</strong>
           </Text>
-          
+
           <Group position="right">
             <Button variant="light" onClick={() => setShowDeleteModal(false)}>
               Cancel
             </Button>
-            <Button
-              color="red"
-              onClick={handleDeleteService}
-              loading={isDeleting}
-            >
+            <Button color="red" onClick={handleDeleteService} loading={isDeleting}>
               Delete Service
             </Button>
           </Group>
@@ -500,11 +479,7 @@ export const ServiceDetail: React.FC = () => {
                 </Text>
                 <Group spacing="xs">
                   <Code block>{rotatedKey.keyId}</Code>
-                  <ActionIcon
-                    color="blue"
-                    variant="light"
-                    onClick={() => copyToClipboard(rotatedKey.keyId)}
-                  >
+                  <ActionIcon color="blue" variant="light" onClick={() => copyToClipboard(rotatedKey.keyId)}>
                     <IconCopy size={14} />
                   </ActionIcon>
                 </Group>
@@ -515,24 +490,13 @@ export const ServiceDetail: React.FC = () => {
                   <Text size="sm" weight={500}>
                     Secret Key:
                   </Text>
-                  <ActionIcon
-                    color="blue"
-                    variant="light"
-                    size="sm"
-                    onClick={() => setShowSecretKey(!showSecretKey)}
-                  >
+                  <ActionIcon color="blue" variant="light" size="sm" onClick={() => setShowSecretKey(!showSecretKey)}>
                     {showSecretKey ? <IconEyeOff size={14} /> : <IconEye size={14} />}
                   </ActionIcon>
                 </Group>
                 <Group spacing="xs">
-                  <Code block>
-                    {showSecretKey ? rotatedKey.secretKey : '••••••••••••••••••••••••••••••••'}
-                  </Code>
-                  <ActionIcon
-                    color="blue"
-                    variant="light"
-                    onClick={() => copyToClipboard(rotatedKey.secretKey)}
-                  >
+                  <Code block>{showSecretKey ? rotatedKey.secretKey : '••••••••••••••••••••••••••••••••'}</Code>
+                  <ActionIcon color="blue" variant="light" onClick={() => copyToClipboard(rotatedKey.secretKey)}>
                     <IconCopy size={14} />
                   </ActionIcon>
                 </Group>
@@ -540,17 +504,15 @@ export const ServiceDetail: React.FC = () => {
 
               <Alert icon={<IconKey />} color="yellow">
                 <Text size="sm">
-                  <strong>Important:</strong> This is the only time you'll see the new secret key.
-                  Your old key will expire in 1 hour.
+                  <strong>Important:</strong> This is the only time you'll see the new secret key. Your old key will expire in 1
+                  hour.
                 </Text>
               </Alert>
             </>
           )}
 
           <Group position="right">
-            <Button onClick={() => setShowKeyModal(false)}>
-              Close
-            </Button>
+            <Button onClick={() => setShowKeyModal(false)}>Close</Button>
           </Group>
         </Stack>
       </Modal>

@@ -179,6 +179,20 @@ export const dataProvider: DataProvider = {
           }
         }
       `;
+    } else if (resource === 'users') {
+      mutation = `
+        mutation CreateUser($data: UserInput!) {
+          createUser(data: $data) {
+            id
+            email
+            permissions
+            isEmailVerified
+            createdAt
+            failedLoginAttempts
+            lockedUntil
+          }
+        }
+      `;
     }
 
     const response = await authenticatedFetch(API_URL, {
@@ -189,7 +203,7 @@ export const dataProvider: DataProvider = {
       credentials: 'include',
       body: JSON.stringify({
         query: mutation,
-        variables: { input: variables }
+        variables: resource === 'services' ? { input: variables } : { data: variables }
       })
     });
 
@@ -199,7 +213,7 @@ export const dataProvider: DataProvider = {
       throw new Error(result.errors[0].message);
     }
 
-    const data = result.data.registerService.service;
+    const data = resource === 'services' ? result.data.registerService.service : result.data.createUser;
 
     return {
       data
@@ -215,6 +229,21 @@ export const dataProvider: DataProvider = {
           updateService(id: $id, input: $input)
         }
       `;
+    } else if (resource === 'users') {
+      mutation = `
+        mutation UpdateUser($id: String!, $data: UserUpdateInput!) {
+          updateUser(id: $id, data: $data) {
+            id
+            email
+            permissions
+            isEmailVerified
+            createdAt
+            updatedAt
+            failedLoginAttempts
+            lockedUntil
+          }
+        }
+      `;
     }
 
     const response = await authenticatedFetch(API_URL, {
@@ -225,7 +254,7 @@ export const dataProvider: DataProvider = {
       credentials: 'include',
       body: JSON.stringify({
         query: mutation,
-        variables: { id, input: variables }
+        variables: resource === 'services' ? { id, input: variables } : { id, data: variables }
       })
     });
 
@@ -235,12 +264,17 @@ export const dataProvider: DataProvider = {
       throw new Error(result.errors[0].message);
     }
 
-    // Re-fetch the updated service
-    const getResult = await dataProvider.getOne({ resource, id });
-
-    return {
-      data: getResult.data as any
-    };
+    // For services, re-fetch the updated service; for users, return the updated user
+    if (resource === 'services') {
+      const getResult = await dataProvider.getOne({ resource, id });
+      return {
+        data: getResult.data as any
+      };
+    } else {
+      return {
+        data: result.data.updateUser as any
+      };
+    }
   },
 
   deleteOne: async ({ resource, id, variables, meta }) => {
@@ -250,6 +284,12 @@ export const dataProvider: DataProvider = {
       mutation = `
         mutation RemoveService($id: ID!) {
           removeService(id: $id)
+        }
+      `;
+    } else if (resource === 'users') {
+      mutation = `
+        mutation DeleteUser($id: String!) {
+          deleteUser(id: $id)
         }
       `;
     }
