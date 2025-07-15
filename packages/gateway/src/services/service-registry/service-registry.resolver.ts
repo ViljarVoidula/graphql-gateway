@@ -135,18 +135,12 @@ export class ServiceRegistryResolver {
   }
 
   @Mutation(() => ServiceRegistrationResult)
-  @Directive('@authz(rules: ["isAdmin"])')
   async registerService(
     @Arg('input') input: RegisterServiceInput,
     @Ctx() ctx: YogaContext
   ): Promise<ServiceRegistrationResult> {
     if (!ctx.user) {
       throw new Error('User not authenticated');
-    }
-
-    // Only admins can register services
-    if (!ctx.user.permissions?.includes('admin')) {
-      throw new Error('Only administrators can register new services');
     }
 
     // Use current user as owner if not specified, or check admin permissions if specified

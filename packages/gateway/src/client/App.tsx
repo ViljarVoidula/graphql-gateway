@@ -12,6 +12,9 @@ import { CustomLayout } from './components/CustomLayout';
 import { Dashboard } from './pages/dashboard';
 import { Login } from './pages/login';
 import { ServiceList } from './pages/services';
+import { ServiceCreate } from './pages/services/create';
+import { ServiceEdit } from './pages/services/edit';
+import { ServiceDetail } from './pages/services/detail';
 import { SessionList } from './pages/sessions';
 import { SessionSettings } from './pages/settings';
 import { UserList } from './pages/users';
@@ -112,6 +115,9 @@ function App() {
                   <Route index element={<Dashboard />} />
                   <Route path="/users" element={<UserList />} />
                   <Route path="/services" element={<ServiceList />} />
+                  <Route path="/services/create" element={<ServiceCreate />} />
+                  <Route path="/services/:id" element={<ServiceDetail />} />
+                  <Route path="/services/:id/edit" element={<ServiceEdit />} />
                   <Route path="/sessions" element={<SessionList />} />
                   <Route path="/settings" element={<SessionSettings />} />
                 </Route>

@@ -41,7 +41,17 @@ export const dataProvider: DataProvider = {
             name
             status
             url
+            description
+            version
+            enableHMAC
+            timeout
+            enableBatching
             createdAt
+            updatedAt
+            owner {
+              id
+              email
+            }
           }
         }
       `;
@@ -95,7 +105,17 @@ export const dataProvider: DataProvider = {
             name
             status
             url
+            description
+            version
+            enableHMAC
+            timeout
+            enableBatching
             createdAt
+            updatedAt
+            owner {
+              id
+              email
+            }
           }
         }
       `;
@@ -127,15 +147,134 @@ export const dataProvider: DataProvider = {
   },
 
   create: async ({ resource, variables, meta }) => {
-    throw new Error('Create operation not implemented');
+    let mutation = '';
+
+    if (resource === 'services') {
+      mutation = `
+        mutation RegisterService($input: RegisterServiceInput!) {
+          registerService(input: $input) {
+            service {
+              id
+              name
+              url
+              description
+              status
+              version
+              enableHMAC
+              timeout
+              enableBatching
+              createdAt
+              updatedAt
+              owner {
+                id
+                email
+              }
+            }
+            hmacKey {
+              keyId
+              secretKey
+              instructions
+            }
+            success
+          }
+        }
+      `;
+    }
+
+    const response = await authenticatedFetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        query: mutation,
+        variables: { input: variables }
+      })
+    });
+
+    const result = await response.json();
+
+    if (result.errors) {
+      throw new Error(result.errors[0].message);
+    }
+
+    const data = result.data.registerService.service;
+
+    return {
+      data
+    };
   },
 
   update: async ({ resource, id, variables, meta }) => {
-    throw new Error('Update operation not implemented');
+    let mutation = '';
+
+    if (resource === 'services') {
+      mutation = `
+        mutation UpdateService($id: ID!, $input: UpdateServiceInput!) {
+          updateService(id: $id, input: $input)
+        }
+      `;
+    }
+
+    const response = await authenticatedFetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        query: mutation,
+        variables: { id, input: variables }
+      })
+    });
+
+    const result = await response.json();
+
+    if (result.errors) {
+      throw new Error(result.errors[0].message);
+    }
+
+    // Re-fetch the updated service
+    const getResult = await dataProvider.getOne({ resource, id });
+
+    return {
+      data: getResult.data as any
+    };
   },
 
   deleteOne: async ({ resource, id, variables, meta }) => {
-    throw new Error('Delete operation not implemented');
+    let mutation = '';
+
+    if (resource === 'services') {
+      mutation = `
+        mutation RemoveService($id: ID!) {
+          removeService(id: $id)
+        }
+      `;
+    }
+
+    const response = await authenticatedFetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        query: mutation,
+        variables: { id }
+      })
+    });
+
+    const result = await response.json();
+
+    if (result.errors) {
+      throw new Error(result.errors[0].message);
+    }
+
+    return {
+      data: { id } as any
+    };
   },
 
   getMany: async ({ resource, ids, meta }) => {
@@ -155,6 +294,80 @@ export const dataProvider: DataProvider = {
   },
 
   custom: async ({ url, method, filters, sorters, payload, query, headers, meta }) => {
+    if (meta?.operation === 'rotateServiceKey') {
+      const mutation = `
+        mutation RotateServiceKey($serviceId: ID!) {
+          rotateServiceKey(serviceId: $serviceId) {
+            oldKeyId
+            newKey {
+              keyId
+              secretKey
+              instructions
+            }
+            success
+          }
+        }
+      `;
+
+      const response = await authenticatedFetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          query: mutation,
+          variables: { serviceId: (payload as any)?.serviceId }
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.errors) {
+        throw new Error(result.errors[0].message);
+      }
+
+      return {
+        data: result.data.rotateServiceKey
+      };
+    }
+
+    if (meta?.operation === 'getServiceKeys') {
+      const queryString = `
+        query GetServiceKeys($serviceId: ID!) {
+          serviceKeys(serviceId: $serviceId) {
+            id
+            keyId
+            status
+            createdAt
+            expiresAt
+          }
+        }
+      `;
+
+      const response = await authenticatedFetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          query: queryString,
+          variables: { serviceId: (payload as any)?.serviceId }
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.errors) {
+        throw new Error(result.errors[0].message);
+      }
+
+      return {
+        data: result.data.serviceKeys
+      };
+    }
+
     throw new Error('Custom operation not implemented');
   }
 };
