@@ -55,6 +55,21 @@ export const dataProvider: DataProvider = {
           }
         }
       `;
+    } else if (resource === 'applications') {
+      query = `#graphql
+        query MyApplications {
+          myApplications {
+            id
+            name
+            description
+            owner { id email }
+            createdAt
+            updatedAt
+            apiKeys { id keyPrefix status name scopes createdAt expiresAt }
+            whitelistedServices { id name status }
+          }
+        }
+      `;
     }
 
     const response = await authenticatedFetch(API_URL, {
@@ -72,7 +87,7 @@ export const dataProvider: DataProvider = {
       throw new Error(result.errors[0].message);
     }
 
-    const data = result.data[resource] || result.data.myServices || result.data.sessions || [];
+    const data = result.data[resource] || result.data.myServices || result.data.myApplications || result.data.sessions || [];
 
     return {
       data,
@@ -119,6 +134,22 @@ export const dataProvider: DataProvider = {
           }
         }
       `;
+    } else if (resource === 'applications') {
+      // No single application query, fetch current user's applications and pick one
+      query = `
+        query MyApplications {
+          myApplications {
+            id
+            name
+            description
+            owner { id email }
+            createdAt
+            updatedAt
+            apiKeys { id keyPrefix status name scopes createdAt expiresAt }
+            whitelistedServices { id name status }
+          }
+        }
+      `;
     }
 
     const response = await authenticatedFetch(API_URL, {
@@ -127,10 +158,14 @@ export const dataProvider: DataProvider = {
         'Content-Type': 'application/json'
       },
       credentials: 'include',
-      body: JSON.stringify({
-        query,
-        variables: { id }
-      })
+      body: JSON.stringify(
+        resource === 'applications'
+          ? { query }
+          : {
+              query,
+              variables: { id }
+            }
+      )
     });
 
     const result = await response.json();
@@ -139,7 +174,11 @@ export const dataProvider: DataProvider = {
       throw new Error(result.errors[0].message);
     }
 
-    const data = result.data.user || result.data.service;
+    let data = result.data.user || result.data.service;
+    if (resource === 'applications') {
+      const apps = result.data.myApplications || [];
+      data = apps.find((a: any) => a.id === id);
+    }
 
     return {
       data
@@ -193,6 +232,18 @@ export const dataProvider: DataProvider = {
           }
         }
       `;
+    } else if (resource === 'applications') {
+      mutation = `
+        mutation CreateApplication($name: String!, $description: String) {
+          createApplication(name: $name, description: $description) {
+            id
+            name
+            description
+            createdAt
+            updatedAt
+          }
+        }
+      `;
     }
 
     const response = await authenticatedFetch(API_URL, {
@@ -203,7 +254,14 @@ export const dataProvider: DataProvider = {
       credentials: 'include',
       body: JSON.stringify({
         query: mutation,
-        variables: resource === 'services' ? { input: variables } : { data: variables }
+        variables:
+          resource === 'services'
+            ? { input: variables }
+            : resource === 'users'
+              ? { data: variables }
+              : resource === 'applications'
+                ? { name: (variables as any).name, description: (variables as any).description }
+                : {}
       })
     });
 
@@ -213,7 +271,10 @@ export const dataProvider: DataProvider = {
       throw new Error(result.errors[0].message);
     }
 
-    const data = resource === 'services' ? result.data.registerService.service : result.data.createUser;
+    let data;
+    if (resource === 'services') data = result.data.registerService.service;
+    else if (resource === 'users') data = result.data.createUser;
+    else if (resource === 'applications') data = result.data.createApplication;
 
     return {
       data
@@ -334,6 +395,87 @@ export const dataProvider: DataProvider = {
   },
 
   custom: async ({ url, method, filters, sorters, payload, query, headers, meta }) => {
+    if (meta?.operation === 'createApplicationApiKey') {
+      const mutation = `
+        mutation CreateAppKey($applicationId: ID!, $name: String!, $scopes: [String!], $expiresAt: DateTimeISO)
+        { createApiKey(applicationId: $applicationId, name: $name, scopes: $scopes, expiresAt: $expiresAt) }
+      `;
+
+      const response = await authenticatedFetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          query: mutation,
+          variables: payload
+        })
+      });
+
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      // Returns plaintext API key once
+      return { data: { apiKey: result.data.createApiKey } };
+    }
+
+    if (meta?.operation === 'revokeApplicationApiKey') {
+      const mutation = `
+        mutation RevokeKey($apiKeyId: ID!){ revokeApiKey(apiKeyId: $apiKeyId) }
+      `;
+      const response = await authenticatedFetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ query: mutation, variables: payload })
+      });
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      return { data: { success: result.data.revokeApiKey } };
+    }
+
+    if (meta?.operation === 'externallyAccessibleServices') {
+      const queryString = `
+        query { externallyAccessibleServices { id name status } }
+      `;
+      const response = await authenticatedFetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ query: queryString })
+      });
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      return { data: result.data.externallyAccessibleServices };
+    }
+
+    if (meta?.operation === 'addServiceToApplication') {
+      const mutation = `
+        mutation AddService($applicationId: ID!, $serviceId: ID!){ addServiceToApplication(applicationId: $applicationId, serviceId: $serviceId) }
+      `;
+      const response = await authenticatedFetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ query: mutation, variables: payload })
+      });
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      return { data: { success: result.data.addServiceToApplication } };
+    }
+
+    if (meta?.operation === 'removeServiceFromApplication') {
+      const mutation = `
+        mutation RemoveService($applicationId: ID!, $serviceId: ID!){ removeServiceFromApplication(applicationId: $applicationId, serviceId: $serviceId) }
+      `;
+      const response = await authenticatedFetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ query: mutation, variables: payload })
+      });
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      return { data: { success: result.data.removeServiceFromApplication } };
+    }
     if (meta?.operation === 'rotateServiceKey') {
       const mutation = `
         mutation RotateServiceKey($serviceId: ID!) {

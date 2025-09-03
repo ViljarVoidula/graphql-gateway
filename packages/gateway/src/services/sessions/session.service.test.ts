@@ -1,11 +1,10 @@
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert';
-import { Container } from 'typedi';
-import { describeWithDatabase, TestDatabaseManager } from '../test/test-utils';
-import { SessionService } from './session.service';
-import { Session } from '../entities/session.entity';
-import { User } from './users/user.entity';
 import * as bcrypt from 'bcrypt';
+import assert from 'node:assert';
+import { beforeEach, describe, it } from 'node:test';
+import { Session } from '../../entities/session.entity';
+import { describeWithDatabase, TestDatabaseManager } from '../../test/test-utils';
+import { SessionService } from '../sessions/session.service';
+import { User } from '../users/user.entity';
 
 describeWithDatabase('SessionService', () => {
   let sessionService: SessionService;
@@ -35,12 +34,7 @@ describeWithDatabase('SessionService', () => {
       const ipAddress = '192.168.1.1';
       const userAgent = 'Mozilla/5.0 Test Browser';
 
-      const session = await sessionService.createSession(
-        testUser.id,
-        sessionId,
-        ipAddress,
-        userAgent
-      );
+      const session = await sessionService.createSession(testUser.id, sessionId, ipAddress, userAgent);
 
       assert.ok(session.id);
       assert.strictEqual(session.userId, testUser.id);
@@ -50,7 +44,7 @@ describeWithDatabase('SessionService', () => {
       assert.strictEqual(session.isActive, true);
       assert.ok(session.expiresAt);
       assert.ok(session.createdAt);
-      
+
       // Verify session exists in database
       const dbSession = await sessionRepository.findOne({ where: { sessionId } });
       assert.ok(dbSession);
@@ -82,30 +76,22 @@ describeWithDatabase('SessionService', () => {
 
       for (const testCase of testCases) {
         const sessionId = `test-session-${Math.random()}`;
-        const session = await sessionService.createSession(
-          testUser.id,
-          sessionId,
-          testCase.input
-        );
-        
-        assert.strictEqual(
-          session.ipAddress,
-          testCase.expected,
-          `Failed for input: ${testCase.input}`
-        );
+        const session = await sessionService.createSession(testUser.id, sessionId, testCase.input);
+
+        assert.strictEqual(session.ipAddress, testCase.expected, `Failed for input: ${testCase.input}`);
       }
     });
 
     it('should set expiration time to 24 hours from now', async () => {
       const sessionId = 'test-session-expiry';
       const beforeCreate = new Date();
-      
+
       const session = await sessionService.createSession(testUser.id, sessionId);
-      
+
       const afterCreate = new Date();
       const expectedExpiry = new Date(beforeCreate.getTime() + 24 * 60 * 60 * 1000);
       const maxExpectedExpiry = new Date(afterCreate.getTime() + 24 * 60 * 60 * 1000);
-      
+
       assert.ok(session.expiresAt >= expectedExpiry);
       assert.ok(session.expiresAt <= maxExpectedExpiry);
     });
@@ -117,12 +103,7 @@ describeWithDatabase('SessionService', () => {
 
     beforeEach(async () => {
       // Create active session
-      activeSession = await sessionService.createSession(
-        testUser.id,
-        'active-session-123',
-        '192.168.1.1',
-        'Test Browser'
-      );
+      activeSession = await sessionService.createSession(testUser.id, 'active-session-123', '192.168.1.1', 'Test Browser');
 
       // Create inactive session
       inactiveSession = await sessionRepository.save(
@@ -139,7 +120,7 @@ describeWithDatabase('SessionService', () => {
 
     it('should find active session by sessionId', async () => {
       const session = await sessionService.findActiveSession('active-session-123');
-      
+
       assert.ok(session);
       assert.strictEqual(session.sessionId, 'active-session-123');
       assert.strictEqual(session.isActive, true);
@@ -148,19 +129,19 @@ describeWithDatabase('SessionService', () => {
 
     it('should not find inactive session', async () => {
       const session = await sessionService.findActiveSession('inactive-session-456');
-      
+
       assert.strictEqual(session, null);
     });
 
     it('should return null for non-existent session', async () => {
       const session = await sessionService.findActiveSession('non-existent-session');
-      
+
       assert.strictEqual(session, null);
     });
 
     it('should include user relation when found', async () => {
       const session = await sessionService.findActiveSession('active-session-123');
-      
+
       assert.ok(session);
       assert.ok(session.user);
       assert.strictEqual(session.user.id, testUser.id);
@@ -172,21 +153,16 @@ describeWithDatabase('SessionService', () => {
     let testSession: Session;
 
     beforeEach(async () => {
-      testSession = await sessionService.createSession(
-        testUser.id,
-        'test-session-invalidate',
-        '192.168.1.1',
-        'Test Browser'
-      );
+      testSession = await sessionService.createSession(testUser.id, 'test-session-invalidate', '192.168.1.1', 'Test Browser');
     });
 
     it('should invalidate session by sessionId', async () => {
       await sessionService.invalidateSession('test-session-invalidate');
-      
+
       // Verify session is no longer active
       const session = await sessionService.findActiveSession('test-session-invalidate');
       assert.strictEqual(session, null);
-      
+
       // Verify session still exists but is inactive
       const inactiveSession = await sessionRepository.findOne({
         where: { sessionId: 'test-session-invalidate' }
@@ -198,7 +174,7 @@ describeWithDatabase('SessionService', () => {
     it('should handle invalidating non-existent session gracefully', async () => {
       // Should not throw an error
       await sessionService.invalidateSession('non-existent-session');
-      
+
       // Original session should still be active
       const session = await sessionService.findActiveSession('test-session-invalidate');
       assert.ok(session);
@@ -211,7 +187,7 @@ describeWithDatabase('SessionService', () => {
       // Create multiple sessions for the test user
       await sessionService.createSession(testUser.id, 'session-1', '192.168.1.1', 'Browser 1');
       await sessionService.createSession(testUser.id, 'session-2', '192.168.1.2', 'Browser 2');
-      
+
       // Create session for different user
       const otherUser = await userRepository.save(
         userRepository.create({
@@ -225,13 +201,13 @@ describeWithDatabase('SessionService', () => {
 
     it('should invalidate all sessions for a specific user', async () => {
       await sessionService.invalidateAllUserSessions(testUser.id);
-      
+
       // Verify test user sessions are inactive
       const session1 = await sessionService.findActiveSession('session-1');
       const session2 = await sessionService.findActiveSession('session-2');
       assert.strictEqual(session1, null);
       assert.strictEqual(session2, null);
-      
+
       // Verify other user session is still active
       const otherSession = await sessionService.findActiveSession('other-user-session');
       assert.ok(otherSession);
@@ -244,7 +220,7 @@ describeWithDatabase('SessionService', () => {
       // Create multiple sessions for the test user
       await sessionService.createSession(testUser.id, 'session-1', '192.168.1.1', 'Browser 1');
       await sessionService.createSession(testUser.id, 'session-2', '192.168.1.2', 'Browser 2');
-      
+
       // Create inactive session
       await sessionRepository.save(
         sessionRepository.create({
@@ -270,15 +246,15 @@ describeWithDatabase('SessionService', () => {
 
     it('should return only active sessions for the user', async () => {
       const sessions = await sessionService.getUserActiveSessions(testUser.id);
-      
+
       assert.strictEqual(sessions.length, 2);
-      assert.ok(sessions.find(s => s.sessionId === 'session-1'));
-      assert.ok(sessions.find(s => s.sessionId === 'session-2'));
-      assert.ok(!sessions.find(s => s.sessionId === 'inactive-session'));
-      assert.ok(!sessions.find(s => s.sessionId === 'other-user-session'));
-      
+      assert.ok(sessions.find((s) => s.sessionId === 'session-1'));
+      assert.ok(sessions.find((s) => s.sessionId === 'session-2'));
+      assert.ok(!sessions.find((s) => s.sessionId === 'inactive-session'));
+      assert.ok(!sessions.find((s) => s.sessionId === 'other-user-session'));
+
       // All returned sessions should be active
-      sessions.forEach(session => {
+      sessions.forEach((session) => {
         assert.strictEqual(session.isActive, true);
         assert.strictEqual(session.userId, testUser.id);
       });
@@ -294,7 +270,7 @@ describeWithDatabase('SessionService', () => {
       );
 
       const sessions = await sessionService.getUserActiveSessions(newUser.id);
-      
+
       assert.strictEqual(sessions.length, 0);
     });
   });
@@ -303,27 +279,22 @@ describeWithDatabase('SessionService', () => {
     let testSession: Session;
 
     beforeEach(async () => {
-      testSession = await sessionService.createSession(
-        testUser.id,
-        'test-session-activity',
-        '192.168.1.1',
-        'Test Browser'
-      );
+      testSession = await sessionService.createSession(testUser.id, 'test-session-activity', '192.168.1.1', 'Test Browser');
     });
 
     it('should update session last activity', async () => {
       const originalActivity = testSession.lastActivity;
-      
+
       // Wait a bit to ensure different timestamp
-      await new Promise(resolve => setTimeout(resolve, 10));
-      
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
       await sessionService.updateSessionActivity('test-session-activity');
-      
+
       // Fetch updated session
       const updatedSession = await sessionRepository.findOne({
         where: { sessionId: 'test-session-activity' }
       });
-      
+
       assert.ok(updatedSession);
       assert.ok(updatedSession.lastActivity > originalActivity);
     });
@@ -337,7 +308,7 @@ describeWithDatabase('SessionService', () => {
   describe('cleanupExpiredSessions', () => {
     beforeEach(async () => {
       const now = new Date();
-      
+
       // Create expired session
       await sessionRepository.save(
         sessionRepository.create({
@@ -356,13 +327,13 @@ describeWithDatabase('SessionService', () => {
 
     it('should remove expired sessions', async () => {
       await sessionService.cleanupExpiredSessions();
-      
+
       // Verify expired session is removed
       const expiredSession = await sessionRepository.findOne({
         where: { sessionId: 'expired-session' }
       });
       assert.strictEqual(expiredSession, null);
-      
+
       // Verify valid session still exists
       const validSession = await sessionService.findActiveSession('valid-session');
       assert.ok(validSession);

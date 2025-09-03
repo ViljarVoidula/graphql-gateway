@@ -15,7 +15,7 @@ import {
 } from '../../auth/session.config';
 import { Session } from '../../entities/session.entity';
 import { log } from '../../utils/logger';
-import { SessionService } from '../session.service';
+import { SessionService } from '../sessions/session.service';
 import { LoginInput } from './login.input';
 import { UserUpdateInput } from './user-update.input';
 import { User } from './user.entity';

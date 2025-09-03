@@ -138,13 +138,15 @@ export class ServiceRegistryResolver {
       throw new Error('User not authenticated');
     }
 
+    // Only admins can register new services
+    if (!ctx.user.permissions?.includes('admin')) {
+      throw new Error('Only administrators can register new services');
+    }
+
     // Use current user as owner if not specified, or check admin permissions if specified
     const ownerId = input.ownerId || ctx.user.id;
 
-    // If user is trying to assign to someone else, they need admin permissions
-    if (input.ownerId && input.ownerId !== ctx.user.id && !ctx.user.permissions?.includes('admin')) {
-      throw new Error('Not authorized to create services for other users');
-    }
+    // Admins may assign ownership to someone else; no extra check needed beyond admin gate above
 
     const serviceData = {
       ...input,

@@ -1,14 +1,23 @@
-import { Field, ID, ObjectType, Directive } from "type-graphql";
-import { Column, Entity, PrimaryGeneratedColumn, BeforeInsert, BeforeUpdate, OneToMany, CreateDateColumn, UpdateDateColumn } from "typeorm";
-import * as bcrypt from "bcrypt";
-import { Service } from "../../entities/service.entity";
+import * as bcrypt from 'bcrypt';
+import { Directive, Field, ID, ObjectType } from 'type-graphql';
+import {
+  BeforeInsert,
+  BeforeUpdate,
+  Column,
+  CreateDateColumn,
+  Entity,
+  OneToMany,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn
+} from 'typeorm';
+import { Service } from '../../entities/service.entity';
 
 @ObjectType()
 @Entity()
 @Directive('@authz(rules: ["isAuthenticated"])')
 export class User {
-  @Field(_type => ID)
-  @PrimaryGeneratedColumn("uuid")
+  @Field((_type) => ID)
+  @PrimaryGeneratedColumn('uuid')
   readonly id!: string;
 
   @Field()
@@ -27,6 +36,13 @@ export class User {
   @Column({ default: false })
   @Field()
   isEmailVerified!: boolean;
+
+  // Email verification fields (not exposed in GraphQL)
+  @Column({ nullable: true })
+  emailVerificationToken?: string | null;
+
+  @Column({ nullable: true })
+  emailVerificationTokenExpiry?: Date | null;
 
   @Column({ nullable: true })
   @Field({ nullable: true })
@@ -51,11 +67,11 @@ export class User {
   @Field()
   updatedAt!: Date;
 
-  @OneToMany("Session", "user")
+  @OneToMany('Session', 'user')
   sessions?: any[];
 
   @Field(() => [Service])
-  @OneToMany(() => Service, service => service.owner)
+  @OneToMany(() => Service, (service) => service.owner)
   ownedServices!: Service[];
 
   private passwordChanged = false;

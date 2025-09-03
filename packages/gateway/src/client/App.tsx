@@ -4,11 +4,14 @@ import { Authenticated, Refine } from '@refinedev/core';
 import { RefineKbar, RefineKbarProvider } from '@refinedev/kbar';
 import { ErrorComponent, notificationProvider } from '@refinedev/mantine';
 import routerProvider from '@refinedev/react-router-v6';
-import { IconAdjustments, IconFingerprint, IconServer, IconUserCircle } from '@tabler/icons-react';
+import { IconAdjustments, IconApps, IconFingerprint, IconServer, IconUserCircle } from '@tabler/icons-react';
 import { useEffect } from 'react';
 import { BrowserRouter, Outlet, Route, Routes } from 'react-router-dom';
 
 import { CustomLayout } from './components/CustomLayout';
+import { ApplicationList } from './pages/applications';
+import { ApplicationCreate } from './pages/applications/create';
+import { ApplicationDetail } from './pages/applications/detail';
 import { Dashboard } from './pages/dashboard';
 import { Login } from './pages/login';
 import { ServiceList } from './pages/services';
@@ -70,6 +73,17 @@ function App() {
                   }
                 },
                 {
+                  name: 'applications',
+                  list: '/applications',
+                  show: '/applications/:id',
+                  create: '/applications/create',
+                  meta: {
+                    canDelete: false,
+                    icon: <IconApps size={18} />,
+                    label: 'Applications'
+                  }
+                },
+                {
                   name: 'services',
                   list: '/services',
                   show: '/services/:id',
@@ -120,6 +134,9 @@ function App() {
                   <Route path="/users/create" element={<UserCreate />} />
                   <Route path="/users/:id" element={<UserDetail />} />
                   <Route path="/users/:id/edit" element={<UserEdit />} />
+                  <Route path="/applications" element={<ApplicationList />} />
+                  <Route path="/applications/create" element={<ApplicationCreate />} />
+                  <Route path="/applications/:id" element={<ApplicationDetail />} />
                   <Route path="/services" element={<ServiceList />} />
                   <Route path="/services/create" element={<ServiceCreate />} />
                   <Route path="/services/:id" element={<ServiceDetail />} />

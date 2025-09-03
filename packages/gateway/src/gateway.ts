@@ -1,27 +1,27 @@
-import { createServer, Server } from 'http';
-import { buildSchema, GraphQLSchema } from 'graphql';
-import { createYoga } from 'graphql-yoga';
-import { SubschemaConfig } from '@graphql-tools/delegate';
-import { buildHMACExecutor } from './utils/hmacExecutor';
 import { stitchSchemas } from '@graphql-tools/stitch';
 import { stitchingDirectives } from '@graphql-tools/stitching-directives';
-import { SchemaLoader } from './SchemaLoader';
-import { makeEndpointsSchema } from './services/endpoints';
-import { keyManager } from './security/keyManager';
-import { dataSource } from './db/datasource';
+import * as fs from 'fs';
+import { buildSchema, GraphQLSchema } from 'graphql';
+import { createYoga } from 'graphql-yoga';
+import { createServer } from 'http';
+import * as path from 'path';
+// reflect-metadata is loaded in src/index.ts
+import { Container } from 'typedi';
 import { initializeRedis } from './auth/session.config';
 import { useSession } from './auth/session.plugin';
-import { Container } from 'typedi';
-import { User } from './services/users/user.entity';
-import { Session } from './entities/session.entity';
-import { Service } from './entities/service.entity';
+import { dataSource } from './db/datasource';
+import { Application } from './entities/application.entity';
 import { ServiceKey } from './entities/service-key.entity';
-import { SessionService } from './services/session.service';
-import { ServiceRegistryService, ServiceCacheManager } from './services/service-registry/service-registry.service';
+import { Service } from './entities/service.entity';
+import { Session } from './entities/session.entity';
+import { SchemaLoader } from './SchemaLoader';
+import { keyManager } from './security/keyManager';
+import { makeEndpointsSchema } from './services/endpoints';
+import { ServiceCacheManager, ServiceRegistryService } from './services/service-registry/service-registry.service';
+import { SessionService } from './services/sessions/session.service';
+import { User } from './services/users/user.entity';
+import { buildHMACExecutor } from './utils/hmacExecutor';
 import { log } from './utils/logger';
-import * as fs from 'fs';
-import * as path from 'path';
-import "reflect-metadata";
 
 const { stitchingDirectivesTransformer } = stitchingDirectives();
 
@@ -91,34 +91,34 @@ async function checkHealth() {
 }
 
 // Service endpoint cache using Map for better control
-export const serviceEndpointCache = new Map<string, { endpoints: string[], lastUpdated: number }>();
+export const serviceEndpointCache = new Map<string, { endpoints: string[]; lastUpdated: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache TTL
 
 async function loadServicesFromDatabase(): Promise<string[]> {
   const cacheKey = 'services';
   const now = Date.now();
-  
+
   // Check cache first
   const cached = serviceEndpointCache.get(cacheKey);
-  if (cached && (now - cached.lastUpdated) < CACHE_TTL) {
+  if (cached && now - cached.lastUpdated < CACHE_TTL) {
     log.debug('Using cached service endpoints', {
       operation: 'loadServicesFromDatabase',
       metadata: { source: 'cache', endpointCount: cached.endpoints.length }
     });
     return cached.endpoints;
   }
-  
+
   try {
     const serviceRegistry = Container.get(ServiceRegistryService);
     const services = await serviceRegistry.getAllServices();
-    const endpoints = services.map(service => service.url);
-    
+    const endpoints = services.map((service) => service.url);
+
     // Update cache on successful fetch
     serviceEndpointCache.set(cacheKey, {
       endpoints,
       lastUpdated: now
     });
-    
+
     log.debug('Loaded services from database', {
       operation: 'loadServicesFromDatabase',
       metadata: { source: 'database', endpointCount: endpoints.length, cached: true }
@@ -130,7 +130,7 @@ async function loadServicesFromDatabase(): Promise<string[]> {
       error: error instanceof Error ? error : new Error(String(error)),
       metadata: { source: 'database' }
     });
-    
+
     // Return cached endpoints if available, even if expired
     if (cached) {
       log.warn('Database unavailable, using cached service endpoints', {
@@ -139,7 +139,7 @@ async function loadServicesFromDatabase(): Promise<string[]> {
       });
       return cached.endpoints;
     }
-    
+
     // No cache available, return empty array
     log.warn('No cached services available, returning empty array', {
       operation: 'loadServicesFromDatabase',
@@ -154,8 +154,9 @@ function cleanupServiceCache() {
   const now = Date.now();
   const cacheKey = 'services';
   const cached = serviceEndpointCache.get(cacheKey);
-  
-  if (cached && (now - cached.lastUpdated) > CACHE_TTL * 2) { // Keep expired entries for 2x TTL
+
+  if (cached && now - cached.lastUpdated > CACHE_TTL * 2) {
+    // Keep expired entries for 2x TTL
     serviceEndpointCache.delete(cacheKey);
     log.debug('Cleaned up expired service cache', {
       operation: 'cleanupServiceCache',
@@ -166,24 +167,26 @@ function cleanupServiceCache() {
 
 const loader = new SchemaLoader(
   function buildSchemaFromEndpoints(loadedEndpoints) {
-    const subschemas: SubschemaConfig[] = loadedEndpoints.map(({ sdl, url }) => ({
+    const subschemas: Array<GraphQLSchema | any> = loadedEndpoints.map(({ sdl, url }) => ({
       schema: buildSchema(sdl),
       executor: buildHMACExecutor({
         endpoint: url,
         timeout: 5000,
-        enableHMAC: true,
+        enableHMAC: true
       }),
-      batch: true,
+      batch: true
     }));
 
-    subschemas.push(makeEndpointsSchema(loader));
+    // Add local resolvers schema
+    const localSchema = makeEndpointsSchema(loader);
+    subschemas.push(localSchema as any);
 
     return stitchSchemas({
       subschemaConfigTransforms: [stitchingDirectivesTransformer],
-      subschemas,
+      subschemas
     });
   },
-  [], // Will be populated after database connection
+  [] // Will be populated after database connection
 );
 
 const server = createServer(
@@ -195,23 +198,24 @@ const server = createServer(
     healthCheckEndpoint: '/health',
     landingPage: false,
     plugins: [
-      useSession(), // Add session plugin
+      useSession() // Add session plugin
     ],
     graphiql: {
-      title: 'GraphQL Gateway with Session Security',
+      title: 'GraphQL Gateway with Session Security'
     },
     context: async ({ request }) => {
       // Context will be extended by session plugin
-      return { 
-        request, 
-        keyManager 
+      return {
+        request,
+        keyManager,
+        schemaLoader: loader
       };
     },
     cors: {
       origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
       credentials: true // Important for sessions
-    },
-  }),
+    }
+  })
 );
 
 // Health check middleware
@@ -222,12 +226,12 @@ server.on('request', async (req, res) => {
     res.end(JSON.stringify(health));
     return;
   }
-  
+
   // Serve admin UI
   if (req.url === '/admin' || req.url?.startsWith('/admin/')) {
     const adminHtmlPath = path.join(__dirname, '..', 'dist', 'client', 'index.html');
     const fallbackHtmlPath = path.join(__dirname, 'client', 'fallback.html');
-    
+
     if (fs.existsSync(adminHtmlPath)) {
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(fs.readFileSync(adminHtmlPath, 'utf-8'));
@@ -268,16 +272,14 @@ server.on('request', async (req, res) => {
       return;
     }
   }
-  
+
   // Handle other routes normally
   return;
 });
 
 export async function startServer() {
-  const REFERSH_INTERVAL = process.env.REFRESH_INTERVAL
-    ? parseInt(process.env.REFRESH_INTERVAL, 10)
-    : 30_000;
-  
+  const REFERSH_INTERVAL = process.env.REFRESH_INTERVAL ? parseInt(process.env.REFRESH_INTERVAL, 10) : 30_000;
+
   // Initialize dataSource before creating schema
   try {
     await dataSource.initialize();
@@ -343,10 +345,14 @@ export async function startServer() {
   // Set up dependency injection
   Container.set('UserRepository', dataSource.getRepository(User));
   Container.set('SessionRepository', dataSource.getRepository(Session));
+  // Note: use consistent DI tokens used by resolvers
+  Container.set('ApplicationRepository', dataSource.getRepository(Application));
   Container.set('ServiceRepository', dataSource.getRepository(Service));
   Container.set('ServiceKeyRepository', dataSource.getRepository(ServiceKey));
+
   Container.set('SessionService', Container.get(SessionService));
   Container.set('ServiceRegistryService', Container.get(ServiceRegistryService));
+
   // JWTService is automatically registered via @Service() decorator
 
   // Load existing services into keyManager
@@ -370,11 +376,11 @@ export async function startServer() {
     const serviceEndpoints = await loadServicesFromDatabase();
     loader.endpoints = serviceEndpoints;
     loader.setEndpointLoader(loadServicesFromDatabase);
-    
+
     // Connect cache manager to the loader and cache
     ServiceCacheManager.setSchemaLoader(loader);
     ServiceCacheManager.setServiceCache(serviceEndpointCache);
-    
+
     log.debug(`Loaded ${serviceEndpoints.length} services from database:`, serviceEndpoints);
   } catch (error) {
     log.error('Failed to load services from database', {
@@ -385,10 +391,8 @@ export async function startServer() {
   }
 
   // Start periodic cleanup of expired keys and cache
-  const KEY_CLEANUP_INTERVAL = process.env.KEY_CLEANUP_INTERVAL
-    ? parseInt(process.env.KEY_CLEANUP_INTERVAL, 10)
-    : 60_000; // 1 minute default
-  
+  const KEY_CLEANUP_INTERVAL = process.env.KEY_CLEANUP_INTERVAL ? parseInt(process.env.KEY_CLEANUP_INTERVAL, 10) : 60_000; // 1 minute default
+
   const cleanupInterval = setInterval(() => {
     keyManager.cleanupExpiredKeys();
     cleanupServiceCache();
@@ -399,16 +403,16 @@ export async function startServer() {
     const sessionService = Container.get(SessionService);
     await sessionService.cleanupExpiredSessions();
   }, 60_000); // Clean up every minute
-  
+
   // sleep 2s
   await loader.reload();
-  await new Promise<void>(resolve => server.listen(4000, resolve));
+  await new Promise<void>((resolve) => server.listen(4000, resolve));
   log.debug('Gateway started on http://localhost:4000');
   log.debug(`HMAC key cleanup will run every ${KEY_CLEANUP_INTERVAL} ms`);
 
   await loader.autoRefresh(REFERSH_INTERVAL);
   log.debug(`Gateway schema will refresh every ${REFERSH_INTERVAL} ms`);
-  
+
   // Store cleanup intervals for stopping later
   (server as any).keyCleanupInterval = cleanupInterval;
   (server as any).sessionCleanupInterval = sessionCleanupInterval;
@@ -416,7 +420,7 @@ export async function startServer() {
 
 export async function stopServer() {
   loader.stopAutoRefresh();
-  
+
   // Clear the key cleanup interval
   if ((server as any).keyCleanupInterval) {
     clearInterval((server as any).keyCleanupInterval);
@@ -426,12 +430,12 @@ export async function stopServer() {
   if ((server as any).sessionCleanupInterval) {
     clearInterval((server as any).sessionCleanupInterval);
   }
-  
+
   // Close database connection
   if (dataSource.isInitialized) {
     await dataSource.destroy();
     log.debug('Database connection closed');
   }
-  
-  await new Promise(resolve => server.close(resolve));
+
+  await new Promise((resolve) => server.close(resolve));
 }

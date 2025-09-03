@@ -17,6 +17,7 @@ import {
 import { useLogout } from '@refinedev/core';
 import {
   IconAdjustments,
+  IconApps,
   IconChevronLeft,
   IconChevronRight,
   IconDashboard,
@@ -46,6 +47,12 @@ const menuItems = [
     label: 'Users',
     icon: IconUserCircle,
     path: '/users'
+  },
+  {
+    id: 'applications',
+    label: 'Applications',
+    icon: IconApps,
+    path: '/applications'
   },
   {
     id: 'services',

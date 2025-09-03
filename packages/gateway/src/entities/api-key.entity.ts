@@ -1,10 +1,20 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
-import { Field, ObjectType, ID, registerEnumType } from 'type-graphql';
+import { Field, ID, ObjectType, registerEnumType } from 'type-graphql';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn
+} from 'typeorm';
+import { Application } from './application.entity';
 
 export enum ApiKeyStatus {
   ACTIVE = 'active',
   REVOKED = 'revoked',
-  EXPIRED = 'expired',
+  EXPIRED = 'expired'
 }
 
 registerEnumType(ApiKeyStatus, { name: 'ApiKeyStatus' });
@@ -53,9 +63,10 @@ export class ApiKey {
   @Column({ nullable: true })
   lastUsedAt?: Date;
 
-  @ManyToOne('Application', { onDelete: 'CASCADE' })
+  @Field(() => Application)
+  @ManyToOne(() => Application, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'applicationId' })
-  application: any;
+  application: Application;
 
   @Field(() => ID)
   @Column()
