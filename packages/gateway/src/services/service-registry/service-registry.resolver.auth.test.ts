@@ -21,7 +21,7 @@ describe('ServiceRegistryResolver Authorization', () => {
       getServiceKeys: mock.fn(),
       rotateServiceKey: mock.fn(),
       revokeServiceKey: mock.fn(),
-      getExternallyAccessibleServices: mock.fn(),
+      getExternallyAccessibleServices: mock.fn()
     };
 
     serviceRegistryResolver = new ServiceRegistryResolver(mockServiceRegistryService);
@@ -36,13 +36,10 @@ describe('ServiceRegistryResolver Authorization', () => {
         description: 'Test service',
         enableHMAC: true,
         timeout: 5000,
-        enableBatching: true,
+        enableBatching: true
       };
 
-      await assert.rejects(
-        () => serviceRegistryResolver.registerService(input, ctx),
-        /User not authenticated/
-      );
+      await assert.rejects(() => serviceRegistryResolver.registerService(input, ctx), /User not authenticated/);
     });
 
     it('should throw error if user is not admin', async () => {
@@ -50,8 +47,8 @@ describe('ServiceRegistryResolver Authorization', () => {
         user: {
           id: 'user123',
           email: 'test@example.com',
-          permissions: ['user'], // Not admin
-        },
+          permissions: ['user'] // Not admin
+        }
       } as any;
       const input = {
         name: 'test-service',
@@ -59,7 +56,7 @@ describe('ServiceRegistryResolver Authorization', () => {
         description: 'Test service',
         enableHMAC: true,
         timeout: 5000,
-        enableBatching: true,
+        enableBatching: true
       };
 
       await assert.rejects(
@@ -73,8 +70,8 @@ describe('ServiceRegistryResolver Authorization', () => {
         user: {
           id: 'admin123',
           email: 'admin@example.com',
-          permissions: ['admin'], // Admin user
-        },
+          permissions: ['admin'] // Admin user
+        }
       } as any;
       const input = {
         name: 'test-service',
@@ -82,13 +79,13 @@ describe('ServiceRegistryResolver Authorization', () => {
         description: 'Test service',
         enableHMAC: true,
         timeout: 5000,
-        enableBatching: true,
+        enableBatching: true
       };
 
       const mockService = { id: 'service123', name: 'test-service' };
       const mockHmacKey = { keyId: 'key123', secretKey: 'secret123' };
-      
-      mockServiceRegistryService.registerService.mock.mockImplementationOnce(() => 
+
+      mockServiceRegistryService.registerService.mock.mockImplementationOnce(() =>
         Promise.resolve({ service: mockService, hmacKey: mockHmacKey })
       );
 
@@ -97,7 +94,7 @@ describe('ServiceRegistryResolver Authorization', () => {
       assert.strictEqual(result.success, true);
       assert.strictEqual(result.service, mockService);
       assert.strictEqual(result.hmacKey, mockHmacKey);
-      
+
       // Verify service was called with correct parameters
       const callArgs = mockServiceRegistryService.registerService.mock.calls[0];
       assert.strictEqual(callArgs.arguments[0].name, input.name);
@@ -110,8 +107,8 @@ describe('ServiceRegistryResolver Authorization', () => {
         user: {
           id: 'admin123',
           email: 'admin@example.com',
-          permissions: ['admin'], // Admin user
-        },
+          permissions: ['admin'] // Admin user
+        }
       } as any;
       const input = {
         name: 'test-service',
@@ -120,20 +117,20 @@ describe('ServiceRegistryResolver Authorization', () => {
         ownerId: 'otheruser123', // Assigning to another user
         enableHMAC: true,
         timeout: 5000,
-        enableBatching: true,
+        enableBatching: true
       };
 
       const mockService = { id: 'service123', name: 'test-service' };
       const mockHmacKey = { keyId: 'key123', secretKey: 'secret123' };
-      
-      mockServiceRegistryService.registerService.mock.mockImplementationOnce(() => 
+
+      mockServiceRegistryService.registerService.mock.mockImplementationOnce(() =>
         Promise.resolve({ service: mockService, hmacKey: mockHmacKey })
       );
 
       const result = await serviceRegistryResolver.registerService(input, ctx);
 
       assert.strictEqual(result.success, true);
-      
+
       // Verify service was called with the specified owner
       const callArgs = mockServiceRegistryService.registerService.mock.calls[0];
       assert.strictEqual(callArgs.arguments[0].ownerId, input.ownerId);
@@ -146,8 +143,8 @@ describe('ServiceRegistryResolver Authorization', () => {
         user: {
           id: 'user123',
           email: 'test@example.com',
-          permissions: ['user'], // Not admin
-        },
+          permissions: ['user'] // Not admin
+        }
       } as any;
 
       await assert.rejects(
@@ -161,19 +158,17 @@ describe('ServiceRegistryResolver Authorization', () => {
         user: {
           id: 'admin123',
           email: 'admin@example.com',
-          permissions: ['admin'], // Admin user
-        },
+          permissions: ['admin'] // Admin user
+        }
       } as any;
 
       const mockService = { id: 'service123', name: 'test-service' };
-      mockServiceRegistryService.updateService.mock.mockImplementationOnce(() => 
-        Promise.resolve(mockService)
-      );
+      mockServiceRegistryService.updateService.mock.mockImplementationOnce(() => Promise.resolve(mockService));
 
       const result = await serviceRegistryResolver.transferServiceOwnership('service123', 'newowner123', ctx);
 
       assert.strictEqual(result, true);
-      
+
       // Verify service was updated with new owner
       const callArgs = mockServiceRegistryService.updateService.mock.calls[0];
       assert.strictEqual(callArgs.arguments[0], 'service123');

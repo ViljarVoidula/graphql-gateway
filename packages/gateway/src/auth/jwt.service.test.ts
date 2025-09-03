@@ -35,7 +35,7 @@ describe('JWTService', () => {
       };
 
       const tokens = jwtService.generateTokens(payload);
-      
+
       // Should be approximately 15 minutes (900 seconds) based on default expiry
       assert.ok(tokens.expiresIn > 800);
       assert.ok(tokens.expiresIn < 1000);
@@ -55,7 +55,7 @@ describe('JWTService', () => {
       assert.ok(tokens.refreshToken);
       assert.strictEqual(tokens.tokenType, 'Bearer');
       assert.ok(tokens.expiresIn > 0);
-      
+
       // Verify the tokens can be decoded and contain the empty values
       const verified = jwtService.verifyAccessToken(tokens.accessToken);
       assert.ok(verified);
@@ -81,10 +81,7 @@ describe('JWTService', () => {
         sessionId: 'session-123'
       };
 
-      assert.throws(
-        () => invalidJwtService.generateTokens(payload),
-        /Failed to generate tokens/
-      );
+      assert.throws(() => invalidJwtService.generateTokens(payload), /Failed to generate tokens/);
     });
   });
 
@@ -162,7 +159,7 @@ describe('JWTService', () => {
     it('should extract token from valid Bearer header', () => {
       const token = 'valid-jwt-token';
       const header = `Bearer ${token}`;
-      
+
       const extracted = jwtService.extractTokenFromHeader(header);
       assert.strictEqual(extracted, token);
     });
@@ -179,7 +176,7 @@ describe('JWTService', () => {
         undefined
       ];
 
-      invalidHeaders.forEach(header => {
+      invalidHeaders.forEach((header) => {
         const extracted = jwtService.extractTokenFromHeader(header);
         assert.strictEqual(extracted, null, `Should return null for: ${header}`);
       });
@@ -190,11 +187,11 @@ describe('JWTService', () => {
     it('should generate session token with correct format', () => {
       const sessionId = 'session-123';
       const token = jwtService.generateSessionToken(sessionId);
-      
+
       assert.ok(token);
       assert.ok(typeof token === 'string');
       assert.ok(token.includes('.'));
-      
+
       // Should be able to verify it
       const verified = jwtService.verifySessionToken(token);
       assert.ok(verified);
@@ -204,7 +201,7 @@ describe('JWTService', () => {
     it('should generate different tokens for different sessions', () => {
       const token1 = jwtService.generateSessionToken('session-1');
       const token2 = jwtService.generateSessionToken('session-2');
-      
+
       assert.notStrictEqual(token1, token2);
     });
   });
@@ -234,7 +231,7 @@ describe('JWTService', () => {
 
       const tokens = jwtService.generateTokens(payload);
       const verified = jwtService.verifySessionToken(tokens.accessToken);
-      
+
       assert.strictEqual(verified, null);
     });
 
@@ -248,7 +245,7 @@ describe('JWTService', () => {
 
       const tokens = jwtService.generateTokens(payload);
       const verified = jwtService.verifySessionToken(tokens.refreshToken);
-      
+
       assert.strictEqual(verified, null);
     });
   });
@@ -264,20 +261,20 @@ describe('JWTService', () => {
 
       // Generate tokens
       const tokens = jwtService.generateTokens(payload);
-      
+
       // Verify access token
       const accessPayload = jwtService.verifyAccessToken(tokens.accessToken);
       assert.ok(accessPayload);
       assert.strictEqual(accessPayload.userId, payload.userId);
       assert.strictEqual(accessPayload.email, payload.email);
       assert.deepStrictEqual(accessPayload.permissions, payload.permissions);
-      
+
       // Verify refresh token
       const refreshPayload = jwtService.verifyRefreshToken(tokens.refreshToken);
       assert.ok(refreshPayload);
       assert.strictEqual(refreshPayload.userId, payload.userId);
       assert.strictEqual(refreshPayload.sessionId, payload.sessionId);
-      
+
       // Generate and verify session token
       const sessionToken = jwtService.generateSessionToken(payload.sessionId);
       const sessionPayload = jwtService.verifySessionToken(sessionToken);

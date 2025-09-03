@@ -13,19 +13,19 @@ import {
   Paper,
   ActionIcon,
   Tooltip,
-  Button,
+  Button
 } from '@mantine/core';
-import { 
-  IconUsers, 
-  IconServer, 
-  IconKey, 
-  IconActivity, 
+import {
+  IconUsers,
+  IconServer,
+  IconKey,
+  IconActivity,
   IconShield,
   IconClock,
   IconAlertCircle,
   IconCheck,
   IconX,
-  IconRefresh,
+  IconRefresh
 } from '@tabler/icons-react';
 
 interface DashboardStats {
@@ -92,10 +92,14 @@ const StatsCard: React.FC<{
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'active': return 'green';
-      case 'inactive': return 'red';
-      case 'maintenance': return 'yellow';
-      default: return 'gray';
+      case 'active':
+        return 'green';
+      case 'inactive':
+        return 'red';
+      case 'maintenance':
+        return 'yellow';
+      default:
+        return 'gray';
     }
   };
 
@@ -114,11 +118,11 @@ export const Dashboard: React.FC = () => {
   const fetchDashboardData = async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const token = localStorage.getItem('accessToken');
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       };
 
       if (token) {
@@ -162,24 +166,24 @@ export const Dashboard: React.FC = () => {
                 permissions
               }
             }
-          `,
-        }),
+          `
+        })
       });
 
       const result = await response.json();
-      
+
       if (result.errors) {
         throw new Error(result.errors[0].message);
       }
 
       const { users, myServices, me } = result.data;
-      
+
       // Calculate user statistics
       const userStats = {
         total: users?.length || 0,
         verified: users?.filter((u: any) => u.isEmailVerified).length || 0,
         locked: users?.filter((u: any) => u.lockedUntil && new Date(u.lockedUntil) > new Date()).length || 0,
-        admins: users?.filter((u: any) => u.permissions?.includes('admin')).length || 0,
+        admins: users?.filter((u: any) => u.permissions?.includes('admin')).length || 0
       };
 
       // Calculate service statistics
@@ -187,7 +191,7 @@ export const Dashboard: React.FC = () => {
         total: myServices?.length || 0,
         active: myServices?.filter((s: any) => s.status === 'active').length || 0,
         inactive: myServices?.filter((s: any) => s.status === 'inactive').length || 0,
-        maintenance: myServices?.filter((s: any) => s.status === 'maintenance').length || 0,
+        maintenance: myServices?.filter((s: any) => s.status === 'maintenance').length || 0
       };
 
       // Calculate session statistics from all users
@@ -199,13 +203,12 @@ export const Dashboard: React.FC = () => {
           const sessionDate = new Date(s.createdAt);
           const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
           return sessionDate > dayAgo;
-        }).length,
+        }).length
       };
 
       // Recent users (last 10)
-      const recentUsers = users
-        ?.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 10) || [];
+      const recentUsers =
+        users?.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 10) || [];
 
       // Recent sessions (last 10)
       const recentSessions = allSessions
@@ -217,7 +220,7 @@ export const Dashboard: React.FC = () => {
         services: serviceStats,
         sessions: sessionStats,
         recentUsers,
-        recentSessions,
+        recentSessions
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch dashboard data');
@@ -265,22 +268,21 @@ export const Dashboard: React.FC = () => {
       <Group position="apart">
         <Title order={2}>Dashboard</Title>
         <Tooltip label="Refresh data">
-          <ActionIcon 
-            size="lg" 
-            variant="light" 
-            onClick={fetchDashboardData}
-            loading={loading}
-          >
+          <ActionIcon size="lg" variant="light" onClick={fetchDashboardData} loading={loading}>
             <IconRefresh size={20} />
           </ActionIcon>
         </Tooltip>
       </Group>
 
       {/* Stats Cards */}
-      <SimpleGrid cols={4} spacing="md" breakpoints={[
-        { maxWidth: 'md', cols: 2, spacing: 'sm' },
-        { maxWidth: 'sm', cols: 1, spacing: 'sm' },
-      ]}>
+      <SimpleGrid
+        cols={4}
+        spacing="md"
+        breakpoints={[
+          { maxWidth: 'md', cols: 2, spacing: 'sm' },
+          { maxWidth: 'sm', cols: 1, spacing: 'sm' }
+        ]}
+      >
         <StatsCard
           title="Total Users"
           value={stats.users.total}
@@ -306,8 +308,8 @@ export const Dashboard: React.FC = () => {
           title="Security"
           value={stats.users.locked}
           icon={<IconShield />}
-          color={stats.users.locked > 0 ? "#e03131" : "#37b24d"}
-          subtitle={stats.users.locked > 0 ? "accounts locked" : "all accounts secure"}
+          color={stats.users.locked > 0 ? '#e03131' : '#37b24d'}
+          subtitle={stats.users.locked > 0 ? 'accounts locked' : 'all accounts secure'}
         />
       </SimpleGrid>
 
@@ -322,7 +324,9 @@ export const Dashboard: React.FC = () => {
             <Stack spacing="xs">
               <Group position="apart">
                 <Text size="sm">Total Users</Text>
-                <Text size="sm" weight={500}>{stats.users.total}</Text>
+                <Text size="sm" weight={500}>
+                  {stats.users.total}
+                </Text>
               </Group>
               <Group position="apart">
                 <Text size="sm">Verified</Text>
@@ -341,11 +345,7 @@ export const Dashboard: React.FC = () => {
               <Group position="apart">
                 <Text size="sm">Locked Accounts</Text>
                 <Group spacing={4}>
-                  {stats.users.locked > 0 ? (
-                    <IconX size={14} color="#e03131" />
-                  ) : (
-                    <IconCheck size={14} color="#37b24d" />
-                  )}
+                  {stats.users.locked > 0 ? <IconX size={14} color="#e03131" /> : <IconCheck size={14} color="#37b24d" />}
                   <Text size="sm">{stats.users.locked}</Text>
                 </Group>
               </Group>
@@ -362,7 +362,9 @@ export const Dashboard: React.FC = () => {
             <Stack spacing="xs">
               <Group position="apart">
                 <Text size="sm">Total Services</Text>
-                <Text size="sm" weight={500}>{stats.services.total}</Text>
+                <Text size="sm" weight={500}>
+                  {stats.services.total}
+                </Text>
               </Group>
               <Group position="apart">
                 <Text size="sm">Active</Text>
@@ -396,17 +398,15 @@ export const Dashboard: React.FC = () => {
               {stats.recentUsers.map((user: any) => (
                 <Group key={user.id} position="apart">
                   <div>
-                    <Text size="sm" weight={500}>{user.email}</Text>
+                    <Text size="sm" weight={500}>
+                      {user.email}
+                    </Text>
                     <Text size="xs" color="dimmed">
                       {new Date(user.createdAt).toLocaleDateString()}
                     </Text>
                   </div>
                   <Group spacing={4}>
-                    {user.isEmailVerified ? (
-                      <IconCheck size={14} color="#37b24d" />
-                    ) : (
-                      <IconX size={14} color="#e03131" />
-                    )}
+                    {user.isEmailVerified ? <IconCheck size={14} color="#37b24d" /> : <IconX size={14} color="#e03131" />}
                   </Group>
                 </Group>
               ))}
@@ -429,16 +429,22 @@ export const Dashboard: React.FC = () => {
               {stats.recentSessions.map((session: any) => (
                 <Group key={session.id} position="apart">
                   <div>
-                    <Text size="sm" weight={500}>{session.ipAddress}</Text>
+                    <Text size="sm" weight={500}>
+                      {session.ipAddress}
+                    </Text>
                     <Text size="xs" color="dimmed">
                       {new Date(session.createdAt).toLocaleDateString()}
                     </Text>
                   </div>
                   <Group spacing={4}>
                     {session.isActive ? (
-                      <Badge color="green" variant="light">Active</Badge>
+                      <Badge color="green" variant="light">
+                        Active
+                      </Badge>
                     ) : (
-                      <Badge color="gray" variant="light">Inactive</Badge>
+                      <Badge color="gray" variant="light">
+                        Inactive
+                      </Badge>
                     )}
                   </Group>
                 </Group>

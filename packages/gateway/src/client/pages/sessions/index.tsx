@@ -12,15 +12,9 @@ import {
   LoadingOverlay,
   Alert,
   ActionIcon,
-  Tooltip,
+  Tooltip
 } from '@mantine/core';
-import { 
-  IconSearch, 
-  IconAlertCircle, 
-  IconRefresh,
-  IconTrash,
-  IconEye,
-} from '@tabler/icons-react';
+import { IconSearch, IconAlertCircle, IconRefresh, IconTrash, IconEye } from '@tabler/icons-react';
 
 export const SessionList: React.FC = () => {
   const [sessions, setSessions] = React.useState([]);
@@ -31,11 +25,11 @@ export const SessionList: React.FC = () => {
   const fetchSessions = async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const token = localStorage.getItem('accessToken');
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       };
 
       if (token) {
@@ -62,20 +56,20 @@ export const SessionList: React.FC = () => {
                 }
               }
             }
-          `,
-        }),
+          `
+        })
       });
 
       const result = await response.json();
-      
+
       if (result.errors) {
         setError(result.errors[0]?.message || 'Failed to fetch sessions');
       } else {
         const users = result.data?.users || [];
-        const allSessions = users.flatMap((user: any) => 
+        const allSessions = users.flatMap((user: any) =>
           user.sessions.map((session: any) => ({
             ...session,
-            userEmail: user.email,
+            userEmail: user.email
           }))
         );
         setSessions(allSessions);
@@ -91,9 +85,9 @@ export const SessionList: React.FC = () => {
     fetchSessions();
   }, []);
 
-  const filteredSessions = sessions.filter((session: any) =>
-    session.userEmail.toLowerCase().includes(searchValue.toLowerCase()) ||
-    session.ipAddress.includes(searchValue)
+  const filteredSessions = sessions.filter(
+    (session: any) =>
+      session.userEmail.toLowerCase().includes(searchValue.toLowerCase()) || session.ipAddress.includes(searchValue)
   );
 
   return (
@@ -141,9 +135,7 @@ export const SessionList: React.FC = () => {
             {filteredSessions.length === 0 ? (
               <tr>
                 <td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>
-                  <Text color="dimmed">
-                    {loading ? 'Loading...' : 'No sessions found'}
-                  </Text>
+                  <Text color="dimmed">{loading ? 'Loading...' : 'No sessions found'}</Text>
                 </td>
               </tr>
             ) : (
@@ -170,11 +162,7 @@ export const SessionList: React.FC = () => {
                     </Text>
                   </td>
                   <td>
-                    <Badge
-                      color={session.isActive ? 'green' : 'gray'}
-                      variant="light"
-                      size="sm"
-                    >
+                    <Badge color={session.isActive ? 'green' : 'gray'} variant="light" size="sm">
                       {session.isActive ? 'Active' : 'Inactive'}
                     </Badge>
                   </td>
@@ -186,22 +174,12 @@ export const SessionList: React.FC = () => {
                   <td>
                     <Group spacing="xs">
                       <Tooltip label="View Details">
-                        <ActionIcon
-                          color="blue"
-                          variant="light"
-                          size="sm"
-                          disabled
-                        >
+                        <ActionIcon color="blue" variant="light" size="sm" disabled>
                           <IconEye size={14} />
                         </ActionIcon>
                       </Tooltip>
                       <Tooltip label="Terminate Session">
-                        <ActionIcon
-                          color="red"
-                          variant="light"
-                          size="sm"
-                          disabled
-                        >
+                        <ActionIcon color="red" variant="light" size="sm" disabled>
                           <IconTrash size={14} />
                         </ActionIcon>
                       </Tooltip>

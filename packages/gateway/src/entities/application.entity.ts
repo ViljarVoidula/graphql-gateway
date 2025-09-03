@@ -1,4 +1,16 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany, JoinColumn, Index, ManyToMany, JoinTable } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  OneToMany,
+  JoinColumn,
+  Index,
+  ManyToMany,
+  JoinTable
+} from 'typeorm';
 import { Field, ObjectType, ID } from 'type-graphql';
 import { User } from '../services/users/user.entity';
 import { Service } from './service.entity';
@@ -30,7 +42,7 @@ export class Application {
   ownerId: string;
 
   @Field(() => [ApiKey])
-  @OneToMany(() => ApiKey, apiKey => apiKey.application)
+  @OneToMany(() => ApiKey, (apiKey) => apiKey.application)
   apiKeys: ApiKey[];
 
   @Field(() => [Service])
@@ -38,7 +50,7 @@ export class Application {
   @JoinTable({
     name: 'application_whitelisted_services',
     joinColumn: { name: 'applicationId', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'serviceId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'serviceId', referencedColumnName: 'id' }
   })
   whitelistedServices: Service[]; // Application owners select from externally_accessible services
 

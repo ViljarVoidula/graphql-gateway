@@ -55,10 +55,9 @@ export class ServiceRegistryService {
     timeout?: number;
     enableBatching?: boolean;
   }): Promise<{ service: ServiceEntity; hmacKey?: any }> {
-    
     // Verify owner exists
     const owner = await this.userRepository.findOne({ where: { id: data.ownerId } });
-    
+
     if (!owner) {
       throw new Error('Owner not found');
     }
@@ -70,12 +69,12 @@ export class ServiceRegistryService {
     });
 
     const savedService = await this.serviceRepository.save(service);
-    
+
     let hmacKey = null;
     if (data.enableHMAC !== false) {
       // Generate HMAC key
       const keyData = this.generateServiceKey(data.url);
-      
+
       // Store in database
       const serviceKey = this.serviceKeyRepository.create({
         keyId: keyData.keyId,
@@ -85,7 +84,7 @@ export class ServiceRegistryService {
       });
 
       await this.serviceKeyRepository.save(serviceKey);
-      
+
       hmacKey = {
         keyId: keyData.keyId,
         secretKey: keyData.secretKey,
@@ -95,15 +94,15 @@ export class ServiceRegistryService {
 
     // Return service with owner populated
     const serviceWithOwner = await this.getServiceById(savedService.id);
-    
+
     // Invalidate cache and trigger gateway reload
     ServiceCacheManager.invalidateServiceCache();
-    
+
     // Trigger gateway reload asynchronously (don't wait for it)
-    ServiceCacheManager.triggerGatewayReload().catch(error => {
+    ServiceCacheManager.triggerGatewayReload().catch((error) => {
       log.error('Failed to trigger gateway reload:', error);
     });
-    
+
     return { service: serviceWithOwner, hmacKey };
   }
 
@@ -122,13 +121,13 @@ export class ServiceRegistryService {
     }
 
     await this.serviceRepository.update(id, data);
-    
+
     // Invalidate cache and trigger gateway reload
     ServiceCacheManager.invalidateServiceCache();
-    ServiceCacheManager.triggerGatewayReload().catch(error => {
+    ServiceCacheManager.triggerGatewayReload().catch((error) => {
       log.error('Failed to trigger gateway reload:', error);
     });
-    
+
     return this.getServiceById(id);
   }
 
@@ -145,23 +144,20 @@ export class ServiceRegistryService {
     }
 
     // Revoke all keys for this service
-    await this.serviceKeyRepository.update(
-      { serviceId: id },
-      { status: ServiceKeyStatus.REVOKED }
-    );
+    await this.serviceKeyRepository.update({ serviceId: id }, { status: ServiceKeyStatus.REVOKED });
 
     // Remove from keyManager
     keyManager.removeService(service.url);
 
     // Soft delete - mark as inactive
     await this.serviceRepository.update(id, { status: ServiceStatus.INACTIVE });
-    
+
     // Invalidate cache and trigger gateway reload
     ServiceCacheManager.invalidateServiceCache();
-    ServiceCacheManager.triggerGatewayReload().catch(error => {
+    ServiceCacheManager.triggerGatewayReload().catch((error) => {
       log.error('Failed to trigger gateway reload:', error);
     });
-    
+
     return true;
   }
 
@@ -172,7 +168,7 @@ export class ServiceRegistryService {
     // Check if requesting user is the owner or admin/service-manager
     if (requestingUserId && service.ownerId !== requestingUserId) {
       const requestingUser = await this.userRepository.findOne({ where: { id: requestingUserId } });
-      if (!requestingUser?.permissions?.some(permission => ['admin', 'service-manager'].includes(permission))) {
+      if (!requestingUser?.permissions?.some((permission) => ['admin', 'service-manager'].includes(permission))) {
         throw new Error('Not authorized to rotate keys for this service');
       }
     }
@@ -184,7 +180,7 @@ export class ServiceRegistryService {
 
     // Generate new key
     const newKeyData = this.generateServiceKey(service.url);
-    
+
     // Store new key
     const newServiceKey = this.serviceKeyRepository.create({
       keyId: newKeyData.keyId,
@@ -222,22 +218,19 @@ export class ServiceRegistryService {
   }
 
   async revokeServiceKey(keyId: string): Promise<boolean> {
-    const result = await this.serviceKeyRepository.update(
-      { keyId },
-      { status: ServiceKeyStatus.REVOKED }
-    );
-    
+    const result = await this.serviceKeyRepository.update({ keyId }, { status: ServiceKeyStatus.REVOKED });
+
     // Also revoke from keyManager
     keyManager.revokeKey(keyId);
-    
+
     return result.affected > 0;
   }
 
   async loadServicesIntoKeyManager(): Promise<void> {
     const services = await this.getAllServices();
-    
+
     for (const service of services) {
-      const activeKey = service.keys.find(k => k.status === ServiceKeyStatus.ACTIVE);
+      const activeKey = service.keys.find((k) => k.status === ServiceKeyStatus.ACTIVE);
       if (activeKey && service.enableHMAC) {
         // Load key into keyManager by storing it directly
         // This simulates the keyManager having the key
@@ -249,10 +242,10 @@ export class ServiceRegistryService {
   private generateServiceKey(url: string): { keyId: string; secretKey: string; instructions: string } {
     // Generate a unique key ID
     const keyId = `sk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // Generate or get the secret key from keyManager
     const serviceKey = keyManager.generateKey(url);
-    
+
     return {
       keyId,
       secretKey: serviceKey.secretKey,
@@ -270,21 +263,21 @@ export class ServiceRegistryService {
 
 // Cache invalidation utilities
 export class ServiceCacheManager {
-  private static serviceEndpointCache = new Map<string, { endpoints: string[], lastUpdated: number }>();
+  private static serviceEndpointCache = new Map<string, { endpoints: string[]; lastUpdated: number }>();
   private static schemaLoader: any = null;
-  
+
   static setSchemaLoader(loader: any) {
     this.schemaLoader = loader;
   }
-  
-  static setServiceCache(cache: Map<string, { endpoints: string[], lastUpdated: number }>) {
+
+  static setServiceCache(cache: Map<string, { endpoints: string[]; lastUpdated: number }>) {
     this.serviceEndpointCache = cache;
   }
-  
+
   static invalidateServiceCache() {
     log.debug('Invalidating service endpoint cache');
     this.serviceEndpointCache.clear();
-    
+
     // Also clear schema cache to force re-introspection
     const { schemaCache } = require('../../SchemaLoader');
     if (schemaCache) {
@@ -292,7 +285,7 @@ export class ServiceCacheManager {
       log.debug('Cleared schema cache');
     }
   }
-  
+
   static async triggerGatewayReload() {
     if (this.schemaLoader) {
       log.debug('Triggering gateway schema reload');

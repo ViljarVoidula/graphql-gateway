@@ -32,7 +32,7 @@ export class ApiKeyService {
 
     const apiKeyEntity = await this.apiKeyRepository.findOne({
       where: { keyPrefix, hashedKey, status: ApiKeyStatus.ACTIVE },
-      relations: ['application', 'application.owner', 'application.whitelistedServices'],
+      relations: ['application', 'application.owner', 'application.whitelistedServices']
     });
 
     if (!apiKeyEntity) {
@@ -53,15 +53,20 @@ export class ApiKeyService {
       apiKeyEntity,
       user: {
         id: apiKeyEntity.application.owner.id,
-        permissions: [...(apiKeyEntity.application.owner.permissions || []), 'api-key-user'],
-      },
+        permissions: [...(apiKeyEntity.application.owner.permissions || []), 'api-key-user']
+      }
     };
   }
 
   /**
    * Generate a new API key
    */
-  async generateApiKey(applicationId: string, name: string, scopes: string[] = [], expiresAt?: Date): Promise<{ apiKey: string; entity: ApiKey }> {
+  async generateApiKey(
+    applicationId: string,
+    name: string,
+    scopes: string[] = [],
+    expiresAt?: Date
+  ): Promise<{ apiKey: string; entity: ApiKey }> {
     const rawKey = this.generateRawApiKey();
     const keyPrefix = rawKey.substring(0, 12);
     const hashedKey = this.hashApiKey(rawKey);
@@ -73,14 +78,14 @@ export class ApiKeyService {
       scopes,
       expiresAt,
       applicationId,
-      status: ApiKeyStatus.ACTIVE,
+      status: ApiKeyStatus.ACTIVE
     });
 
     await this.apiKeyRepository.save(apiKeyEntity);
 
     return {
       apiKey: rawKey,
-      entity: apiKeyEntity,
+      entity: apiKeyEntity
     };
   }
 

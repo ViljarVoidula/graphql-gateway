@@ -33,11 +33,8 @@ const logger = winston.createLogger({
   format: structuredFormat,
   transports: [
     new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      )
-    }),
+      format: winston.format.combine(winston.format.colorize(), winston.format.simple())
+    })
   ]
 });
 
@@ -65,7 +62,7 @@ class StructuredLogger {
 
   private formatMessage(message: string, meta?: LogMetadata): [string, LogMetadata] {
     const formattedMeta = meta ? { ...meta } : {};
-    
+
     // Add context information if available
     if (formattedMeta.error && formattedMeta.error instanceof Error) {
       formattedMeta.error = {

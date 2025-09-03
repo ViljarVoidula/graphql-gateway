@@ -27,7 +27,7 @@ export class KeyManager {
   generateKey(serviceUrl: string): ServiceKey {
     const keyId = this.generateKeyId(serviceUrl);
     const secretKey = this.generateSecretKey();
-    
+
     const key: ServiceKey = {
       keyId,
       secretKey,
@@ -36,7 +36,7 @@ export class KeyManager {
     };
 
     this.keys.set(keyId, key);
-    
+
     // Track keys by service URL
     if (!this.serviceKeys.has(serviceUrl)) {
       this.serviceKeys.set(serviceUrl, []);
@@ -58,7 +58,7 @@ export class KeyManager {
 
     // Find the most recent active key
     const activeKeys = keyIds
-      .map(id => this.keys.get(id))
+      .map((id) => this.keys.get(id))
       .filter((key): key is ServiceKey => key !== undefined && key.status === 'active')
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
@@ -91,19 +91,15 @@ export class KeyManager {
    */
   rotateKey(serviceUrl: string): ServiceKey {
     const newKey = this.generateKey(serviceUrl);
-    
+
     // Optionally set expiration for old keys after rotation
     const oldKeyIds = this.serviceKeys.get(serviceUrl) || [];
     const oldActiveKeys = oldKeyIds
-      .map(id => this.keys.get(id))
-      .filter((key): key is ServiceKey => 
-        key !== undefined && 
-        key.status === 'active' && 
-        key.keyId !== newKey.keyId
-      );
+      .map((id) => this.keys.get(id))
+      .filter((key): key is ServiceKey => key !== undefined && key.status === 'active' && key.keyId !== newKey.keyId);
 
     // Set old keys to expire in 1 hour (grace period)
-    oldActiveKeys.forEach(key => {
+    oldActiveKeys.forEach((key) => {
       key.expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
     });
 
@@ -117,9 +113,9 @@ export class KeyManager {
   getServiceKeys(serviceUrl: string): ServiceKeyInfo[] {
     const keyIds = this.serviceKeys.get(serviceUrl) || [];
     return keyIds
-      .map(id => this.keys.get(id))
+      .map((id) => this.keys.get(id))
       .filter((key): key is ServiceKey => key !== undefined)
-      .map(key => ({
+      .map((key) => ({
         url: serviceUrl,
         keyId: key.keyId,
         createdAt: key.createdAt,
@@ -138,7 +134,7 @@ export class KeyManager {
     }
 
     // Remove all keys for this service
-    keyIds.forEach(keyId => {
+    keyIds.forEach((keyId) => {
       this.keys.delete(keyId);
     });
 
@@ -157,7 +153,7 @@ export class KeyManager {
     for (const [keyId, key] of this.keys.entries()) {
       if (key.expiresAt && key.expiresAt < now) {
         this.keys.delete(keyId);
-        
+
         // Remove from service keys tracking
         for (const [serviceUrl, keyIds] of this.serviceKeys.entries()) {
           const index = keyIds.indexOf(keyId);
@@ -169,7 +165,7 @@ export class KeyManager {
             break;
           }
         }
-        
+
         cleanedCount++;
       }
     }
@@ -200,8 +196,8 @@ export class KeyManager {
     const allKeys = Array.from(this.keys.values());
     return {
       totalKeys: allKeys.length,
-      activeKeys: allKeys.filter(k => k.status === 'active').length,
-      revokedKeys: allKeys.filter(k => k.status === 'revoked').length,
+      activeKeys: allKeys.filter((k) => k.status === 'active').length,
+      revokedKeys: allKeys.filter((k) => k.status === 'revoked').length,
       services: this.serviceKeys.size
     };
   }

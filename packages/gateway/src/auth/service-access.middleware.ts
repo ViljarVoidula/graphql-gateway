@@ -19,16 +19,12 @@ export function createServiceAccessMiddleware() {
     }
 
     // Check if the application can access this service
-    const canAccess = await authorizationService.canApplicationAccessServiceByUrl(
-      context.application.id,
-      serviceUrl
-    );
+    const canAccess = await authorizationService.canApplicationAccessServiceByUrl(context.application.id, serviceUrl);
 
     if (!canAccess) {
-      throw new GraphQLError(
-        `Application "${context.application.name}" does not have access to service: ${serviceUrl}`,
-        { extensions: { code: 'SERVICE_ACCESS_DENIED' } }
-      );
+      throw new GraphQLError(`Application "${context.application.name}" does not have access to service: ${serviceUrl}`, {
+        extensions: { code: 'SERVICE_ACCESS_DENIED' }
+      });
     }
   };
 }

@@ -22,16 +22,19 @@ This is a React-based admin interface for managing the GraphQL Gateway, built wi
 ### Installation
 
 1. Install dependencies:
+
 ```bash
 npm install
 ```
 
 2. Build the admin UI:
+
 ```bash
 npm run build:admin
 ```
 
 3. Start the gateway server:
+
 ```bash
 npm start
 ```
@@ -43,11 +46,13 @@ npm start
 For development with hot reload:
 
 1. Start the gateway server:
+
 ```bash
 npm start
 ```
 
 2. In another terminal, start the admin UI dev server:
+
 ```bash
 npm run dev:admin
 ```
@@ -67,12 +72,14 @@ npm run dev:admin
 ### Admin Features
 
 #### Dashboard
+
 - Gateway health monitoring
 - User and service statistics
 - Session activity overview
 - Service status indicators
 
 #### User Management
+
 - List all users with pagination and search
 - View user details and permissions
 - Create new users
@@ -80,6 +87,7 @@ npm run dev:admin
 - Account status management
 
 #### Service Registry
+
 - List all registered services
 - View service details and configuration
 - Register new services
@@ -88,6 +96,7 @@ npm run dev:admin
 - Service health monitoring
 
 #### Session Management
+
 - View active and expired sessions
 - Session details (IP, user agent, etc.)
 - Session termination
@@ -98,23 +107,27 @@ npm run dev:admin
 The admin UI connects to the GraphQL Gateway's existing API endpoints:
 
 ### Authentication Endpoints
+
 - `login`: User authentication
 - `logout`: Session termination
 - `me`: Current user information
 
 ### User Endpoints
+
 - `users`: List all users
 - `user(id)`: Get specific user
 - `createUser`: Create new user
 - `updateUser`: Update user details
 
 ### Service Endpoints
+
 - `services`: List all services
 - `service(id)`: Get specific service
 - `registerService`: Register new service
 - `updateService`: Update service configuration
 
 ### Session Endpoints
+
 - `sessions`: List all sessions
 - `session(id)`: Get specific session
 - `deleteSession`: Terminate session

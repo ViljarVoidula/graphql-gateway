@@ -48,7 +48,7 @@ export class JWTService {
       } as jwt.SignOptions);
 
       const refreshPayload = {
-        userId: payload.userId, 
+        userId: payload.userId,
         sessionId: payload.sessionId
       };
 
@@ -102,21 +102,17 @@ export class JWTService {
 
   extractTokenFromHeader(authHeader?: string): string | null {
     if (!authHeader) return null;
-    
+
     const parts = authHeader.split(' ');
     if (parts.length !== 2 || parts[0] !== 'Bearer') {
       return null;
     }
-    
+
     return parts[1];
   }
 
   generateSessionToken(sessionId: string): string {
-    return jwt.sign(
-      { sessionId, type: 'session' },
-      this.accessTokenSecret,
-      { expiresIn: '24h' }
-    );
+    return jwt.sign({ sessionId, type: 'session' }, this.accessTokenSecret, { expiresIn: '24h' });
   }
 
   verifySessionToken(token: string): { sessionId: string } | null {

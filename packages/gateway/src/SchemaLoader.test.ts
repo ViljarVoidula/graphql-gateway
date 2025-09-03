@@ -7,8 +7,6 @@ import { SchemaLoader, schemaCache } from './SchemaLoader';
 let mockExecutor: any;
 let originalBuildHMACExecutor: any;
 
-
-
 describe('SchemaLoader', () => {
   let schemaLoader: SchemaLoader;
   let mockBuildSchema: (endpoints: any[]) => GraphQLSchema;
@@ -17,7 +15,7 @@ describe('SchemaLoader', () => {
   beforeEach(async () => {
     // Clear all caches before each test
     schemaCache.clear();
-    
+
     // Create a mock schema
     mockSchema = buildSchema(`
       type Query {
@@ -46,7 +44,7 @@ describe('SchemaLoader', () => {
       const hmacExecutorModule = require('./utils/hmacExecutor');
       hmacExecutorModule.buildHMACExecutor = originalBuildHMACExecutor;
     }
-    
+
     // Stop any running intervals
     schemaLoader?.stopAutoRefresh();
   });
@@ -55,9 +53,9 @@ describe('SchemaLoader', () => {
     it('should initialize with provided endpoints and build schema function', () => {
       const endpoints = ['http://localhost:4000/graphql', 'http://localhost:4001/graphql'];
       const buildSchemaFn = () => mockSchema;
-      
+
       const loader = new SchemaLoader(buildSchemaFn, endpoints);
-      
+
       assert.deepStrictEqual(loader.endpoints, endpoints);
       assert.strictEqual(loader.schema, null);
       assert.strictEqual(loader.loadedEndpoints.length, 0);
@@ -71,7 +69,7 @@ describe('SchemaLoader', () => {
           __schema: introspectionFromSchema(mockSchema).__schema
         }
       };
-      
+
       // Mock executor to return introspection data
       mockExecutor = mock.fn(() => Promise.resolve(mockIntrospectionData));
 
@@ -87,7 +85,7 @@ describe('SchemaLoader', () => {
     it('should use cached schema when available and not expired', async () => {
       const url = 'http://localhost:4000/graphql';
       const cachedSdl = 'type Query { cached: String }';
-      
+
       // Pre-populate cache
       schemaCache.set(url, {
         sdl: cachedSdl,
@@ -106,7 +104,7 @@ describe('SchemaLoader', () => {
           __schema: introspectionFromSchema(mockSchema).__schema
         }
       };
-      
+
       // Pre-populate cache with expired entry
       schemaCache.set(url, {
         sdl: 'type Query { old: String }',
@@ -124,7 +122,7 @@ describe('SchemaLoader', () => {
     it('should handle endpoint errors gracefully and use cached schema', async () => {
       const url = 'http://localhost:4000/graphql';
       const cachedSdl = 'type Query { cached: String }';
-      
+
       // Pre-populate cache with expired entry
       schemaCache.set(url, {
         sdl: cachedSdl,
@@ -185,29 +183,29 @@ describe('SchemaLoader', () => {
   describe('loadEndpoints', () => {
     it('should return static endpoints when no loader is set', async () => {
       const endpoints = await schemaLoader.loadEndpoints();
-      
+
       assert.deepStrictEqual(endpoints, ['http://localhost:4000/graphql']);
     });
 
     it('should use endpoint loader when set', async () => {
       const dynamicEndpoints = ['http://dynamic1.com/graphql', 'http://dynamic2.com/graphql'];
       const mockLoader = mock.fn(() => Promise.resolve(dynamicEndpoints));
-      
+
       schemaLoader.setEndpointLoader(mockLoader);
-      
+
       const endpoints = await schemaLoader.loadEndpoints();
-      
+
       assert.deepStrictEqual(endpoints, dynamicEndpoints);
       assert.strictEqual(mockLoader.mock.callCount(), 1);
     });
 
     it('should handle endpoint loader errors gracefully', async () => {
       const mockLoader = mock.fn(() => Promise.reject(new Error('Loader failed')));
-      
+
       schemaLoader.setEndpointLoader(mockLoader);
-      
+
       const endpoints = await schemaLoader.loadEndpoints();
-      
+
       // Should fallback to static endpoints
       assert.deepStrictEqual(endpoints, ['http://localhost:4000/graphql']);
     });
@@ -224,7 +222,7 @@ describe('SchemaLoader', () => {
 
       // Use a very short interval for testing
       schemaLoader.autoRefresh(50);
-      
+
       // Wait for the interval to trigger
       setTimeout(() => {
         // Should have been called at least once
@@ -237,12 +235,12 @@ describe('SchemaLoader', () => {
     it('should stop previous interval when called again', () => {
       schemaLoader.autoRefresh(1000);
       const firstIntervalId = (schemaLoader as any).intervalId;
-      
+
       schemaLoader.autoRefresh(2000);
       const secondIntervalId = (schemaLoader as any).intervalId;
-      
+
       assert.notStrictEqual(firstIntervalId, secondIntervalId);
-      
+
       schemaLoader.stopAutoRefresh();
     });
   });
@@ -251,7 +249,7 @@ describe('SchemaLoader', () => {
     it('should clear the refresh interval', () => {
       schemaLoader.autoRefresh(1000);
       assert.ok((schemaLoader as any).intervalId !== null);
-      
+
       schemaLoader.stopAutoRefresh();
       assert.strictEqual((schemaLoader as any).intervalId, null);
     });
@@ -266,9 +264,9 @@ describe('SchemaLoader', () => {
   describe('setEndpointLoader', () => {
     it('should set the endpoint loader function', () => {
       const mockLoader = mock.fn();
-      
+
       schemaLoader.setEndpointLoader(mockLoader);
-      
+
       assert.strictEqual((schemaLoader as any).endpointLoader, mockLoader);
     });
   });
@@ -277,21 +275,21 @@ describe('SchemaLoader', () => {
     it('should remove expired cache entries', () => {
       const url1 = 'http://old.com/graphql';
       const url2 = 'http://fresh.com/graphql';
-      
+
       // Add old cache entry
       schemaCache.set(url1, {
         sdl: 'old schema',
         lastUpdated: Date.now() - 25 * 60 * 1000 // 25 minutes ago
       });
-      
+
       // Add fresh cache entry
       schemaCache.set(url2, {
         sdl: 'fresh schema',
         lastUpdated: Date.now()
       });
-      
+
       schemaLoader.cleanupExpiredCache();
-      
+
       // Old entry should be removed, fresh entry should remain
       assert.strictEqual(schemaCache.has(url1), false);
       assert.strictEqual(schemaCache.has(url2), true);
@@ -299,15 +297,15 @@ describe('SchemaLoader', () => {
 
     it('should keep recently expired entries within 2x TTL', () => {
       const url = 'http://recent.com/graphql';
-      
+
       // Add recently expired entry (15 minutes ago, TTL is 10 minutes)
       schemaCache.set(url, {
         sdl: 'recent schema',
         lastUpdated: Date.now() - 15 * 60 * 1000
       });
-      
+
       schemaLoader.cleanupExpiredCache();
-      
+
       // Should still be present
       assert.strictEqual(schemaCache.has(url), true);
     });
@@ -321,7 +319,7 @@ describe('SchemaLoader', () => {
           __schema: introspectionFromSchema(mockSchema).__schema
         }
       };
-      
+
       let callCount = 0;
       mockExecutor = mock.fn(() => {
         callCount++;
@@ -331,11 +329,11 @@ describe('SchemaLoader', () => {
       // First load should fetch and cache
       await schemaLoader.reload();
       assert.strictEqual(callCount, 1);
-      
+
       // Second load should use cache
       await schemaLoader.reload();
       assert.strictEqual(callCount, 1);
-      
+
       // Verify cache was used
       assert.ok(schemaCache.has(url));
     });
@@ -347,25 +345,27 @@ describe('SchemaLoader', () => {
         'http://failing1.com/graphql',
         'http://failing2.com/graphql'
       ]);
-      
+
       mockExecutor = mock.fn(() => Promise.reject(new Error('All endpoints failed')));
 
       await multiEndpointLoader.reload();
-      
+
       // Should complete without throwing
       assert.strictEqual(multiEndpointLoader.loadedEndpoints.length, 0);
       assert.strictEqual(multiEndpointLoader.schema, mockSchema);
     });
 
     it('should handle malformed introspection data', async () => {
-      mockExecutor = mock.fn(() => Promise.resolve({
-        data: {
-          __schema: null // Invalid schema
-        }
-      }));
+      mockExecutor = mock.fn(() =>
+        Promise.resolve({
+          data: {
+            __schema: null // Invalid schema
+          }
+        })
+      );
 
       await schemaLoader.reload();
-      
+
       assert.strictEqual(schemaLoader.loadedEndpoints.length, 0);
     });
   });

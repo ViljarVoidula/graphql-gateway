@@ -45,7 +45,7 @@ export class Session {
   @Directive('@authz(rules: ["canAccessUserData"])')
   expiresAt?: Date;
 
-  @ManyToOne("User", "sessions")
+  @ManyToOne('User', 'sessions')
   @JoinColumn({ name: 'userId' })
   user!: any;
 }

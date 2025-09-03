@@ -1,18 +1,7 @@
 import React from 'react';
 import { useLogin } from '@refinedev/core';
 import { useForm } from '@refinedev/react-hook-form';
-import {
-  Box,
-  Card,
-  TextInput,
-  PasswordInput,
-  Button,
-  Title,
-  Text,
-  Center,
-  Stack,
-  Alert,
-} from '@mantine/core';
+import { Box, Card, TextInput, PasswordInput, Button, Title, Text, Center, Stack, Alert } from '@mantine/core';
 import { IconAlertCircle } from '@tabler/icons-react';
 
 interface LoginFormData {
@@ -27,7 +16,7 @@ export const Login: React.FC = () => {
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors }
   } = useForm<LoginFormData>();
 
   const onSubmit = (data: LoginFormData) => {
@@ -35,7 +24,7 @@ export const Login: React.FC = () => {
     login(data, {
       onError: (error) => {
         setError(error.message || 'Login failed');
-      },
+      }
     });
   };
 
@@ -46,7 +35,7 @@ export const Login: React.FC = () => {
         minHeight: '100vh',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center',
+        justifyContent: 'center'
       }}
     >
       <Card shadow="xl" p="xl" radius="md" style={{ minWidth: 400 }}>
@@ -74,8 +63,8 @@ export const Login: React.FC = () => {
                     required: 'Email is required',
                     pattern: {
                       value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                      message: 'Invalid email address',
-                    },
+                      message: 'Invalid email address'
+                    }
                   })}
                   error={errors.email?.message as string}
                 />
@@ -87,19 +76,13 @@ export const Login: React.FC = () => {
                     required: 'Password is required',
                     minLength: {
                       value: 6,
-                      message: 'Password must be at least 6 characters',
-                    },
+                      message: 'Password must be at least 6 characters'
+                    }
                   })}
                   error={errors.password?.message as string}
                 />
 
-                <Button
-                  type="submit"
-                  fullWidth
-                  loading={isLoading}
-                  size="md"
-                  style={{ marginTop: '1rem' }}
-                >
+                <Button type="submit" fullWidth loading={isLoading} size="md" style={{ marginTop: '1rem' }}>
                   Sign In
                 </Button>
               </Stack>

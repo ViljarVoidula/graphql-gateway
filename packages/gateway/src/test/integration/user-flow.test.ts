@@ -15,10 +15,10 @@ describeWithDatabase('User Integration Flow', () => {
     const schema = await buildSchema({
       resolvers: [UserResolver],
       container: Container,
-      authChecker: () => true, // Disable auth for tests
+      authChecker: () => true // Disable auth for tests
     });
 
-    yoga = createYoga({ 
+    yoga = createYoga({
       schema,
       logging: false // Disable logging in tests
     });
@@ -54,7 +54,7 @@ describeWithDatabase('User Integration Flow', () => {
     });
 
     const createUserResult = await createUserResponse.json();
-    
+
     assert.ok(!createUserResult.errors, `GraphQL errors: ${JSON.stringify(createUserResult.errors)}`);
     assert.ok(createUserResult.data.createUser);
     assert.strictEqual(createUserResult.data.createUser.email, 'integration@example.com');
@@ -97,7 +97,7 @@ describeWithDatabase('User Integration Flow', () => {
     });
 
     const loginResult = await loginResponse.json();
-    
+
     assert.ok(!loginResult.errors, `GraphQL errors: ${JSON.stringify(loginResult.errors)}`);
     assert.ok(loginResult.data.login.user);
     assert.strictEqual(loginResult.data.login.user.email, 'integration@example.com');
@@ -127,7 +127,7 @@ describeWithDatabase('User Integration Flow', () => {
     });
 
     const usersResult = await usersResponse.json();
-    
+
     assert.ok(!usersResult.errors, `GraphQL errors: ${JSON.stringify(usersResult.errors)}`);
     assert.ok(usersResult.data.users);
     assert.strictEqual(usersResult.data.users.length, 1);
@@ -173,7 +173,7 @@ describeWithDatabase('User Integration Flow', () => {
     });
 
     const duplicateResult = await duplicateResponse.json();
-    
+
     assert.ok(duplicateResult.errors);
     assert.ok(duplicateResult.errors[0].message.includes('User with this email already exists'));
   });
@@ -211,7 +211,7 @@ describeWithDatabase('User Integration Flow', () => {
     });
 
     const loginResult = await loginResponse.json();
-    
+
     assert.ok(loginResult.errors);
     assert.ok(loginResult.errors[0].message.includes('Invalid email or password'));
   });

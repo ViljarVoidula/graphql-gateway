@@ -17,7 +17,7 @@ export class AuthorizationService {
   async canApplicationAccessService(applicationId: string, serviceId: string): Promise<boolean> {
     const application = await this.applicationRepository.findOne({
       where: { id: applicationId },
-      relations: ['whitelistedServices'],
+      relations: ['whitelistedServices']
     });
 
     if (!application) {
@@ -25,7 +25,7 @@ export class AuthorizationService {
     }
 
     // Check if the service is whitelisted for this application
-    return application.whitelistedServices.some(service => service.id === serviceId);
+    return application.whitelistedServices.some((service) => service.id === serviceId);
   }
 
   /**
@@ -34,13 +34,13 @@ export class AuthorizationService {
   async canApplicationAccessServiceByUrl(applicationId: string, serviceUrl: string): Promise<boolean> {
     const application = await this.applicationRepository.findOne({
       where: { id: applicationId },
-      relations: ['whitelistedServices'],
+      relations: ['whitelistedServices']
     });
 
     if (!application) {
       return false;
     }
 
-    return application.whitelistedServices.some(service => service.url === serviceUrl);
+    return application.whitelistedServices.some((service) => service.url === serviceUrl);
   }
 }

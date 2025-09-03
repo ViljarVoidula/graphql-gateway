@@ -11,7 +11,7 @@ export const useSession = (): Plugin => {
       const request = (context as any).request;
       const jwtService = Container.get(JWTService);
       const apiKeyService = Container.get(ApiKeyService);
-      
+
       let sessionId: string | null = null;
       let sessionData = null;
       let apiKeyContext = null;
@@ -28,7 +28,7 @@ export const useSession = (): Plugin => {
             application: apiKeyContext.application,
             apiKey: apiKeyContext.apiKeyEntity,
             sessionId: null,
-            authType: 'api-key',
+            authType: 'api-key'
           });
           return;
         }
@@ -51,38 +51,43 @@ export const useSession = (): Plugin => {
       if (!sessionData) {
         const cookieHeader = request?.headers?.get('cookie');
         if (cookieHeader) {
-          const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
-            const [key, value] = cookie.trim().split('=');
-            if (key && value) {
-              acc[key] = value;
-            }
-            return acc;
-          }, {} as Record<string, string>);
-          
+          const cookies = cookieHeader.split(';').reduce(
+            (acc, cookie) => {
+              const [key, value] = cookie.trim().split('=');
+              if (key && value) {
+                acc[key] = value;
+              }
+              return acc;
+            },
+            {} as Record<string, string>
+          );
+
           sessionId = cookies[SESSION_COOKIE_NAME] || null;
           if (sessionId) {
             sessionData = await getSession(sessionId);
           }
         }
       }
-      
+
       // Update session activity if session exists
       if (sessionData && sessionId) {
         await updateSessionActivity(sessionId);
       }
-      
+
       // Extend context with session/JWT data
       extendContext({
         session: sessionData,
-        user: sessionData?.isAuthenticated ? {
-          id: sessionData.userId,
-          email: sessionData.email,
-          permissions: sessionData.permissions || []
-        } : null,
+        user: sessionData?.isAuthenticated
+          ? {
+              id: sessionData.userId,
+              email: sessionData.email,
+              permissions: sessionData.permissions || []
+            }
+          : null,
         application: null,
         apiKey: null,
         sessionId,
-        authType: sessionData?.isAuthenticated ? 'session' : null,
+        authType: sessionData?.isAuthenticated ? 'session' : null
       });
     }
   };
