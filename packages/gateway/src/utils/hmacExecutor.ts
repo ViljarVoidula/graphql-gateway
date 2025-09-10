@@ -2,6 +2,8 @@ import { buildHTTPExecutor } from '@graphql-tools/executor-http';
 import { HMACUtils } from '../security/hmac';
 import { keyManager } from '../security/keyManager';
 import { log } from './logger';
+import { withRemoteCallMetrics } from './telemetry/metrics';
+import { withSpan } from './telemetry/tracing';
 
 export interface HMACExecutorOptions {
   endpoint: string;
@@ -116,10 +118,28 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
         headers: Object.keys(updatedOptions.headers || {})
       });
 
-      return fetch(url, updatedOptions).catch((error) => {
-        log.error(`Fetch error for ${url}:`, error);
-        throw new Error(`Failed to fetch from ${url}: ${error.message}`);
-      });
+      return withSpan(
+        'remote.graphql.request',
+        () =>
+          withRemoteCallMetrics({
+            service: (() => {
+              try {
+                return new URL(String(url)).host;
+              } catch {
+                return 'unknown';
+              }
+            })(),
+            url: String(url),
+            method: String((updatedOptions as any).method || 'POST'),
+            operation: 'GraphQL POST',
+            fn: () =>
+              fetch(url, updatedOptions).catch((error) => {
+                log.error(`Fetch error for ${url}:`, error);
+                throw new Error(`Failed to fetch from ${url}: ${error.message}`);
+              })
+          }),
+        { attributes: { 'url.full': String(url) } }
+      );
     }
   });
 }

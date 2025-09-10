@@ -108,3 +108,7 @@ packages/services/records/target
 packages/shared/mongodb-migrator/target
 notes/
 packages/gateway/.env.local
+packages/infrastructure/o11y/docker-compose.yaml
+
+packages/infrastructure/common/**
+packages/infrastructure/o11y/otel-collector-config.yaml

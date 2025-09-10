@@ -32,9 +32,8 @@ const logger = winston.createLogger({
   levels,
   format: structuredFormat,
   transports: [
-    new winston.transports.Console({
-      format: winston.format.combine(winston.format.colorize(), winston.format.simple())
-    })
+    // Use the top-level JSON format for console output as well
+    new winston.transports.Console()
   ]
 });
 

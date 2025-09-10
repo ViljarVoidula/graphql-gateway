@@ -1,9 +1,13 @@
 import { stitchSchemas } from '@graphql-tools/stitch';
 import { stitchingDirectives } from '@graphql-tools/stitching-directives';
+import cors from '@koa/cors';
 import * as fs from 'fs';
 import { buildSchema, GraphQLSchema } from 'graphql';
 import { createYoga } from 'graphql-yoga';
-import { createServer } from 'http';
+import Koa from 'koa';
+import compress from 'koa-compress';
+import koaHelmet from 'koa-helmet';
+import responseTime from 'koa-response-time';
 import * as path from 'path';
 // reflect-metadata is loaded in src/index.ts
 import { Container } from 'typedi';
@@ -22,6 +26,7 @@ import { SessionService } from './services/sessions/session.service';
 import { User } from './services/users/user.entity';
 import { buildHMACExecutor } from './utils/hmacExecutor';
 import { log } from './utils/logger';
+import { koaMetrics } from './utils/telemetry/metrics';
 
 const { stitchingDirectivesTransformer } = stitchingDirectives();
 
@@ -189,61 +194,98 @@ const loader = new SchemaLoader(
   [] // Will be populated after database connection
 );
 
-const server = createServer(
-  createYoga({
-    schema: () => loader.schema,
-    maskedErrors: false,
-    multipart: true,
-    logging: 'debug',
-    healthCheckEndpoint: '/health',
-    landingPage: false,
-    plugins: [
-      useSession() // Add session plugin
-    ],
-    graphiql: {
-      title: 'GraphQL Gateway with Session Security'
-    },
-    context: async ({ request }) => {
-      // Context will be extended by session plugin
-      return {
-        request,
-        keyManager,
-        schemaLoader: loader
-      };
-    },
-    cors: {
-      origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-      credentials: true // Important for sessions
+// Koa application will host the Yoga handler and additional routes
+const app = new Koa();
+
+// Basic production-ready middlewares
+app.use(responseTime());
+// Record request latency metrics
+app.use(koaMetrics());
+// Security headers via Helmet
+// Note: GraphiQL (served by Yoga) uses a small inline script and a favicon hosted on raw.githubusercontent.com.
+// We relax CSP accordingly while keeping sensible defaults.
+app.use(
+  koaHelmet({
+    contentSecurityPolicy: {
+      // Keep Helmet defaults and extend them
+      directives: {
+        defaultSrc: ["'self'"],
+        imgSrc: ["'self'", 'data:', 'https://raw.githubusercontent.com'],
+        scriptSrc: ["'self'", "'unsafe-inline'"], // Allow inline for GraphiQL bootstrap
+        styleSrc: ["'self'", "'unsafe-inline'"], // GraphiQL injects inline styles
+        connectSrc: [
+          "'self'",
+          // Allow configured CORS origin if provided (useful for Admin UI/dev)
+          ...(process.env.CORS_ORIGIN ? [process.env.CORS_ORIGIN] : [])
+        ],
+        fontSrc: ["'self'", 'data:']
+      }
     }
   })
 );
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    credentials: true
+  })
+);
+app.use(compress());
+
+const yoga = createYoga({
+  schema: () => loader.schema,
+  maskedErrors: false,
+  multipart: true,
+  logging: 'debug',
+  landingPage: false,
+  plugins: [
+    useSession() // Add session plugin
+  ],
+  graphiql: {
+    title: 'GraphQL Gateway with Session Security'
+  },
+  context: async ({ request }) => {
+    // Context will be extended by session plugin
+    return {
+      request,
+      keyManager,
+      schemaLoader: loader
+    };
+  },
+  cors: {
+    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    credentials: true // Important for sessions
+  }
+});
+
+// We'll store the server instance returned by app.listen() so stopServer can close it
+let server: import('http').Server | undefined;
 
 // Health check middleware
-server.on('request', async (req, res) => {
-  if (req.url === '/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    const health = await checkHealth();
-    res.end(JSON.stringify(health));
+// Health and admin middleware
+app.use(async (ctx, next) => {
+  // Health endpoint
+  if (ctx.path === '/health') {
+    ctx.type = 'application/json';
+    ctx.body = await checkHealth();
     return;
   }
 
-  // Serve admin UI
-  if (req.url === '/admin' || req.url?.startsWith('/admin/')) {
+  // Admin UI
+  if (ctx.path === '/admin' || ctx.path.startsWith('/admin/')) {
     const adminHtmlPath = path.join(__dirname, '..', 'dist', 'client', 'index.html');
     const fallbackHtmlPath = path.join(__dirname, 'client', 'fallback.html');
 
     if (fs.existsSync(adminHtmlPath)) {
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(fs.readFileSync(adminHtmlPath, 'utf-8'));
+      ctx.type = 'text/html';
+      ctx.body = fs.readFileSync(adminHtmlPath, 'utf-8');
       return;
     } else if (fs.existsSync(fallbackHtmlPath)) {
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(fs.readFileSync(fallbackHtmlPath, 'utf-8'));
+      ctx.type = 'text/html';
+      ctx.body = fs.readFileSync(fallbackHtmlPath, 'utf-8');
       return;
     } else {
-      // Ultimate fallback
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(`
+      ctx.type = 'text/html';
+      ctx.body = `
         <!DOCTYPE html>
         <html>
         <head>
@@ -268,13 +310,28 @@ server.on('request', async (req, res) => {
           </div>
         </body>
         </html>
-      `);
+      `;
       return;
     }
   }
 
-  // Handle other routes normally
-  return;
+  await next();
+});
+
+// Mount Yoga at /graphql
+app.use(async (ctx, next) => {
+  if (ctx.path === '/graphql' || ctx.path.startsWith('/graphql')) {
+    // Let the Yoga handler write directly to the Node response.
+    await new Promise<void>((resolve) => {
+      // Prevent Koa from handling the response body
+      ctx.respond = false;
+      // yoga is a Node-style handler (req, res, next)
+      (yoga as any)(ctx.req, ctx.res, () => resolve());
+    });
+    return;
+  }
+
+  await next();
 });
 
 export async function startServer() {
@@ -406,7 +463,14 @@ export async function startServer() {
 
   // sleep 2s
   await loader.reload();
-  await new Promise<void>((resolve) => server.listen(4000, resolve));
+
+  // Start Koa server
+  await new Promise<void>((resolve) => {
+    // log starting
+    log.info('Starting GraphQL Gateway server on http://localhost:4000', { operation: 'startServer' });
+    server = app.listen(4000, () => resolve());
+    log.info('GraphQL Gateway server started on http://localhost:4000', { operation: 'startServer' });
+  });
   log.debug('Gateway started on http://localhost:4000');
   log.debug(`HMAC key cleanup will run every ${KEY_CLEANUP_INTERVAL} ms`);
 
@@ -422,13 +486,19 @@ export async function stopServer() {
   loader.stopAutoRefresh();
 
   // Clear the key cleanup interval
-  if ((server as any).keyCleanupInterval) {
-    clearInterval((server as any).keyCleanupInterval);
-  }
+  if (server) {
+    if ((server as any).keyCleanupInterval) {
+      clearInterval((server as any).keyCleanupInterval);
+    }
 
-  // Clear the session cleanup interval
-  if ((server as any).sessionCleanupInterval) {
-    clearInterval((server as any).sessionCleanupInterval);
+    if ((server as any).sessionCleanupInterval) {
+      clearInterval((server as any).sessionCleanupInterval);
+    }
+
+    // Close the HTTP server
+    await new Promise<void>((resolve, reject) => {
+      server!.close((err) => (err ? reject(err) : resolve()));
+    });
   }
 
   // Close database connection
@@ -436,6 +506,4 @@ export async function stopServer() {
     await dataSource.destroy();
     log.debug('Database connection closed');
   }
-
-  await new Promise((resolve) => server.close(resolve));
 }
