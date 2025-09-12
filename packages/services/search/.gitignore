@@ -1,0 +1,9 @@
+/target
+**/*.rs.bk
+Cargo.lock
+.DS_Store
+# Coverage artifacts
+coverage/
+*.profraw
+*.profdata
+lcov.info

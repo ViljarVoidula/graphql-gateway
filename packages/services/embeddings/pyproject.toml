@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "embeddings-service"
+version = "0.1.0"
+description = "Embeddings service integrating vector models with search service"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [ { name = "GraphQL Gateway Team" } ]
+dependencies = [
+  "fastapi>=0.104.0",
+  "uvicorn[standard]>=0.24.0",
+  "pydantic>=2.5.0",
+  "pydantic-settings>=2.0.0",
+  "transformers>=4.53.0",
+  "sentence-transformers>=2.2.2",
+  "torch>=2.1.0",
+  "pillow>=10.0.0",
+  "numpy>=1.24.0",
+  "httpx>=0.25.0",
+  "python-multipart>=0.0.6",
+  "protobuf>=3.20.0",
+  "ftfy>=6.1.0",
+  "open-clip-torch>=2.20.0",
+  "accelerate>=0.21.0",
+  "safetensors>=0.4.0",
+  "huggingface-hub>=0.20.0",
+  "timm>=0.9.12",
+  "strawberry-graphql[fastapi]>=0.211.0",
+  "motor>=3.3.1"
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio", "httpx", "ruff"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 120

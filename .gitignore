@@ -112,3 +112,9 @@ packages/infrastructure/o11y/docker-compose.yaml
 
 packages/infrastructure/common/**
 packages/infrastructure/o11y/otel-collector-config.yaml
+packages/services/search/coverage-summary.txt
+packages/services/**/.venv/**
+packages/services/**/src/embeddings_service.**egg-info**
+packages/services/**/.models-cache/**
+packages/services/**/__pycache__/**
+packages/services/**/.hf-cache/**

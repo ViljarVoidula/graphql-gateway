@@ -1,0 +1,29 @@
+version: '3.9'
+services:
+  vespa:
+    image: vespaengine/vespa:8.578.22
+    container_name: vespa
+    hostname: vespa-container
+    ports:
+      - '8100:8080' # query / document API
+      - '19071:19071' # config / deploy API
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:19071/state/v1/health']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+  search-service:
+    build: .
+    container_name: search-service
+    depends_on:
+      vespa:
+        condition: service_healthy
+    environment:
+      VESPA_ENDPOINT: http://vespa:8080
+      VESPA_DEPLOY_ENDPOINT: http://vespa:19071
+      APP_ID: demo-app
+      SEARCH_AUTO_DEPLOY: 'true'
+      SEARCH_DEFAULT_TENSOR_DIM: 8
+      SEARCH_DEFAULT_GEO_ENABLED: 'true'
+    ports:
+      - '8088:8088'
