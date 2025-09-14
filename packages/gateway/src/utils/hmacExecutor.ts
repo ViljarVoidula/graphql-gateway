@@ -1,6 +1,11 @@
 import { buildHTTPExecutor } from '@graphql-tools/executor-http';
+import { Container } from 'typedi';
+import { dataSource } from '../db/datasource';
+import { Service } from '../entities/service.entity';
 import { HMACUtils } from '../security/hmac';
 import { keyManager } from '../security/keyManager';
+import { AuditLogService } from '../services/audit/audit-log.service';
+import { ApplicationUsageService } from '../services/usage/application-usage.service';
 import { log } from './logger';
 import { withRemoteCallMetrics } from './telemetry/metrics';
 import { withSpan } from './telemetry/tracing';
@@ -132,11 +137,70 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
             url: String(url),
             method: String((updatedOptions as any).method || 'POST'),
             operation: 'GraphQL POST',
-            fn: () =>
-              fetch(url, updatedOptions).catch((error) => {
+            fn: async () => {
+              const serviceHost = (() => {
+                try {
+                  return new URL(String(url)).host;
+                } catch {
+                  return 'unknown';
+                }
+              })();
+              const contextApp = (context as any)?.application; // Provided by auth layer for api-key
+              const usageService = Container.has(ApplicationUsageService) ? Container.get(ApplicationUsageService) : null;
+              const audit = Container.has(AuditLogService) ? Container.get(AuditLogService) : null;
+
+              // Look up service ID by URL for usage tracking
+              let serviceId: string | undefined;
+              try {
+                const serviceRepository = dataSource.getRepository(Service);
+                const service = await serviceRepository.findOne({ where: { url: String(url) } });
+                serviceId = service?.id;
+              } catch (error) {
+                log.debug('Failed to resolve service ID for usage tracking:', error);
+              }
+              const start = Date.now();
+              try {
+                const res = await fetch(url, updatedOptions);
+                const latencyMs = Date.now() - start;
+                if (contextApp && usageService && serviceId) {
+                  await usageService.increment(contextApp.id, serviceId, { error: !res.ok });
+                }
+                if (contextApp && audit) {
+                  await audit.logApiRequest({
+                    applicationId: contextApp.id,
+                    serviceId,
+                    serviceName: serviceHost,
+                    statusCode: res.status,
+                    latencyMs,
+                    httpMethod: String((updatedOptions as any).method || 'POST'),
+                    success: res.ok,
+                    extraMetadata: { rawStatus: res.status, url: String(url) }
+                  });
+                }
+                return res;
+              } catch (error: any) {
+                const latencyMs = Date.now() - start;
                 log.error(`Fetch error for ${url}:`, error);
+                if (contextApp && usageService && serviceId) {
+                  await usageService.increment(contextApp.id, serviceId, { error: true });
+                }
+                if (contextApp && audit) {
+                  await audit.logApiRequest({
+                    applicationId: contextApp.id,
+                    serviceId,
+                    serviceName: serviceHost,
+                    statusCode: undefined,
+                    latencyMs,
+                    httpMethod: String((updatedOptions as any).method || 'POST'),
+                    success: false,
+                    errorClass: error?.name,
+                    errorMessage: error?.message?.slice(0, 300),
+                    extraMetadata: { networkError: true, url: String(url) }
+                  });
+                }
                 throw new Error(`Failed to fetch from ${url}: ${error.message}`);
-              })
+              }
+            }
           }),
         { attributes: { 'url.full': String(url) } }
       );

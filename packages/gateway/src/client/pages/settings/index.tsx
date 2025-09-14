@@ -1,12 +1,24 @@
-import { Alert, Badge, Button, Card, Divider, Group, Stack, Switch, Text, Title } from '@mantine/core';
-import { IconClock, IconInfoCircle, IconSettings, IconShield } from '@tabler/icons-react';
+import { Alert, Badge, Button, Card, Divider, Group, Loader, NumberInput, Stack, Switch, Text, Title } from '@mantine/core';
+import { IconClock, IconDatabase, IconInfoCircle, IconSettings, IconShield } from '@tabler/icons-react';
 import React, { useEffect, useState } from 'react';
-import { getTokenTimeToExpiry, isAutoRefreshEnabled, refreshAuthToken, setAutoRefreshEnabled } from '../../utils/auth';
+import {
+  authenticatedFetch,
+  getTokenTimeToExpiry,
+  isAutoRefreshEnabled,
+  refreshAuthToken,
+  setAutoRefreshEnabled
+} from '../../utils/auth';
 
 export const SessionSettings: React.FC = () => {
   const [autoRefreshEnabled, setAutoRefreshEnabledState] = useState(true);
   const [timeToExpiry, setTimeToExpiry] = useState<number | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  // Audit retention state
+  const [auditRetention, setAuditRetention] = useState<number | null>(null);
+  const [auditInitial, setAuditInitial] = useState<number | null>(null);
+  const [auditLoading, setAuditLoading] = useState(true);
+  const [auditSaving, setAuditSaving] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
 
   useEffect(() => {
     // Load current settings
@@ -17,6 +29,28 @@ export const SessionSettings: React.FC = () => {
     const interval = setInterval(() => {
       setTimeToExpiry(getTokenTimeToExpiry());
     }, 30 * 1000);
+
+    // Fetch settings (admin only route - if unauthorized we silently ignore)
+    (async () => {
+      try {
+        const res = await authenticatedFetch('/graphql', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: `query Settings { settings { auditLogRetentionDays } }`
+          })
+        });
+        const data = await res.json();
+        if (data?.data?.settings) {
+          setAuditRetention(data.data.settings.auditLogRetentionDays);
+          setAuditInitial(data.data.settings.auditLogRetentionDays);
+        }
+      } catch (e: any) {
+        setAuditError(e?.message || 'Failed to load settings');
+      } finally {
+        setAuditLoading(false);
+      }
+    })();
 
     return () => clearInterval(interval);
   }, []);
@@ -125,6 +159,82 @@ export const SessionSettings: React.FC = () => {
               Manually extend your session by 15 minutes
             </Text>
           </Group>
+        </Stack>
+      </Card>
+
+      <Card shadow="sm" p="lg" radius="md" withBorder>
+        <Stack spacing="md">
+          <Group spacing="sm">
+            <IconDatabase size={20} />
+            <Text weight={500} size="md">
+              Audit Log Retention
+            </Text>
+          </Group>
+          {auditLoading ? (
+            <Group>
+              <Loader size="sm" /> <Text size="sm">Loading current retention...</Text>
+            </Group>
+          ) : auditError ? (
+            <Alert color="red" title="Failed to load" icon={<IconInfoCircle size={16} />}>
+              {' '}
+              {auditError}{' '}
+            </Alert>
+          ) : (
+            <>
+              <NumberInput
+                label="Retention (days)"
+                description="How long audit log entries are kept before eligible for cleanup"
+                min={1}
+                max={1825}
+                value={auditRetention === null ? undefined : auditRetention}
+                onChange={(val) => setAuditRetention(typeof val === 'number' ? val : auditRetention)}
+              />
+              <Group spacing="sm">
+                <Button
+                  size="xs"
+                  disabled={auditSaving || auditRetention === null || auditRetention === auditInitial}
+                  loading={auditSaving}
+                  onClick={async () => {
+                    if (auditRetention === null) return;
+                    setAuditSaving(true);
+                    setAuditError(null);
+                    try {
+                      const res = await authenticatedFetch('/graphql', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          query: `mutation UpdateRetention($days: Int!) { updateAuditLogRetentionDays(days: $days) }`,
+                          variables: { days: auditRetention }
+                        })
+                      });
+                      const json = await res.json();
+                      if (json.errors) {
+                        throw new Error(json.errors[0]?.message || 'Update failed');
+                      }
+                      setAuditInitial(auditRetention);
+                    } catch (e: any) {
+                      setAuditError(e?.message || 'Failed to update retention');
+                    } finally {
+                      setAuditSaving(false);
+                    }
+                  }}
+                >
+                  Save
+                </Button>
+                {auditInitial !== null && auditRetention !== auditInitial && (
+                  <Button variant="subtle" size="xs" disabled={auditSaving} onClick={() => setAuditRetention(auditInitial)}>
+                    Reset
+                  </Button>
+                )}
+              </Group>
+              <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+                <Text size="xs">
+                  Increasing retention increases storage usage. The cleanup job runs periodically based on configured cleanup
+                  interval; changes apply to newly written logs immediately.
+                </Text>
+              </Alert>
+            </>
+          )}
         </Stack>
       </Card>
 

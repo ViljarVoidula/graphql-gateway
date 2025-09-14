@@ -1,6 +1,6 @@
 # 🚀 GraphQL Gateway Project
 
-> *A blazing-fast, polyglot microservices ecosystem with unified GraphQL gateway and enterprise-grade database migrations*
+> _A blazing-fast, polyglot microservices ecosystem with unified GraphQL gateway and enterprise-grade database migrations_
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)](https://www.rust-lang.org/)
@@ -25,27 +25,31 @@ Welcome to the **GraphQL Gateway Project** - a next-generation microservices pla
 ## 🏗️ Services Architecture
 
 ### 🌐 GraphQL Gateway (`packages/gateway/`)
+
 - **🔧 Technology**: TypeScript, Node.js, Apollo Federation
 - **🎯 Purpose**: Aggregates and proxies GraphQL schemas from multiple services
 - **✨ Features**: Schema stitching, hot-reloading, error handling, rate limiting
 - **🔗 Endpoints**: Unified GraphQL API with interactive playground
 
 ### 📦 Records Service (`packages/services/records/`)
+
 - **🔧 Technology**: Rust, Axum, async-graphql, MongoDB
 - **🎯 Purpose**: High-performance product catalog and record management
 - **✨ Features**: CRUD operations, media handling, taxonomy support, migrations
 - **⚡ Performance**: Blazing-fast queries with type safety guarantees
 
 ### 📚 Shared Libraries (`packages/shared/`)
+
 - **🗃️ MongoDB Migrator**: Reusable migration framework for all services
 - **🔄 Common Types**: Shared data structures and utilities
 - **🛠️ Developer Tools**: CLI utilities and helper functions
 
 ## 🗃️ Database Migration System
 
-> *Enterprise-grade database evolution with zero-downtime deployments*
+> _Enterprise-grade database evolution with zero-downtime deployments_
 
 ### 🌟 Features
+
 - ✅ **🔍 Auto-Discovery**: Migrations register themselves using inventory macros
 - ✅ **🏠 Service Isolation**: Each service maintains its own migration state
 - ✅ **🛠️ Rich CLI Tools**: Comprehensive command-line interface for migration management
@@ -54,6 +58,7 @@ Welcome to the **GraphQL Gateway Project** - a next-generation microservices pla
 - ✅ **🚀 Production Ready**: Dry-run, planning, backup support, and zero-downtime deployments
 
 ### 🏃‍♂️ Quick Start
+
 ```bash
 # 📊 Check migration status across all services
 cargo run migrate status
@@ -72,8 +77,9 @@ cargo run migrate discover
 ```
 
 ### 📖 Documentation
+
 - **[📚 MongoDB Migrator Framework](packages/shared/mongodb-migrator/README.md)** - Core migration system
-- **[🗃️ Records Service Migration Guide](packages/services/records/MIGRATION_GUIDE.md)** - Service-specific guide  
+- **[🗃️ Records Service Migration Guide](packages/services/records/MIGRATION_GUIDE.md)** - Service-specific guide
 - **[⚡ Migration Quick Reference](packages/services/records/MIGRATION_QUICK_REFERENCE.md)** - Command cheat sheet
 
 ## 🚀 Quick Start Guide
@@ -81,6 +87,7 @@ cargo run migrate discover
 ### 📋 Prerequisites
 
 Before you begin, ensure you have:
+
 - **Node.js 18+** - [Install Node.js](https://nodejs.org/)
 - **Rust 1.70+** - [Install Rust](https://rustup.rs/)
 - **MongoDB** - [Install MongoDB](https://docs.mongodb.com/manual/installation/) or use [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
@@ -89,12 +96,14 @@ Before you begin, ensure you have:
 ### 🏃‍♂️ Getting Started
 
 1. **📥 Clone the Repository**
+
    ```bash
    git clone <repository-url>
    cd graphql-gateway
    ```
 
 2. **⚙️ Environment Setup**
+
    ```bash
    # Copy environment templates
    cp packages/gateway/.env.example packages/gateway/.env
@@ -102,6 +111,7 @@ Before you begin, ensure you have:
    ```
 
 3. **🚀 Start the Gateway**
+
    ```bash
    cd packages/gateway
    npm install
@@ -109,6 +119,7 @@ Before you begin, ensure you have:
    ```
 
 4. **🦀 Start the Records Service**
+
    ```bash
    cd packages/services/records
    cargo run
@@ -131,14 +142,16 @@ docker-compose up gateway records-service
 
 ## 💡 Future Improvements
 
-> *Ideas and enhancements on our roadmap*
+> _Ideas and enhancements on our roadmap_
 
 ### 🔄 Schema Fallback Strategies
+
 - **📦 Cached Strategy**: Return last known state when remote schema fetch fails
 - **🗑️ Drop Strategy**: Remove failed endpoints from root schema (current default)
 - **🔀 Graceful Degradation**: Partial schema loading with service health indicators
 
-### 🌟 Planned Features  
+### 🌟 Planned Features
+
 - **🔐 Advanced Authentication**: OAuth2, JWT, API key management
 - **📊 Real-time Analytics**: GraphQL query metrics and performance monitoring
 - **🎯 Smart Caching**: Intelligent query result caching with TTL
@@ -146,7 +159,7 @@ docker-compose up gateway records-service
 
 ## 🏛️ Microservice Architecture Examples
 
-> *Scalable, event-driven architecture that separates external API interactions from internal processing*
+> _Scalable, event-driven architecture that separates external API interactions from internal processing_
 
 This section illustrates a production-ready system where the **GraphQL Gateway** serves as the primary API layer for external clients, while internal processing leverages an asynchronous, event-driven backbone using **Kafka**.
 
@@ -195,35 +208,43 @@ The diagram below showcases a modern architecture that decouples external API in
 ### 🏗️ System Layers
 
 #### 1. 🌐 **API Gateway Layer (GraphQL Gateway)**
+
 The Gateway serves as the **single source of truth** for all external clients. It provides:
+
 - 🔄 **Unified GraphQL API** with schema stitching
-- 🛡️ **Authentication & Authorization** 
+- 🛡️ **Authentication & Authorization**
 - 🚦 **Rate limiting** and request throttling
 - 📊 **Request routing** and load balancing
 - 🔍 **API monitoring** and analytics
 
 #### 2. ⚙️ **Service Layer (Polyglot Microservices)**
+
 Each service is a **self-contained business unit** with clear responsibilities:
 
 - **📦 Records Service (Rust)**
+
   - Core business logic for product record management
   - Optimized for performance and memory safety
   - MongoDB integration with advanced querying
 
-- **📂 Categories Service (Go)**  
+- **📂 Categories Service (Go)**
   - Manages data taxonomies and hierarchical categories
   - Built for high-concurrency read operations
   - PostgreSQL for relational data integrity
 
 #### 3. 🚀 **Event-Driven Backbone (Kafka)**
+
 **Asynchronous communication** for scalability and resilience:
+
 - 📡 **Event Publishing**: Services emit domain events
-- 🔄 **Loose Coupling**: Services evolve independently  
+- 🔄 **Loose Coupling**: Services evolve independently
 - 📈 **Horizontal Scaling**: Process events in parallel
 - 🛡️ **Fault Tolerance**: Retry mechanisms and dead letter queues
 
 #### 4. ⚡ **Event Processing Layer**
+
 **Specialized background services** for non-blocking operations:
+
 - 📧 **Notification Service**: Email, SMS, push notifications
 - 📊 **Analytics Pipeline**: Data aggregation and insights
 - 🔍 **Search Indexing**: ElasticSearch synchronization
@@ -232,6 +253,7 @@ Each service is a **self-contained business unit** with clear responsibilities:
 ### 🔄 Request & Data Flow Examples
 
 #### **Synchronous Flow (External API)**
+
 ```mermaid
 sequenceDiagram
     participant Client
@@ -250,6 +272,7 @@ sequenceDiagram
 **Perfect for**: User-facing interactions requiring immediate feedback
 
 #### **Asynchronous Flow (Internal Processing)**
+
 ```mermaid
 sequenceDiagram
     participant RecordsService
@@ -277,7 +300,7 @@ npm run bootstrap  # or manually install each service
 # 🔄 Start development mode with hot-reload
 npm run dev:all
 
-# 🧪 Run tests across all services  
+# 🧪 Run tests across all services
 npm run test:all
 
 # 🎨 Format code consistently
@@ -296,7 +319,7 @@ npm test
 npm run test:integration
 
 # Records service tests (Rust)
-cd packages/services/records  
+cd packages/services/records
 cargo test
 cargo test --release  # Performance tests
 
@@ -307,7 +330,7 @@ npm run test:e2e
 ### 📊 Code Quality & Standards
 
 - **TypeScript**: ESLint + Prettier for consistent code style
-- **Rust**: rustfmt + clippy for idiomatic Rust code  
+- **Rust**: rustfmt + clippy for idiomatic Rust code
 - **GraphQL**: Schema validation and breaking change detection
 - **Git Hooks**: Pre-commit hooks for automated quality checks
 
@@ -321,7 +344,7 @@ Each service exposes comprehensive health endpoints:
 # Gateway health
 curl http://localhost:4000/health
 
-# Records service health  
+# Records service health
 curl http://localhost:8080/health
 
 # Detailed health with dependencies
@@ -343,9 +366,61 @@ logger.info('Record created', {
   recordId: record.id,
   userId: context.user.id,
   duration: '23ms',
-  metadata: { source: 'api' }
+  metadata: { source: 'api' },
 });
 ```
+
+## ⚡ Performance & High-Volume Operation
+
+Optimizations included for sustained traffic (hundreds of millions of requests/day):
+
+### Buffered Persistence
+
+| Path        | Mechanism                           | Config                                             | Storage Pattern                  |
+| ----------- | ----------------------------------- | -------------------------------------------------- | -------------------------------- |
+| Usage stats | In-memory aggregation + timed flush | `USAGE_FLUSH_INTERVAL_MS`, `USAGE_BUFFER_MAX_KEYS` | Batched `INSERT ... ON CONFLICT` |
+| Audit logs  | In-memory queue + size/time flush   | `AUDIT_FLUSH_INTERVAL_MS`, `AUDIT_BUFFER_MAX`      | Multi-row `INSERT` chunks        |
+
+Flush failures requeue data to avoid loss. On shutdown, buffers force-flush.
+
+### Metrics (OpenTelemetry)
+
+Exposed instruments (per service label):
+
+```
+buffer.size{service="usage|audit"}
+buffer.flush.duration.ms{service="usage|audit"}
+buffer.flush.rows{service="usage|audit"}
+buffer.flush.failures{service="usage|audit"}
+```
+
+### Index & Partition Migrations
+
+Migration `1759000000000-AddPerformanceIndexes` adds supporting indexes; `1759000001000-PartitionAuditLogs` introduces optional monthly partitioning of `audit_logs` by `createdAt`.
+
+Retention cleanup automatically drops expired partitions when partitioning is enabled; otherwise it performs batched deletes driven by retention metadata.
+
+### Environment Variables (Defaults)
+
+```
+USAGE_FLUSH_INTERVAL_MS=5000
+USAGE_BUFFER_MAX_KEYS=500
+AUDIT_FLUSH_INTERVAL_MS=5000
+AUDIT_BUFFER_MAX=1000
+```
+
+### Operational Guidance
+
+- Alert if `buffer.size` grows persistently (ingestion lag)
+- Tune flush interval downward if each flush processes large batches (>5k rows)
+- Pre-create future audit partitions monthly via `SELECT create_audit_logs_partition(<first_of_month>)`
+- For extreme retention volumes, consider tablespace-level partition storage & WAL compression
+
+### Future Enhancements (Ideas)
+
+- Adaptive flush (shorter interval as buffer utilization rises)
+- Optional durable local write-ahead journal before buffering
+- Sampling / dynamic throttling for homogeneous low-risk audit entries
 
 ## 🤝 Contributing
 
@@ -365,18 +440,21 @@ We welcome contributions! Here's how to get involved:
 ### 📋 Development Guidelines
 
 #### **For Gateway (TypeScript)**
+
 - Follow existing code patterns and architecture
 - Write comprehensive tests for new features
 - Update GraphQL schema documentation
 - Ensure backward compatibility
 
 #### **For Services (Rust)**
+
 - Use `cargo fmt` and `cargo clippy`
 - Write unit and integration tests
 - Add database migrations when needed
 - Document public APIs thoroughly
 
 #### **For Documentation**
+
 - Keep README files up-to-date
 - Add inline code comments for complex logic
 - Include examples for new features
@@ -423,7 +501,30 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 **🚀 Built with passion by the GraphQL Gateway Team**
 
-*Scalable • Performant • Developer-Friendly*
+_Scalable • Performant • Developer-Friendly_
+
+### 🔬 Benchmarks
+
+K6 benchmark scripts are available under `packages/gateway/src/benchmarks`:
+
+Quick commands (run from `packages/gateway`):
+
+```
+npm run bench:smoke   # baseline latency
+npm run bench:ramp    # progressive load
+npm run bench:mix     # read/write mix
+npm run bench:spike   # burst resilience
+npm run bench:soak    # long duration stability
+```
+
+Override scale:
+
+```
+RAMP_MAX_VU=1000 npm run bench:ramp
+DURATION=1h npm run bench:soak
+```
+
+Set `API_KEY` if required for authorization. See `src/benchmarks/README.md` for more details.
 
 [![GitHub stars](https://img.shields.io/github/stars/your-org/graphql-gateway?style=social)](https://github.com/your-org/graphql-gateway)
 [![Follow us](https://img.shields.io/twitter/follow/your-org?style=social)](https://twitter.com/your-org)

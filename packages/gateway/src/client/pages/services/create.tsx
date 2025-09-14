@@ -31,6 +31,7 @@ interface ServiceFormData {
   enableHMAC: boolean;
   timeout: number;
   enableBatching: boolean;
+  externally_accessible: boolean;
 }
 
 interface HMACKeyData {
@@ -58,7 +59,8 @@ export const ServiceCreate: React.FC = () => {
       version: '',
       enableHMAC: true,
       timeout: 5000,
-      enableBatching: true
+      enableBatching: true,
+      externally_accessible: true
     }
   });
 
@@ -176,6 +178,13 @@ export const ServiceCreate: React.FC = () => {
                 description="Allow batching of multiple requests"
                 checked={watchedValues.enableBatching}
                 {...register('enableBatching')}
+              />
+
+              <Switch
+                label="Externally Accessible"
+                description="Allow this service to be discoverable and whitelisted by applications"
+                checked={watchedValues.externally_accessible}
+                {...register('externally_accessible')}
               />
 
               {error && (

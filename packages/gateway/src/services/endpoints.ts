@@ -11,14 +11,23 @@ import { SchemaLoader } from '../SchemaLoader';
 import { authZRules } from '../auth/authz-rules';
 import { dataSource } from '../db/datasource';
 import { ApiKey } from '../entities/api-key.entity';
+import { ApplicationUsage } from '../entities/application-usage.entity';
 import { Application } from '../entities/application.entity';
+import { AuditLog } from '../entities/audit-log.entity';
+import { SchemaChange } from '../entities/schema-change.entity';
 import { ServiceKey } from '../entities/service-key.entity';
 import { Service } from '../entities/service.entity';
 import { Session } from '../entities/session.entity';
 import { log } from '../utils/logger';
 import { ApiKeyResolver } from './api-keys/api-key.resolver';
 import { ApplicationResolver } from './applications/application.resolver';
+import { AuditLogResolver } from './audit/audit-log.resolver';
+import { ComplianceUsageResolver } from './compliance/compliance-usage.resolver';
+import { ConfigurationResolver } from './config/configuration.resolver';
+import { HealthResolver } from './health/health.resolver';
+import { SchemaChangeResolver } from './schema-changes/schema-change.resolver';
 import { ServiceRegistryResolver } from './service-registry/service-registry.resolver';
+import { ApplicationUsageResolver } from './usage/application-usage.resolver';
 import { User } from './users/user.entity';
 import { UserResolver } from './users/user.resolver';
 
@@ -30,12 +39,9 @@ const { authZDirectiveTransformer } = authZDirective();
 const schemaCache: WeakMap<object, GraphQLSchema> = new WeakMap();
 
 export function makeEndpointsSchema(loader: SchemaLoader): GraphQLSchema {
-  // Clear cache to ensure fresh schema generation (temporary for debugging)
-  schemaCache.delete(loader);
-
-  // Check if we already have a cached schema for this loader
-  if (schemaCache.has(loader)) {
-    return schemaCache.get(loader);
+  const disableCache = process.env.NODE_ENV !== 'production';
+  if (!disableCache && schemaCache.has(loader)) {
+    return schemaCache.get(loader)!;
   }
 
   // Set up dependency injection
@@ -44,14 +50,28 @@ export function makeEndpointsSchema(loader: SchemaLoader): GraphQLSchema {
   Container.set('ApplicationRepository', dataSource.getRepository(Application));
   Container.set('ServiceRepository', dataSource.getRepository(Service));
   Container.set('ServiceKeyRepository', dataSource.getRepository(ServiceKey));
+  Container.set('AuditLogRepository', dataSource.getRepository(AuditLog));
+  Container.set('SchemaChangeRepository', dataSource.getRepository(SchemaChange));
+  Container.set('ApplicationUsageRepository', dataSource.getRepository(ApplicationUsage));
 
   const { resolvers: coreResolvers, typeDefs: coreTypefs } = buildTypeDefsAndResolversSync({
-    resolvers: [UserResolver, ApplicationResolver, ServiceRegistryResolver, ApiKeyResolver],
+    resolvers: [
+      UserResolver,
+      ApplicationResolver,
+      ServiceRegistryResolver,
+      ApiKeyResolver,
+      AuditLogResolver,
+      ApplicationUsageResolver,
+      SchemaChangeResolver,
+      ConfigurationResolver,
+      HealthResolver,
+      ComplianceUsageResolver
+    ],
     container: Container,
-    orphanedTypes: [Application, ApiKey, Session]
+    orphanedTypes: [Application, ApiKey, Session, AuditLog, ApplicationUsage]
   });
 
-  const schema = authZDirectiveTransformer(
+  let schema = authZDirectiveTransformer(
     createSchema({
       typeDefs: mergeTypeDefs([coreTypefs, authZDirectiveTypeDefs]),
       resolvers: mergeResolvers([coreResolvers])
@@ -71,7 +91,20 @@ export function makeEndpointsSchema(loader: SchemaLoader): GraphQLSchema {
     });
   } catch {}
 
-  // Cache the schema for this loader
-  schemaCache.set(loader, schema);
+  // Self-heal: if expected new fields (e.g., auditLogSummary) missing and cache disabled, rebuild once
+  try {
+    const qf = Object.keys(schema.getQueryType()?.getFields?.() || {});
+    if (!qf.includes('auditLogSummary') && !disableCache) {
+      log.warn('Expected auditLogSummary not found; forcing schema rebuild');
+      schema = authZDirectiveTransformer(
+        createSchema({
+          typeDefs: mergeTypeDefs([coreTypefs, authZDirectiveTypeDefs]),
+          resolvers: mergeResolvers([coreResolvers])
+        })
+      );
+    }
+  } catch {}
+
+  if (!disableCache) schemaCache.set(loader, schema);
   return schema;
 }

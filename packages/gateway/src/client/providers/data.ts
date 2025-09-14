@@ -46,6 +46,7 @@ export const dataProvider: DataProvider = {
             enableHMAC
             timeout
             enableBatching
+            externally_accessible
             createdAt
             updatedAt
             owner {
@@ -65,6 +66,9 @@ export const dataProvider: DataProvider = {
             owner { id email }
             createdAt
             updatedAt
+            rateLimitPerMinute
+            rateLimitPerDay
+            rateLimitDisabled
             apiKeys { id keyPrefix status name scopes createdAt expiresAt }
             whitelistedServices { id name status }
           }
@@ -125,6 +129,7 @@ export const dataProvider: DataProvider = {
             enableHMAC
             timeout
             enableBatching
+            externally_accessible
             createdAt
             updatedAt
             owner {
@@ -145,6 +150,9 @@ export const dataProvider: DataProvider = {
             owner { id email }
             createdAt
             updatedAt
+            rateLimitPerMinute
+            rateLimitPerDay
+            rateLimitDisabled
             apiKeys { id keyPrefix status name scopes createdAt expiresAt }
             whitelistedServices { id name status }
           }
@@ -202,6 +210,7 @@ export const dataProvider: DataProvider = {
               enableHMAC
               timeout
               enableBatching
+              externally_accessible
               createdAt
               updatedAt
               owner {
@@ -548,6 +557,104 @@ export const dataProvider: DataProvider = {
       return {
         data: result.data.serviceKeys
       };
+    }
+
+    if (meta?.operation === 'setServiceExternallyAccessible') {
+      const mutation = `
+        mutation SetServiceExternallyAccessible($serviceId: ID!, $externally_accessible: Boolean!) {
+          setServiceExternallyAccessible(serviceId: $serviceId, externally_accessible: $externally_accessible)
+        }
+      `;
+      const response = await authenticatedFetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ query: mutation, variables: payload })
+      });
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      return { data: { success: result.data.setServiceExternallyAccessible } };
+    }
+
+    if (meta?.operation === 'updateApplicationRateLimits') {
+      const mutation = `
+        mutation UpdateApplicationRateLimits($applicationId: ID!, $perMinute: Int, $perDay: Int, $disabled: Boolean) {
+          updateApplicationRateLimits(
+            applicationId: $applicationId
+            perMinute: $perMinute
+            perDay: $perDay
+            disabled: $disabled
+          ) {
+            id
+            name
+            rateLimitPerMinute
+            rateLimitPerDay
+            rateLimitDisabled
+          }
+        }
+      `;
+      const response = await authenticatedFetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ query: mutation, variables: payload })
+      });
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      return { data: result.data.updateApplicationRateLimits };
+    }
+
+    if (meta?.operation === 'applicationAuditLogs') {
+      const query = `
+        query ApplicationAuditLogs($applicationId: ID!, $limit: Int) {
+          applicationAuditLogs(applicationId: $applicationId, limit: $limit) {
+            id
+            eventType
+            metadata
+            createdAt
+            user {
+              id
+              email
+            }
+          }
+        }
+      `;
+      const response = await authenticatedFetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ query, variables: payload })
+      });
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      return { data: result.data.applicationAuditLogs };
+    }
+
+    if (meta?.operation === 'applicationUsage') {
+      const query = `
+        query ApplicationUsage($applicationId: ID!, $limit: Int) {
+          applicationUsage(applicationId: $applicationId, limit: $limit) {
+            id
+            date
+            requestCount
+            errorCount
+            rateLimitExceededCount
+            service {
+              id
+              name
+            }
+          }
+        }
+      `;
+      const response = await authenticatedFetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ query, variables: payload })
+      });
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      return { data: result.data.applicationUsage };
     }
 
     throw new Error('Custom operation not implemented');

@@ -33,6 +33,7 @@ import {
 } from '@tabler/icons-react';
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { authenticatedFetch } from '../../utils/auth';
 
 export const UserDetail: React.FC = () => {
   const navigate = useNavigate();
@@ -52,6 +53,47 @@ export const UserDetail: React.FC = () => {
   const { mutate: deleteUser, isLoading: isDeleting } = useDelete();
 
   const user = userData?.data;
+
+  // Audit logs state for user
+  const [auditLogs, setAuditLogs] = React.useState<any[]>([]);
+  const [auditLoading, setAuditLoading] = React.useState(false);
+  const [auditCategory, setAuditCategory] = React.useState<string | null>(null);
+  const [auditSeverity, setAuditSeverity] = React.useState<string | null>(null);
+
+  const loadAuditLogs = React.useCallback(async () => {
+    if (!id) return;
+    setAuditLoading(true);
+    try {
+      const query = `query UserAudit($userId: ID!, $limit: Int, $category: AuditCategory, $severity: AuditSeverity){
+        userAuditLogs(userId: $userId, limit: $limit, category: $category, severity: $severity){
+          id eventType category severity action success correlationId createdAt metadata
+        }
+      }`;
+      const res = await authenticatedFetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          query,
+          variables: { userId: id, limit: 25, category: auditCategory, severity: auditSeverity }
+        })
+      });
+      const json = await res.json();
+      if (!json.errors) {
+        setAuditLogs(json.data.userAuditLogs || []);
+      }
+    } catch (e) {
+      // silent error log
+      // eslint-disable-next-line no-console
+      console.error('Failed to load user audit logs', e);
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [id, auditCategory, auditSeverity]);
+
+  React.useEffect(() => {
+    loadAuditLogs();
+  }, [loadAuditLogs]);
 
   const handleDeleteUser = () => {
     deleteUser(
@@ -267,6 +309,80 @@ export const UserDetail: React.FC = () => {
                     )}
                   </tbody>
                 </Table>
+              </Stack>
+            </Card>
+
+            {/* User Audit Logs */}
+            <Card withBorder>
+              <Stack spacing="sm">
+                <Group position="apart" align="flex-end">
+                  <Group spacing="xs">
+                    <IconShield size={20} />
+                    <Text weight={500}>Audit Logs</Text>
+                  </Group>
+                  <Group spacing={4}>
+                    <select
+                      style={{ fontSize: '0.75rem' }}
+                      value={auditCategory || ''}
+                      onChange={(e) => setAuditCategory(e.target.value || null)}
+                    >
+                      <option value="">Category</option>
+                      {['authentication', 'authorization', 'configuration', 'security', 'data_access', 'system'].map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      style={{ fontSize: '0.75rem' }}
+                      value={auditSeverity || ''}
+                      onChange={(e) => setAuditSeverity(e.target.value || null)}
+                    >
+                      <option value="">Severity</option>
+                      {['info', 'low', 'medium', 'high', 'critical'].map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                    <Button size="xs" variant="light" onClick={loadAuditLogs} loading={auditLoading}>
+                      Refresh
+                    </Button>
+                  </Group>
+                </Group>
+                <Divider />
+                {auditLoading ? (
+                  <Text size="xs">Loading...</Text>
+                ) : auditLogs.length === 0 ? (
+                  <Text size="xs" color="dimmed">
+                    No audit logs
+                  </Text>
+                ) : (
+                  <Table verticalSpacing={2} fontSize="xs">
+                    <thead>
+                      <tr>
+                        <th>Evt</th>
+                        <th>Cat</th>
+                        <th>Sev</th>
+                        <th>Act</th>
+                        <th>Succ</th>
+                        <th>Time</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auditLogs.map((l: any) => (
+                        <tr key={l.id}>
+                          <td>{l.eventType}</td>
+                          <td>{l.category || '—'}</td>
+                          <td>{l.severity || '—'}</td>
+                          <td>{l.action || '—'}</td>
+                          <td>{l.success === true ? 'Y' : l.success === false ? 'N' : '—'}</td>
+                          <td>{new Date(l.createdAt).toLocaleTimeString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                )}
               </Stack>
             </Card>
 

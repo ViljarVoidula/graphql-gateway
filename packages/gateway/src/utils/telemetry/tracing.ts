@@ -54,5 +54,5 @@ export function getLogTraceContext(explicitSpan?: Span) {
 export function withTraceMeta(meta: Record<string, any> = {}, explicitSpan?: Span) {
   return { ...meta, ...getLogTraceContext(explicitSpan) };
 }
-debugger;
+
 export default tracer;

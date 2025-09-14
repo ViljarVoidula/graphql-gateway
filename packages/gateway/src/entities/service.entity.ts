@@ -1,15 +1,15 @@
+import { Field, ID, ObjectType, registerEnumType } from 'type-graphql';
 import {
-  Entity,
-  PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
-  UpdateDateColumn,
-  OneToMany,
-  ManyToOne,
+  Entity,
+  Index,
   JoinColumn,
-  Index
+  ManyToOne,
+  OneToMany,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn
 } from 'typeorm';
-import { Field, ObjectType, ID, registerEnumType } from 'type-graphql';
 import { User } from '../services/users/user.entity';
 
 export enum ServiceStatus {
@@ -65,7 +65,7 @@ export class Service {
   enableBatching: boolean;
 
   @Field()
-  @Column({ default: false })
+  @Column({ default: true })
   @Index()
   externally_accessible: boolean; // Gateway admins control this
 

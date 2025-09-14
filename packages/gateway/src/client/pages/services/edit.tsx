@@ -15,7 +15,7 @@ import {
   Title
 } from '@mantine/core';
 import { showNotification } from '@mantine/notifications';
-import { useOne, useUpdate } from '@refinedev/core';
+import { useCustomMutation, useOne, useUpdate } from '@refinedev/core';
 import { IconAlertCircle, IconArrowLeft } from '@tabler/icons-react';
 import React from 'react';
 import { useForm } from 'react-hook-form';
@@ -38,13 +38,17 @@ export const ServiceEdit: React.FC = () => {
   const {
     data: serviceData,
     isLoading: isLoadingService,
-    error: loadError
+    error: loadError,
+    refetch
   } = useOne({
     resource: 'services',
     id: id!
   });
+  const { mutate: customMutate } = useCustomMutation();
 
   const service = serviceData?.data;
+  const [togglingExternal, setTogglingExternal] = React.useState(false);
+  const [externalError, setExternalError] = React.useState<string | null>(null);
 
   const {
     register,
@@ -80,6 +84,35 @@ export const ServiceEdit: React.FC = () => {
       });
     }
   }, [service, reset]);
+
+  const toggleExternallyAccessible = () => {
+    if (!service) return;
+    setTogglingExternal(true);
+    setExternalError(null);
+    const next = !service.externally_accessible;
+    customMutate(
+      {
+        method: 'post',
+        url: '',
+        values: { serviceId: service.id, externally_accessible: next },
+        meta: { operation: 'setServiceExternallyAccessible' }
+      },
+      {
+        onSuccess: (res: any) => {
+          if (!res?.data?.success) {
+            setExternalError('Mutation returned unsuccessful response');
+          } else {
+            refetch();
+          }
+          setTogglingExternal(false);
+        },
+        onError: (err: any) => {
+          setExternalError(err?.message || 'Failed to update external accessibility');
+          setTogglingExternal(false);
+        }
+      }
+    );
+  };
 
   const onSubmit = (values: ServiceFormData) => {
     updateService(
@@ -150,6 +183,9 @@ export const ServiceEdit: React.FC = () => {
         <Title order={2}>Edit Service</Title>
         <Badge color={getStatusColor(service.status)} variant="light">
           {service.status}
+        </Badge>
+        <Badge color={service.externally_accessible ? 'blue' : 'gray'} variant="filled">
+          {service.externally_accessible ? 'Externally Accessible' : 'Internal Only'}
         </Badge>
       </Group>
 
@@ -231,6 +267,27 @@ export const ServiceEdit: React.FC = () => {
               checked={watchedValues.enableBatching}
               {...register('enableBatching')}
             />
+
+            <Divider my="sm" />
+            <Group position="apart" align="center">
+              <Stack spacing={4} style={{ flex: 1 }}>
+                <Title order={5}>External Accessibility</Title>
+                <Text size="sm" color="dimmed">
+                  Allow this service to be discoverable and whitelisted by applications.
+                </Text>
+                {externalError && (
+                  <Alert icon={<IconAlertCircle size={16} />} color="red" mt={4}>
+                    {externalError}
+                  </Alert>
+                )}
+              </Stack>
+              <Switch
+                checked={!!service.externally_accessible}
+                onChange={toggleExternallyAccessible}
+                disabled={togglingExternal}
+                label={service.externally_accessible ? 'Enabled' : 'Disabled'}
+              />
+            </Group>
 
             {error && (
               <Alert icon={<IconAlertCircle size={16} />} color="red">

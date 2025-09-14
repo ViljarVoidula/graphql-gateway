@@ -135,5 +135,9 @@ class StructuredLogger {
 // Export configured logger instance
 export const log = new StructuredLogger(logger);
 
+// Child logger for internal gateway control-plane context (settings, background tasks, maintenance)
+// Provides consistent filtering fields across all internal-only operational events.
+export const gatewayInternalLog = log.child({ scope: 'gateway', internal: true, plane: 'control' });
+
 // Export for testing
 export { logger as winstonLogger };

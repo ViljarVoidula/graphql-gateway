@@ -17,7 +17,12 @@
     "migration:show": "typeorm-ts-node-commonjs migration:show -d src/db/datasource.ts",
     "migration:create": "typeorm-ts-node-commonjs migration:create",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,md}\""
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
+    "bench:smoke": "k6 run src/benchmarks/query-smoke.js",
+    "bench:ramp": "k6 run src/benchmarks/query-ramp.js",
+    "bench:mix": "k6 run src/benchmarks/mutation-mix.js",
+    "bench:spike": "k6 run src/benchmarks/stress-spike.js",
+    "bench:soak": "k6 run src/benchmarks/soak-long.js"
   },
   "dependencies": {
     "@escape.tech/graphql-armor": "3.1.6",

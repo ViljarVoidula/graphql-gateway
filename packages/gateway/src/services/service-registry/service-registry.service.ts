@@ -1,10 +1,10 @@
-import { Service, Inject } from 'typedi';
+import { Inject, Service } from 'typedi';
 import { Repository } from 'typeorm';
-import { Service as ServiceEntity, ServiceStatus } from '../../entities/service.entity';
 import { ServiceKey, ServiceKeyStatus } from '../../entities/service-key.entity';
-import { User } from '../users/user.entity';
+import { Service as ServiceEntity, ServiceStatus } from '../../entities/service.entity';
 import { keyManager } from '../../security/keyManager';
 import { log } from '../../utils/logger';
+import { User } from '../users/user.entity';
 
 @Service()
 export class ServiceRegistryService {
@@ -54,7 +54,12 @@ export class ServiceRegistryService {
     enableHMAC?: boolean;
     timeout?: number;
     enableBatching?: boolean;
+    externally_accessible?: boolean;
   }): Promise<{ service: ServiceEntity; hmacKey?: any }> {
+    // Disallow registering internal gateway pseudo endpoints
+    if (data.url.startsWith('internal://')) {
+      throw new Error('Cannot register internal gateway endpoints');
+    }
     // Verify owner exists
     const owner = await this.userRepository.findOne({ where: { id: data.ownerId } });
 
@@ -64,6 +69,7 @@ export class ServiceRegistryService {
 
     const service = this.serviceRepository.create({
       ...data,
+      externally_accessible: data.externally_accessible !== false,
       ownerId: owner.id,
       status: ServiceStatus.ACTIVE
     });
@@ -134,6 +140,11 @@ export class ServiceRegistryService {
   async removeService(id: string, requestingUserId?: string): Promise<boolean> {
     const service = await this.getServiceById(id);
     if (!service) return false;
+
+    // Protect internal gateway pseudo service if ever present
+    if (service.url === 'internal://gateway') {
+      throw new Error('Cannot remove internal gateway service');
+    }
 
     // Check if requesting user is the owner or admin
     if (requestingUserId && service.ownerId !== requestingUserId) {

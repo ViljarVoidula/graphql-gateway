@@ -1,5 +1,5 @@
 import { GraphQLError } from 'graphql';
-import { Arg, Ctx, Directive, ID, Mutation, Query, Resolver } from 'type-graphql';
+import { Arg, Ctx, Directive, ID, Int, Mutation, Query, Resolver } from 'type-graphql';
 import { Inject, Service } from 'typedi';
 import { Repository } from 'typeorm';
 import { ApiKeyService } from '../../auth/api-key.service';
@@ -7,7 +7,9 @@ import { ExtendedYogaContext } from '../../auth/auth.types';
 import { dataSource } from '../../db/datasource';
 import { ApiKey, ApiKeyStatus } from '../../entities/api-key.entity';
 import { Application } from '../../entities/application.entity';
+import { AuditCategory, AuditEventType, AuditSeverity } from '../../entities/audit-log.entity';
 import { Service as ServiceEntity, ServiceStatus } from '../../entities/service.entity';
+import { AuditLogService } from '../audit/audit-log.service';
 
 @Service()
 @Resolver(Application)
@@ -47,8 +49,14 @@ export class ApplicationResolver {
       description,
       ownerId: context.user!.id
     });
-
-    return this.applicationRepository.save(application);
+    const saved = await this.applicationRepository.save(application);
+    const audit = new AuditLogService();
+    await audit.log(AuditEventType.APPLICATION_CREATED, {
+      applicationId: saved.id,
+      userId: context.user!.id,
+      metadata: { name }
+    });
+    return saved;
   }
 
   @Mutation(() => Boolean)
@@ -142,7 +150,18 @@ export class ApplicationResolver {
     }
 
     const { apiKey } = await this.apiKeyService.generateApiKey(applicationId, name, scopes, expiresAt);
-
+    const audit = new AuditLogService();
+    await audit.log(AuditEventType.API_KEY_CREATED, {
+      applicationId,
+      userId: context.user!.id,
+      metadata: { name, scopes, expiresAt },
+      category: AuditCategory.SECURITY,
+      severity: AuditSeverity.INFO,
+      action: 'create_api_key',
+      success: true,
+      resourceType: 'api_key',
+      resourceId: applicationId
+    } as any);
     // Only return the key once - it won't be shown again
     return apiKey;
   }
@@ -165,6 +184,18 @@ export class ApplicationResolver {
     }
 
     await dataSource.getRepository(ApiKey).update(apiKeyId, { status: ApiKeyStatus.REVOKED });
+    const audit = new AuditLogService();
+    await audit.log(AuditEventType.API_KEY_REVOKED, {
+      applicationId: apiKey.application.id,
+      userId: context.user!.id,
+      metadata: { apiKeyId },
+      category: AuditCategory.SECURITY,
+      severity: AuditSeverity.LOW,
+      action: 'revoke_api_key',
+      success: true,
+      resourceType: 'api_key',
+      resourceId: apiKeyId
+    } as any);
     return true;
   }
 
@@ -212,5 +243,21 @@ export class ApplicationResolver {
     }
 
     return application.apiKeys;
+  }
+
+  @Mutation(() => Application)
+  @Directive('@authz(rules: ["isAdmin"])')
+  async updateApplicationRateLimits(
+    @Arg('applicationId', () => ID) applicationId: string,
+    @Arg('perMinute', () => Int, { nullable: true }) perMinute: number,
+    @Arg('perDay', () => Int, { nullable: true }) perDay: number,
+    @Arg('disabled', { nullable: true }) disabled: boolean
+  ): Promise<Application> {
+    const app = await this.applicationRepository.findOne({ where: { id: applicationId } });
+    if (!app) throw new GraphQLError('Application not found');
+    app.rateLimitPerMinute = perMinute ?? app.rateLimitPerMinute ?? null;
+    app.rateLimitPerDay = perDay ?? app.rateLimitPerDay ?? null;
+    if (disabled !== undefined) app.rateLimitDisabled = disabled;
+    return this.applicationRepository.save(app);
   }
 }

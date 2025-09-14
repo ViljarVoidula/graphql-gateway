@@ -1,20 +1,23 @@
+import { Field, ID, ObjectType } from 'type-graphql';
 import {
-  Entity,
-  PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
-  UpdateDateColumn,
+  Entity,
+  Index,
+  JoinColumn,
+  JoinTable,
+  ManyToMany,
   ManyToOne,
   OneToMany,
-  JoinColumn,
-  Index,
-  ManyToMany,
-  JoinTable
+  PrimaryGeneratedColumn,
+  UpdateDateColumn
 } from 'typeorm';
-import { Field, ObjectType, ID } from 'type-graphql';
 import { User } from '../services/users/user.entity';
-import { Service } from './service.entity';
 import { ApiKey } from './api-key.entity';
+import { Service } from './service.entity';
+// Use type-only imports to avoid potential circular dependency issues
+import { ApplicationUsage } from './application-usage.entity';
+import { AuditLog } from './audit-log.entity';
 
 @ObjectType()
 @Entity('applications')
@@ -53,6 +56,26 @@ export class Application {
     inverseJoinColumn: { name: 'serviceId', referencedColumnName: 'id' }
   })
   whitelistedServices: Service[]; // Application owners select from externally_accessible services
+
+  // --- Rate limiting configuration ---
+  // Simple global per-minute and per-day limits; can be extended later per service.
+  @Field({ nullable: true, description: 'Max requests per minute allowed for this application (null = unlimited)' })
+  @Column({ type: 'int', nullable: true })
+  rateLimitPerMinute?: number | null;
+
+  @Field({ nullable: true, description: 'Max requests per day allowed for this application (null = unlimited)' })
+  @Column({ type: 'int', nullable: true })
+  rateLimitPerDay?: number | null;
+
+  @Field({ nullable: true, description: 'If true, rate limiting is currently disabled for this application' })
+  @Column({ type: 'boolean', default: false })
+  rateLimitDisabled: boolean;
+
+  @OneToMany(() => ApplicationUsage, (usage) => usage.application)
+  usageRecords: ApplicationUsage[];
+
+  @OneToMany(() => AuditLog, (log) => log.application)
+  auditLogs: AuditLog[];
 
   @Field()
   @CreateDateColumn()

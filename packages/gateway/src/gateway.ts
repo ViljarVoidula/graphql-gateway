@@ -18,11 +18,19 @@ import { Application } from './entities/application.entity';
 import { ServiceKey } from './entities/service-key.entity';
 import { Service } from './entities/service.entity';
 import { Session } from './entities/session.entity';
+import { createRateLimitPlugin } from './middleware/rate-limit.middleware';
+import { createUsageTrackingPlugin } from './middleware/usage-tracking.plugin';
 import { SchemaLoader } from './SchemaLoader';
 import { keyManager } from './security/keyManager';
 import { makeEndpointsSchema } from './services/endpoints';
+// Ensure side-effect import of new resolvers so type-graphql can pick them up if schema build scans metadata
+import { loadSecurityConfig } from './config/security.config';
+import './services/applications/application-service-rate-limit.resolver';
+import { cleanupExpiredAuditLogs } from './services/audit/audit-log.retention';
+import { AuditLogService } from './services/audit/audit-log.service';
 import { ServiceCacheManager, ServiceRegistryService } from './services/service-registry/service-registry.service';
 import { SessionService } from './services/sessions/session.service';
+import { ApplicationUsageService } from './services/usage/application-usage.service';
 import { User } from './services/users/user.entity';
 import { buildHMACExecutor } from './utils/hmacExecutor';
 import { log } from './utils/logger';
@@ -211,8 +219,8 @@ app.use(
       directives: {
         defaultSrc: ["'self'"],
         imgSrc: ["'self'", 'data:', 'https://raw.githubusercontent.com'],
-        scriptSrc: ["'self'", "'unsafe-inline'"], // Allow inline for GraphiQL bootstrap
-        styleSrc: ["'self'", "'unsafe-inline'"], // GraphiQL injects inline styles
+        scriptSrc: ["'self'", "'unsafe-inline'", 'https://unpkg.com'], // Allow unpkg.com for GraphiQL
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://unpkg.com'], // Allow unpkg.com for GraphiQL styles
         connectSrc: [
           "'self'",
           // Allow configured CORS origin if provided (useful for Admin UI/dev)
@@ -238,7 +246,10 @@ const yoga = createYoga({
   logging: 'debug',
   landingPage: false,
   plugins: [
-    useSession() // Add session plugin
+    // Rate limit (must come before session if it doesn't need session info; here we rely only on API key auth data)
+    createRateLimitPlugin(),
+    useSession(),
+    createUsageTrackingPlugin()
   ],
   graphiql: {
     title: 'GraphQL Gateway with Session Security'
@@ -259,6 +270,8 @@ const yoga = createYoga({
 
 // We'll store the server instance returned by app.listen() so stopServer can close it
 let server: import('http').Server | undefined;
+// Optional memory usage logging interval id
+let memoryLogInterval: NodeJS.Timeout | undefined;
 
 // Health check middleware
 // Health and admin middleware
@@ -336,6 +349,7 @@ app.use(async (ctx, next) => {
 
 export async function startServer() {
   const REFERSH_INTERVAL = process.env.REFRESH_INTERVAL ? parseInt(process.env.REFRESH_INTERVAL, 10) : 30_000;
+  const MEMORY_LOG_INTERVAL = process.env.MEMORY_LOG_INTERVAL ? parseInt(process.env.MEMORY_LOG_INTERVAL, 10) : undefined; // disabled by default
 
   // Initialize dataSource before creating schema
   try {
@@ -461,8 +475,43 @@ export async function startServer() {
     await sessionService.cleanupExpiredSessions();
   }, 60_000); // Clean up every minute
 
+  // Audit log retention cleanup scheduling
+  const securityConfig = loadSecurityConfig(); // still provides cleanup interval + batch controls
+  const auditRetentionInterval = setInterval(async () => {
+    try {
+      const deleted = await cleanupExpiredAuditLogs({
+        batchSize: securityConfig.auditLogCleanupBatchSize,
+        maxBatchesPerRun: securityConfig.auditLogCleanupMaxBatches
+      });
+      if (deleted > 0) {
+        log.debug('Audit retention cleanup deleted records', {
+          operation: 'auditLogRetentionCleanup',
+          metadata: { deleted }
+        });
+      }
+    } catch (err) {
+      log.error('Audit retention cleanup failed', {
+        operation: 'auditLogRetentionCleanup',
+        error: err instanceof Error ? err : new Error(String(err))
+      });
+    }
+  }, securityConfig.auditLogCleanupIntervalMs);
+
   // sleep 2s
   await loader.reload();
+
+  // Start background flushers for buffered services (audit + usage)
+  try {
+    const usageSvc = Container.get(ApplicationUsageService);
+    usageSvc.startBufferFlusher();
+    const auditSvc = Container.get(AuditLogService);
+    auditSvc.startBufferFlusher();
+  } catch (err) {
+    log.error('Failed to start background flushers', {
+      operation: 'startServer',
+      error: err instanceof Error ? err : new Error(String(err))
+    });
+  }
 
   // Start Koa server
   await new Promise<void>((resolve) => {
@@ -480,6 +529,26 @@ export async function startServer() {
   // Store cleanup intervals for stopping later
   (server as any).keyCleanupInterval = cleanupInterval;
   (server as any).sessionCleanupInterval = sessionCleanupInterval;
+  (server as any).auditRetentionInterval = auditRetentionInterval;
+
+  if (MEMORY_LOG_INTERVAL && MEMORY_LOG_INTERVAL > 0) {
+    memoryLogInterval = setInterval(() => {
+      const usage = process.memoryUsage();
+      const toMB = (n: number) => Math.round((n / 1024 / 1024) * 100) / 100;
+      log.debug('Memory usage snapshot', {
+        operation: 'memoryUsage',
+        metadata: {
+          rssMB: toMB(usage.rss),
+          heapTotalMB: toMB(usage.heapTotal),
+          heapUsedMB: toMB(usage.heapUsed),
+          externalMB: toMB(usage.external),
+          arrayBuffersMB: toMB((usage as any).arrayBuffers || 0),
+          schemaLoader: loader.getMetrics()
+        }
+      });
+    }, MEMORY_LOG_INTERVAL);
+    (server as any).memoryLogInterval = memoryLogInterval;
+  }
 }
 
 export async function stopServer() {
@@ -494,10 +563,36 @@ export async function stopServer() {
     if ((server as any).sessionCleanupInterval) {
       clearInterval((server as any).sessionCleanupInterval);
     }
+    if ((server as any).auditRetentionInterval) {
+      clearInterval((server as any).auditRetentionInterval);
+    }
+    if ((server as any).memoryLogInterval) {
+      clearInterval((server as any).memoryLogInterval);
+    }
 
     // Close the HTTP server
     await new Promise<void>((resolve, reject) => {
       server!.close((err) => (err ? reject(err) : resolve()));
+    });
+  }
+
+  // Flush buffered services before shutdown
+  try {
+    const usageSvc = Container.get(ApplicationUsageService);
+    await usageSvc.shutdown();
+  } catch (e) {
+    log.error('Failed to shutdown usage service cleanly', {
+      operation: 'stopServer',
+      error: e instanceof Error ? e : new Error(String(e))
+    });
+  }
+  try {
+    const auditSvc = Container.get(AuditLogService);
+    await auditSvc.shutdown();
+  } catch (e) {
+    log.error('Failed to shutdown audit service cleanly', {
+      operation: 'stopServer',
+      error: e instanceof Error ? e : new Error(String(e))
     });
   }
 

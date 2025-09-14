@@ -66,6 +66,9 @@ class RegisterServiceInput {
 
   @Field({ defaultValue: true })
   enableBatching: boolean;
+
+  @Field({ defaultValue: true })
+  externally_accessible?: boolean;
 }
 
 @InputType()
@@ -150,8 +153,14 @@ export class ServiceRegistryResolver {
 
     const serviceData = {
       ...input,
+      externally_accessible: input.externally_accessible !== false,
       ownerId
     };
+
+    // Prevent registering internal pseudo endpoints
+    if (serviceData.url.startsWith('internal://')) {
+      throw new Error('Cannot register internal gateway endpoints');
+    }
 
     const { service, hmacKey } = await this.serviceRegistryService.registerService(serviceData);
 
@@ -184,6 +193,11 @@ export class ServiceRegistryResolver {
 
   @Mutation(() => Boolean)
   async removeService(@Arg('id', () => ID) id: string, @Ctx() ctx: YogaContext): Promise<boolean> {
+    const svc = await this.serviceRegistryService.getServiceById(id);
+    if (svc?.url === 'internal://gateway') {
+      throw new Error('Cannot remove internal gateway service');
+    }
+
     const success = await this.serviceRegistryService.removeService(id, ctx.user?.id);
 
     if (success && (ctx as any).schemaLoader) {

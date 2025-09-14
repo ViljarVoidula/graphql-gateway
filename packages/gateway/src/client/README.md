@@ -73,10 +73,26 @@ npm run dev:admin
 
 #### Dashboard
 
-- Gateway health monitoring
-- User and service statistics
-- Session activity overview
-- Service status indicators
+- Gateway health monitoring (weighted health score)
+- Audit log summary (24h totals, severity distribution, top actions)
+- User, service, and session statistics
+- Top services by 24h request volume & error rate
+- Top applications (request volume & API key count)
+- Offline / maintenance service alerts
+- Services with breaking schema changes in the last 24h
+
+##### Health Score Formula
+
+The health score is a heuristic between 0–100 derived from:
+
+1. Base availability: activeServices / totalServices
+2. Penalty components:
+   - Average error rate across services \* 0.3
+   - Breaking changes weight: (totalBreakingChanges24h \* 0.05) / totalServices
+
+Final Score = clamp01(base - penalty) \* 100 (rounded)
+
+This produces quick visual degradation when either availability, stability (breaking changes), or reliability (error rates) worsens.
 
 #### User Management
 

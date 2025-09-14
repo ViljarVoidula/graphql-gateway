@@ -147,5 +147,5 @@ if (process.env.NODE_ENV !== 'test') {
     heartbeat.add(1, { service: 'graphql-gateway' } as any);
   }, 10_000).unref?.();
 }
-debugger;
+
 export default meter;

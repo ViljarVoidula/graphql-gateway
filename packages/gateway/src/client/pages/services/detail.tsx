@@ -31,6 +31,7 @@ import {
 } from '@tabler/icons-react';
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import SchemaChangesPanel from '../../components/SchemaChangesPanel';
 import { authenticatedFetch } from '../../utils/auth';
 
 interface ServiceKey {
@@ -362,6 +363,9 @@ export const ServiceDetail: React.FC = () => {
             )}
           </Stack>
         </Paper>
+
+        {/* Schema Changes Panel */}
+        <SchemaChangesPanel serviceId={service.id as string} />
 
         {service.enableHMAC && (
           <Paper withBorder p="xl">

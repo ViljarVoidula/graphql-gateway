@@ -13,8 +13,10 @@ import {
   SESSION_COOKIE_NAME,
   YogaContext
 } from '../../auth/session.config';
+import { AuditCategory, AuditEventType, AuditSeverity } from '../../entities/audit-log.entity';
 import { Session } from '../../entities/session.entity';
 import { log } from '../../utils/logger';
+import { AuditLogService } from '../audit/audit-log.service';
 import { SessionService } from '../sessions/session.service';
 import { LoginInput } from './login.input';
 import { UserUpdateInput } from './user-update.input';
@@ -74,14 +76,44 @@ export class UserResolver {
 
   @Mutation((_returns) => AuthResponse)
   async login(@Arg('data') data: LoginInput, @Ctx() context: YogaContext): Promise<AuthResponse> {
+    const request = (context as any).request;
+    const ipAddress =
+      request?.headers?.get('x-forwarded-for') ||
+      request?.headers?.get('x-real-ip') ||
+      request?.headers?.get('cf-connecting-ip') ||
+      request?.socket?.remoteAddress ||
+      'unknown';
+    const userAgent = request?.headers?.get('user-agent') || 'unknown';
+    const audit = new AuditLogService();
+
     try {
       const user = await this.userRepository.findOneBy({ email: data.email });
       if (!user) {
-        debugger;
+        await audit.log(AuditEventType.USER_LOGIN, {
+          metadata: { email: data.email, reason: 'user_not_found' },
+          category: AuditCategory.AUTHENTICATION,
+          severity: AuditSeverity.LOW,
+          action: 'login',
+          success: false,
+          ipAddress,
+          userAgent,
+          riskScore: 5
+        } as any);
         throw new GraphQLError('Invalid email or password');
       }
 
       if (user.isLocked) {
+        await audit.log(AuditEventType.USER_LOGIN, {
+          userId: user.id,
+          metadata: { email: user.email, reason: 'account_locked' },
+          category: AuditCategory.AUTHENTICATION,
+          severity: AuditSeverity.HIGH,
+          action: 'login',
+          success: false,
+          ipAddress,
+          userAgent,
+          riskScore: 70
+        });
         throw new GraphQLError('Account is temporarily locked due to failed login attempts');
       }
 
@@ -92,7 +124,17 @@ export class UserResolver {
           user.lockedUntil = new Date(Date.now() + 30 * 60 * 1000);
         }
         await this.userRepository.save(user);
-        debugger;
+        await audit.log(AuditEventType.USER_LOGIN, {
+          userId: user.id,
+          metadata: { email: user.email, failedAttempts: user.failedLoginAttempts },
+          category: AuditCategory.AUTHENTICATION,
+          severity: user.failedLoginAttempts >= 5 ? AuditSeverity.HIGH : AuditSeverity.LOW,
+          action: 'login',
+          success: false,
+          ipAddress,
+          userAgent,
+          riskScore: Math.min(10 + user.failedLoginAttempts * 10, 90)
+        });
         throw new GraphQLError('Invalid email or password');
       }
 
@@ -124,16 +166,7 @@ export class UserResolver {
         );
       }
 
-      // Store session in database
-      const request = (context as any).request;
-      const ipAddress =
-        request?.headers?.get('x-forwarded-for') ||
-        request?.headers?.get('x-real-ip') ||
-        request?.headers?.get('cf-connecting-ip') ||
-        request?.socket?.remoteAddress ||
-        'unknown';
-
-      await this.sessionService.createSession(user.id, sessionId, ipAddress, request?.headers?.get('user-agent') || 'unknown');
+      await this.sessionService.createSession(user.id, sessionId, ipAddress, userAgent);
 
       // Generate JWT tokens
       const tokens = this.jwtService.generateTokens({
@@ -143,11 +176,20 @@ export class UserResolver {
         sessionId
       });
 
-      return {
-        user,
-        tokens,
-        sessionId
-      };
+      await audit.log(AuditEventType.USER_LOGIN, {
+        userId: user.id,
+        // sessionId column expects a UUID; our session token is random hex.
+        // Store it inside metadata instead of the column to avoid invalid uuid errors.
+        metadata: { email: user.email, sessionToken: sessionId },
+        category: AuditCategory.AUTHENTICATION,
+        severity: AuditSeverity.INFO,
+        action: 'login',
+        success: true,
+        ipAddress,
+        userAgent,
+        riskScore: 0
+      });
+      return { user, tokens, sessionId };
     } catch (error) {
       if (error instanceof Error) {
         throw new GraphQLError(`Login failed: ${error.message}`);
@@ -174,6 +216,18 @@ export class UserResolver {
         response.headers.set('Set-Cookie', `${SESSION_COOKIE_NAME}=; HttpOnly; Secure; SameSite=Strict; Max-Age=0; Path=/`);
       }
 
+      // Audit log
+      try {
+        const audit = new AuditLogService();
+        await audit.log(AuditEventType.USER_LOGIN, {
+          userId: context.user?.id,
+          action: 'logout',
+          category: AuditCategory.AUTHENTICATION,
+          severity: AuditSeverity.INFO,
+          success: true,
+          metadata: { reason: 'user_logout', sessionToken: context.sessionId }
+        } as any);
+      } catch {}
       return true;
     } catch (error) {
       log.error('Logout error:', error);
@@ -199,6 +253,17 @@ export class UserResolver {
         response.headers.set('Set-Cookie', `${SESSION_COOKIE_NAME}=; HttpOnly; Secure; SameSite=Strict; Max-Age=0; Path=/`);
       }
 
+      try {
+        const audit = new AuditLogService();
+        await audit.log(AuditEventType.USER_LOGIN, {
+          userId: context.user.id,
+          action: 'logout_all',
+          category: AuditCategory.AUTHENTICATION,
+          severity: AuditSeverity.INFO,
+          success: true,
+          metadata: { reason: 'user_logout_all' }
+        } as any);
+      } catch {}
       return true;
     } catch (error) {
       log.error('Logout all error:', error);
