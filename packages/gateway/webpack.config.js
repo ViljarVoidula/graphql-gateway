@@ -4,11 +4,16 @@ const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 module.exports = {
   mode: process.env.NODE_ENV === 'production' ? 'production' : 'development',
-  entry: './src/client/index.tsx',
+  entry: {
+    admin: './src/client/index.tsx',
+    docs: './src/client/docs/index.tsx'
+  },
   output: {
     path: path.resolve(__dirname, 'dist/client'),
-    filename: 'bundle.js',
-    publicPath: process.env.NODE_ENV === 'production' ? '/admin/' : '/'
+    filename: '[name].bundle.js',
+    // Use root publicPath so both /admin and /docs bundles can be requested directly
+    // e.g. /admin.bundle.js, /docs.bundle.js. The gateway will serve these as static assets.
+    publicPath: '/'
   },
   resolve: {
     extensions: ['.ts', '.tsx', '.js', '.jsx'],
@@ -44,7 +49,15 @@ module.exports = {
   plugins: [
     new HtmlWebpackPlugin({
       template: './src/client/public/index.html',
-      filename: 'index.html'
+      filename: 'index.html',
+      chunks: ['admin'],
+      excludeChunks: ['docs']
+    }),
+    new HtmlWebpackPlugin({
+      template: './src/client/public/index.html',
+      filename: 'docs.html',
+      chunks: ['docs'],
+      excludeChunks: ['admin']
     }),
     new CopyWebpackPlugin({
       patterns: [
@@ -67,7 +80,16 @@ module.exports = {
       }
     ],
     port: 3040,
-    historyApiFallback: true,
+    // Serve both /admin and /docs SPAs from same dev server.
+    // We provide explicit rewrites so /docs routes get docs.html and others fall back to index.html
+    historyApiFallback: {
+      rewrites: [
+        { from: /^\/docs$/, to: '/docs.html' },
+        { from: /^\/docs\/.*/, to: '/docs.html' },
+        { from: /^\/admin$/, to: '/index.html' },
+        { from: /^\/admin\/.*/, to: '/index.html' }
+      ]
+    },
     proxy: [
       {
         context: ['/graphql', '/health'],

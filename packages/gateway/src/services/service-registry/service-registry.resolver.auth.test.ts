@@ -1,9 +1,7 @@
-import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert';
-import { Container } from 'typedi';
-import { ServiceRegistryResolver } from './service-registry.resolver';
-import { ServiceRegistryService } from './service-registry.service';
+import { beforeEach, describe, it, mock } from 'node:test';
 import { YogaContext } from '../../auth/session.config';
+import { ServiceRegistryResolver } from './service-registry.resolver';
 
 describe('ServiceRegistryResolver Authorization', () => {
   let serviceRegistryResolver: ServiceRegistryResolver;
@@ -36,7 +34,8 @@ describe('ServiceRegistryResolver Authorization', () => {
         description: 'Test service',
         enableHMAC: true,
         timeout: 5000,
-        enableBatching: true
+        enableBatching: true,
+        useMsgPack: false
       };
 
       await assert.rejects(() => serviceRegistryResolver.registerService(input, ctx), /User not authenticated/);
@@ -56,7 +55,8 @@ describe('ServiceRegistryResolver Authorization', () => {
         description: 'Test service',
         enableHMAC: true,
         timeout: 5000,
-        enableBatching: true
+        enableBatching: true,
+        useMsgPack: false
       };
 
       await assert.rejects(
@@ -79,7 +79,8 @@ describe('ServiceRegistryResolver Authorization', () => {
         description: 'Test service',
         enableHMAC: true,
         timeout: 5000,
-        enableBatching: true
+        enableBatching: true,
+        useMsgPack: false
       };
 
       const mockService = { id: 'service123', name: 'test-service' };
@@ -117,7 +118,8 @@ describe('ServiceRegistryResolver Authorization', () => {
         ownerId: 'otheruser123', // Assigning to another user
         enableHMAC: true,
         timeout: 5000,
-        enableBatching: true
+        enableBatching: true,
+        useMsgPack: false
       };
 
       const mockService = { id: 'service123', name: 'test-service' };

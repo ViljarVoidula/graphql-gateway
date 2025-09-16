@@ -115,6 +115,7 @@ export const ServiceList: React.FC = () => {
                 <th>URL</th>
                 <th>Status</th>
                 <th>HMAC</th>
+                <th>MsgPack</th>
                 <th>Created</th>
                 <th>Actions</th>
               </tr>
@@ -154,6 +155,11 @@ export const ServiceList: React.FC = () => {
                     <td>
                       <Badge color={service.enableHMAC ? 'green' : 'red'} variant="light" size="sm">
                         {service.enableHMAC ? 'Enabled' : 'Disabled'}
+                      </Badge>
+                    </td>
+                    <td>
+                      <Badge color={service.useMsgPack ? 'green' : 'gray'} variant="light" size="sm">
+                        {service.useMsgPack ? 'On' : 'Off'}
                       </Badge>
                     </td>
                     <td>

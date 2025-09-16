@@ -29,6 +29,7 @@ interface ServiceFormData {
   enableHMAC: boolean;
   timeout: number;
   enableBatching: boolean;
+  useMsgPack: boolean;
 }
 
 export const ServiceEdit: React.FC = () => {
@@ -64,7 +65,8 @@ export const ServiceEdit: React.FC = () => {
       version: '',
       enableHMAC: true,
       timeout: 5000,
-      enableBatching: true
+      enableBatching: true,
+      useMsgPack: false
     }
   });
 
@@ -80,7 +82,8 @@ export const ServiceEdit: React.FC = () => {
         version: service.version || '',
         enableHMAC: service.enableHMAC ?? true,
         timeout: service.timeout || 5000,
-        enableBatching: service.enableBatching ?? true
+        enableBatching: service.enableBatching ?? true,
+        useMsgPack: service.useMsgPack ?? false
       });
     }
   }, [service, reset]);
@@ -266,6 +269,13 @@ export const ServiceEdit: React.FC = () => {
               description="Allow batching of multiple requests"
               checked={watchedValues.enableBatching}
               {...register('enableBatching')}
+            />
+
+            <Switch
+              label="Enable MessagePack"
+              description="Allow Gateway to negotiate MessagePack responses (adds x-msgpack-enabled:1 when client requests)"
+              checked={watchedValues.useMsgPack}
+              {...register('useMsgPack')}
             />
 
             <Divider my="sm" />

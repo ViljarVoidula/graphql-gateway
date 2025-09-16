@@ -46,6 +46,7 @@ export const dataProvider: DataProvider = {
             enableHMAC
             timeout
             enableBatching
+            useMsgPack
             externally_accessible
             createdAt
             updatedAt
@@ -129,6 +130,7 @@ export const dataProvider: DataProvider = {
             enableHMAC
             timeout
             enableBatching
+            useMsgPack
             externally_accessible
             createdAt
             updatedAt
@@ -210,6 +212,7 @@ export const dataProvider: DataProvider = {
               enableHMAC
               timeout
               enableBatching
+              useMsgPack
               externally_accessible
               createdAt
               updatedAt

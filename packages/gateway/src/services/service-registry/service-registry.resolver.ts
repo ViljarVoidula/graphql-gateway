@@ -67,6 +67,9 @@ class RegisterServiceInput {
   @Field({ defaultValue: true })
   enableBatching: boolean;
 
+  @Field({ defaultValue: false })
+  useMsgPack: boolean;
+
   @Field({ defaultValue: true })
   externally_accessible?: boolean;
 }
@@ -93,6 +96,9 @@ class UpdateServiceInput {
 
   @Field({ nullable: true })
   enableBatching?: boolean;
+
+  @Field({ nullable: true })
+  useMsgPack?: boolean;
 
   @Field(() => ServiceStatus, { nullable: true })
   status?: ServiceStatus;

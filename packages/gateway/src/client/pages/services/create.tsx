@@ -32,6 +32,7 @@ interface ServiceFormData {
   timeout: number;
   enableBatching: boolean;
   externally_accessible: boolean;
+  useMsgPack: boolean;
 }
 
 interface HMACKeyData {
@@ -60,7 +61,8 @@ export const ServiceCreate: React.FC = () => {
       enableHMAC: true,
       timeout: 5000,
       enableBatching: true,
-      externally_accessible: true
+      externally_accessible: true,
+      useMsgPack: false
     }
   });
 
@@ -178,6 +180,13 @@ export const ServiceCreate: React.FC = () => {
                 description="Allow batching of multiple requests"
                 checked={watchedValues.enableBatching}
                 {...register('enableBatching')}
+              />
+
+              <Switch
+                label="Enable MessagePack"
+                description="Allow Gateway to negotiate MessagePack responses (adds x-msgpack-enabled:1 when client requests)"
+                checked={watchedValues.useMsgPack}
+                {...register('useMsgPack')}
               />
 
               <Switch

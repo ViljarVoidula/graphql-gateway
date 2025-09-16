@@ -10,17 +10,36 @@ import { log } from './logger';
 import { withRemoteCallMetrics } from './telemetry/metrics';
 import { withSpan } from './telemetry/tracing';
 
+// Lazy loader for msgpack decoder (loaded only if a MsgPack response is actually received)
+let msgpackDecode: ((buf: Uint8Array) => any) | null = null;
+let msgpackDecodeLoading: Promise<void> | null = null;
+async function ensureMsgPackDecodeLoaded() {
+  if (msgpackDecode || msgpackDecodeLoading) return msgpackDecodeLoading;
+  msgpackDecodeLoading = import('@msgpack/msgpack')
+    .then((mod: any) => {
+      if (typeof mod.decode === 'function') msgpackDecode = mod.decode;
+    })
+    .catch(() => {
+      // Ignore; will just skip decoding
+    })
+    .finally(() => {
+      msgpackDecodeLoading = null;
+    });
+  return msgpackDecodeLoading;
+}
+
 export interface HMACExecutorOptions {
   endpoint: string;
   timeout?: number;
   enableHMAC?: boolean;
+  useMsgPack?: boolean; // when true, allow propagating x-msgpack-enabled header downstream
 }
 
 /**
  * Create an HTTP executor with HMAC signing capabilities
  */
 export function buildHMACExecutor(options: HMACExecutorOptions): any {
-  const { endpoint, timeout = 5000, enableHMAC = true } = options;
+  const { endpoint, timeout = 5000, enableHMAC = true, useMsgPack = false } = options;
 
   return buildHTTPExecutor({
     endpoint,
@@ -70,6 +89,16 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
 
       if (contextHeaders.traceparent) {
         headers['traceparent'] = contextHeaders.traceparent;
+      }
+
+      // Propagate MessagePack preference if enabled for this service and present on incoming request
+      if (useMsgPack) {
+        // Always request msgpack from downstream if the service is configured for it
+        headers['x-msgpack-enabled'] = '1';
+        // Accept header for clarity (remote may ignore)
+        headers['Accept'] = headers['Accept']
+          ? headers['Accept'] + ',application/x-msgpack'
+          : 'application/x-msgpack,application/json';
       }
 
       // Add HMAC signing if enabled
@@ -176,6 +205,50 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
                     success: res.ok,
                     extraMetadata: { rawStatus: res.status, url: String(url) }
                   });
+                }
+                // If we requested msgpack, attempt transparent decode so gateway continues operating on JSON
+                if (useMsgPack) {
+                  try {
+                    const contentType = res.headers.get('content-type') || '';
+                    if (contentType.includes('application/x-msgpack')) {
+                      const arrayBuffer = await res.arrayBuffer();
+                      const originalSize = arrayBuffer.byteLength;
+                      // Lazy import msgpack decoder from @msgpack/msgpack if available; fallback gracefully
+                      let decoded: any = null;
+                      try {
+                        if (!msgpackDecode) {
+                          await ensureMsgPackDecodeLoaded();
+                        }
+                        if (msgpackDecode) decoded = msgpackDecode(new Uint8Array(arrayBuffer));
+                      } catch (e) {
+                        log.warn('MsgPack decode failed, passing raw response', e);
+                      }
+                      if (decoded != null) {
+                        try {
+                          const jsonStr = JSON.stringify(decoded);
+                          const jsonSize = Buffer.byteLength(jsonStr);
+                          log.debug('MsgPack downstream stats', {
+                            operation: 'msgpackDecode',
+                            service: serviceHost,
+                            endpoint: String(url),
+                            msgpackBytes: originalSize,
+                            jsonBytes: jsonSize,
+                            savingsBytes: jsonSize - originalSize,
+                            savingsPercent: jsonSize > 0 ? Math.round(((jsonSize - originalSize) / jsonSize) * 100) : 0
+                          });
+                          return new Response(jsonStr, {
+                            status: res.status,
+                            statusText: res.statusText,
+                            headers: { 'content-type': 'application/json' }
+                          });
+                        } catch (encodeErr) {
+                          log.warn('Failed to stringify decoded msgpack; falling back to raw', encodeErr);
+                        }
+                      }
+                    }
+                  } catch (e) {
+                    log.warn('Failed to transparently decode msgpack response', e);
+                  }
                 }
                 return res;
               } catch (error: any) {

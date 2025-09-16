@@ -74,6 +74,8 @@ export class ConfigurationService {
 
   // ---- Specific helpers for known settings ----
   private readonly AUDIT_RETENTION_KEY = 'audit.log.retention.days';
+  private readonly PUBLIC_DOCS_ENABLED_KEY = 'public.documentation.enabled';
+  private readonly PUBLIC_DOCS_MODE_KEY = 'public.documentation.mode'; // 'disabled' | 'preview' | 'enabled'
 
   /**
    * Returns audit log retention in days. Falls back to env or default if not yet configured.
@@ -101,5 +103,59 @@ export class ConfigurationService {
     if (!Number.isFinite(days) || days <= 0) days = 1;
     if (days > 365 * 5) days = 365 * 5;
     return Math.round(days);
+  }
+
+  /**
+   * Returns whether public documentation pages are enabled.
+   * Bootstraps from env PUBLIC_DOCUMENTATION_ENABLED if present ("true"/"1") otherwise defaults to false.
+   */
+  async isPublicDocumentationEnabled(): Promise<boolean> {
+    // Backward compatibility: if explicit boolean flag set, it overrides mode
+    const legacyValue = await this.load(this.PUBLIC_DOCS_ENABLED_KEY);
+    if (typeof legacyValue === 'boolean') return legacyValue;
+    const mode = await this.getPublicDocumentationMode();
+    return mode === 'enabled';
+  }
+
+  /**
+   * Updates the public documentation enabled flag.
+   */
+  async setPublicDocumentationEnabled(enabled: boolean): Promise<boolean> {
+    await this.upsert(this.PUBLIC_DOCS_ENABLED_KEY, enabled);
+    gatewayInternalLog.info('Updated legacy public documentation boolean flag', {
+      operation: 'configurationUpdate',
+      metadata: { enabled }
+    });
+    // Also set mode for consistency
+    await this.upsert(this.PUBLIC_DOCS_MODE_KEY, enabled ? 'enabled' : 'disabled');
+    return enabled;
+  }
+
+  /** Tri-state public documentation mode. */
+  async getPublicDocumentationMode(): Promise<'disabled' | 'preview' | 'enabled'> {
+    const value = await this.load(this.PUBLIC_DOCS_MODE_KEY);
+    if (typeof value === 'string' && ['disabled', 'preview', 'enabled'].includes(value)) {
+      return value as any;
+    }
+    // Fallback to env variable if provided
+    const envMode = process.env.PUBLIC_DOCUMENTATION_MODE;
+    if (envMode && ['disabled', 'preview', 'enabled'].includes(envMode)) return envMode as any;
+    // Legacy env boolean still respected
+    const legacyEnv = process.env.PUBLIC_DOCUMENTATION_ENABLED;
+    if (legacyEnv !== undefined) {
+      const bool = ['true', '1', 'yes', 'on'].includes(legacyEnv.toLowerCase());
+      return bool ? 'enabled' : 'disabled';
+    }
+    return 'disabled';
+  }
+
+  async setPublicDocumentationMode(mode: 'disabled' | 'preview' | 'enabled'): Promise<'disabled' | 'preview' | 'enabled'> {
+    if (!['disabled', 'preview', 'enabled'].includes(mode)) mode = 'disabled';
+    await this.upsert(this.PUBLIC_DOCS_MODE_KEY, mode);
+    gatewayInternalLog.info('Updated public documentation mode', {
+      operation: 'configurationUpdate',
+      metadata: { mode }
+    });
+    return mode;
   }
 }

@@ -1,4 +1,18 @@
-import { Alert, Badge, Button, Card, Divider, Group, Loader, NumberInput, Stack, Switch, Text, Title } from '@mantine/core';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Divider,
+  Group,
+  Loader,
+  NumberInput,
+  Select,
+  Stack,
+  Switch,
+  Text,
+  Title
+} from '@mantine/core';
 import { IconClock, IconDatabase, IconInfoCircle, IconSettings, IconShield } from '@tabler/icons-react';
 import React, { useEffect, useState } from 'react';
 import {
@@ -19,6 +33,11 @@ export const SessionSettings: React.FC = () => {
   const [auditLoading, setAuditLoading] = useState(true);
   const [auditSaving, setAuditSaving] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
+  // Public documentation mode
+  const [docsMode, setDocsMode] = useState<'DISABLED' | 'PREVIEW' | 'ENABLED' | null>(null);
+  const [docsModeInitial, setDocsModeInitial] = useState<'DISABLED' | 'PREVIEW' | 'ENABLED' | null>(null);
+  const [docsModeSaving, setDocsModeSaving] = useState(false);
+  const [docsModeError, setDocsModeError] = useState<string | null>(null);
 
   useEffect(() => {
     // Load current settings
@@ -37,13 +56,17 @@ export const SessionSettings: React.FC = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            query: `query Settings { settings { auditLogRetentionDays } }`
+            query: `query Settings { settings { auditLogRetentionDays publicDocumentationMode } }`
           })
         });
         const data = await res.json();
         if (data?.data?.settings) {
           setAuditRetention(data.data.settings.auditLogRetentionDays);
           setAuditInitial(data.data.settings.auditLogRetentionDays);
+          if (data.data.settings.publicDocumentationMode) {
+            setDocsMode(data.data.settings.publicDocumentationMode as 'DISABLED' | 'PREVIEW' | 'ENABLED');
+            setDocsModeInitial(data.data.settings.publicDocumentationMode as 'DISABLED' | 'PREVIEW' | 'ENABLED');
+          }
         }
       } catch (e: any) {
         setAuditError(e?.message || 'Failed to load settings');
@@ -75,7 +98,7 @@ export const SessionSettings: React.FC = () => {
     <Stack spacing="lg">
       <Group spacing="sm">
         <IconSettings size={24} />
-        <Title order={2}>Session Settings</Title>
+        <Title order={2}>Gateway Settings</Title>
       </Group>
 
       <Card shadow="sm" p="lg" radius="md" withBorder>
@@ -231,6 +254,82 @@ export const SessionSettings: React.FC = () => {
                 <Text size="xs">
                   Increasing retention increases storage usage. The cleanup job runs periodically based on configured cleanup
                   interval; changes apply to newly written logs immediately.
+                </Text>
+              </Alert>
+            </>
+          )}
+        </Stack>
+      </Card>
+
+      <Card shadow="sm" p="lg" radius="md" withBorder>
+        <Stack spacing="md">
+          <Group spacing="sm">
+            <IconInfoCircle size={20} />
+            <Text weight={500} size="md">
+              Public Documentation Mode
+            </Text>
+          </Group>
+          {auditLoading ? (
+            <Group>
+              <Loader size="sm" /> <Text size="sm">Loading current mode...</Text>
+            </Group>
+          ) : docsModeError ? (
+            <Alert color="red" title="Failed to load" icon={<IconInfoCircle size={16} />}>
+              {docsModeError}
+            </Alert>
+          ) : (
+            <>
+              <Select
+                label="Mode"
+                description="Controls visibility of published API documentation pages"
+                value={docsMode ?? undefined}
+                onChange={(val) => setDocsMode((val as any) || docsMode)}
+                data={[
+                  { value: 'DISABLED', label: 'Disabled (hidden from all users)' },
+                  { value: 'PREVIEW', label: 'Preview (only authenticated users)' },
+                  { value: 'ENABLED', label: 'Enabled (publicly accessible)' }
+                ]}
+              />
+              <Group spacing="sm">
+                <Button
+                  size="xs"
+                  loading={docsModeSaving}
+                  disabled={docsModeSaving || docsMode === null || docsMode === docsModeInitial}
+                  onClick={async () => {
+                    if (docsMode === null) return;
+                    setDocsModeSaving(true);
+                    setDocsModeError(null);
+                    try {
+                      const res = await authenticatedFetch('/graphql', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          query: `mutation SetDocsMode($mode: PublicDocumentationMode!) { setPublicDocumentationMode(mode: $mode) }`,
+                          variables: { mode: docsMode }
+                        })
+                      });
+                      const json = await res.json();
+                      if (json.errors) throw new Error(json.errors[0]?.message || 'Update failed');
+                      setDocsModeInitial(docsMode);
+                    } catch (e: any) {
+                      setDocsModeError(e?.message || 'Failed to update mode');
+                    } finally {
+                      setDocsModeSaving(false);
+                    }
+                  }}
+                >
+                  Save
+                </Button>
+                {docsModeInitial !== null && docsMode !== docsModeInitial && (
+                  <Button variant="subtle" size="xs" disabled={docsModeSaving} onClick={() => setDocsMode(docsModeInitial)}>
+                    Reset
+                  </Button>
+                )}
+              </Group>
+              <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+                <Text size="xs">
+                  <strong>DISABLED:</strong> No documentation pages are served. <strong>PREVIEW:</strong> Accessible only to
+                  authenticated users. <strong>ENABLED:</strong> Publicly accessible without authentication.
                 </Text>
               </Alert>
             </>

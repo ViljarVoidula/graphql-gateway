@@ -1,5 +1,5 @@
 import { stitchSchemas } from '@graphql-tools/stitch';
-import { stitchingDirectives } from '@graphql-tools/stitching-directives';
+// Use local compat wrapper to avoid TS type conflicts across @graphql-tools packages
 import cors from '@koa/cors';
 import * as fs from 'fs';
 import { buildSchema, GraphQLSchema } from 'graphql';
@@ -9,6 +9,7 @@ import compress from 'koa-compress';
 import koaHelmet from 'koa-helmet';
 import responseTime from 'koa-response-time';
 import * as path from 'path';
+import { getStitchingDirectivesTransformer } from './utils/stitchingDirectivesCompat';
 // reflect-metadata is loaded in src/index.ts
 import { Container } from 'typedi';
 import { initializeRedis } from './auth/session.config';
@@ -28,6 +29,7 @@ import { loadSecurityConfig } from './config/security.config';
 import './services/applications/application-service-rate-limit.resolver';
 import { cleanupExpiredAuditLogs } from './services/audit/audit-log.retention';
 import { AuditLogService } from './services/audit/audit-log.service';
+import { ConfigurationService } from './services/config/configuration.service';
 import { ServiceCacheManager, ServiceRegistryService } from './services/service-registry/service-registry.service';
 import { SessionService } from './services/sessions/session.service';
 import { ApplicationUsageService } from './services/usage/application-usage.service';
@@ -36,7 +38,23 @@ import { buildHMACExecutor } from './utils/hmacExecutor';
 import { log } from './utils/logger';
 import { koaMetrics } from './utils/telemetry/metrics';
 
-const { stitchingDirectivesTransformer } = stitchingDirectives();
+// Lazy msgpack encoder (loaded only if a client actually asks for msgpack)
+let msgpackEncode: ((value: any) => Uint8Array) | null = null;
+let msgpackEncodeLoading: Promise<void> | null = null;
+async function ensureMsgPackEncodeLoaded() {
+  if (msgpackEncode || msgpackEncodeLoading) return msgpackEncodeLoading;
+  msgpackEncodeLoading = import('@msgpack/msgpack')
+    .then((mod: any) => {
+      if (typeof mod.encode === 'function') msgpackEncode = mod.encode;
+    })
+    .catch(() => {})
+    .finally(() => {
+      msgpackEncodeLoading = null;
+    });
+  return msgpackEncodeLoading;
+}
+
+const stitchingDirectivesTransformer = getStitchingDirectivesTransformer();
 
 // Health check function
 async function checkHealth() {
@@ -180,13 +198,9 @@ function cleanupServiceCache() {
 
 const loader = new SchemaLoader(
   function buildSchemaFromEndpoints(loadedEndpoints) {
-    const subschemas: Array<GraphQLSchema | any> = loadedEndpoints.map(({ sdl, url }) => ({
+    const subschemas: Array<GraphQLSchema | any> = loadedEndpoints.map(({ sdl, url, useMsgPack }) => ({
       schema: buildSchema(sdl),
-      executor: buildHMACExecutor({
-        endpoint: url,
-        timeout: 5000,
-        enableHMAC: true
-      }),
+      executor: buildHMACExecutor({ endpoint: url, timeout: 5000, enableHMAC: true, useMsgPack: !!useMsgPack }),
       batch: true
     }));
 
@@ -237,7 +251,16 @@ app.use(
     credentials: true
   })
 );
-app.use(compress());
+// Skip gzip/deflate for MsgPack since it's already a dense binary format
+app.use(
+  compress({
+    filter: (contentType) => {
+      if (!contentType) return true;
+      if (contentType.includes('application/x-msgpack')) return false; // no compression for msgpack
+      return compress.filter ? compress.filter(contentType) : true;
+    }
+  })
+);
 
 const yoga = createYoga({
   schema: () => loader.schema,
@@ -283,7 +306,61 @@ app.use(async (ctx, next) => {
     return;
   }
 
-  // Admin UI
+  // Documentation pages gating & static file serving
+  if (ctx.path === '/docs' || ctx.path.startsWith('/docs/')) {
+    const config = Container.get(ConfigurationService);
+    const mode = await config.getPublicDocumentationMode();
+    if (mode === 'disabled') {
+      ctx.status = 404;
+      ctx.body = 'Documentation is disabled';
+      return;
+    }
+    if (mode === 'preview') {
+      let authenticated = false;
+      try {
+        const anyCtx: any = ctx as any;
+        if (anyCtx?.state?.user || anyCtx?.user) authenticated = true;
+      } catch {}
+      if (!authenticated) {
+        ctx.status = 401;
+        ctx.body = 'Authentication required to view documentation (preview mode)';
+        return;
+      }
+    }
+
+    // Serve the built docs.html if available
+    if (ctx.path === '/docs') {
+      const docsHtmlPath = path.join(__dirname, '..', 'dist', 'client', 'docs.html');
+      if (fs.existsSync(docsHtmlPath)) {
+        let html = fs.readFileSync(docsHtmlPath, 'utf-8');
+        // Inject a mode badge placeholder replacement if template contains marker, else prepend small badge bar.
+        if (html.includes('<!-- PUBLIC_DOC_MODE -->')) {
+          html = html.replace('<!-- PUBLIC_DOC_MODE -->', `<meta name="x-public-doc-mode" content="${mode}" />`);
+        } else {
+          // naive injection before closing head tag
+          html = html.replace('</head>', `  <meta name="x-public-doc-mode" content="${mode}" />\n</head>`);
+        }
+        ctx.type = 'text/html';
+        ctx.body = html;
+        return;
+      }
+      // Fallback minimal message if bundle not built yet
+      ctx.type = 'text/html';
+      ctx.body = `<!DOCTYPE html><html><head><title>API Docs</title></head><body><h1>API Documentation</h1><p>The documentation UI bundle has not been built yet. Run <code>npm run build:admin</code> to generate it.</p><p>Current mode: ${mode}</p></body></html>`;
+      return;
+    }
+
+    // Potential future: static assets under /docs/assets/* served from dist/client/assets
+    const assetCandidate = path.join(__dirname, '..', 'dist', 'client', ctx.path.replace(/^\/docs\//, ''));
+    if (fs.existsSync(assetCandidate) && fs.statSync(assetCandidate).isFile()) {
+      ctx.type = path.extname(assetCandidate) === '.js' ? 'application/javascript' : undefined;
+      ctx.body = fs.readFileSync(assetCandidate);
+      return;
+    }
+    return; // nothing else matches /docs/*
+  }
+
+  // Admin UI (serve built static assets)
   if (ctx.path === '/admin' || ctx.path.startsWith('/admin/')) {
     const adminHtmlPath = path.join(__dirname, '..', 'dist', 'client', 'index.html');
     const fallbackHtmlPath = path.join(__dirname, 'client', 'fallback.html');
@@ -329,6 +406,36 @@ app.use(async (ctx, next) => {
   }
 
   await next();
+});
+
+// Client -> Gateway msgpack response negotiation (before GraphQL handler mounting)
+app.use(async (ctx, next) => {
+  // Only engage for GraphQL endpoint; we wrap response after Yoga executes
+  const wantsMsgPack = ctx.headers['x-msgpack-enabled'] === '1';
+  if (!wantsMsgPack) return next();
+  await next();
+  if (!ctx.path.startsWith('/graphql')) return; // only transform graphql responses
+  // If body is already a Buffer/string JSON we can attempt to parse then re-encode.
+  try {
+    if (!msgpackEncode) await ensureMsgPackEncodeLoaded();
+    if (!msgpackEncode) return; // encoding lib unavailable
+    if (ctx.body && typeof ctx.body !== 'string' && !(ctx.body instanceof Uint8Array)) {
+      // Body may be an object; encode directly
+      ctx.set('content-type', 'application/x-msgpack');
+      ctx.body = Buffer.from(msgpackEncode(ctx.body));
+    } else if (typeof ctx.body === 'string') {
+      // Try parse JSON
+      try {
+        const parsed = JSON.parse(ctx.body);
+        ctx.set('content-type', 'application/x-msgpack');
+        ctx.body = Buffer.from(msgpackEncode(parsed));
+      } catch {
+        // leave as-is if not JSON
+      }
+    }
+  } catch (e) {
+    log.warn('Failed to encode msgpack response for client', e);
+  }
 });
 
 // Mount Yoga at /graphql

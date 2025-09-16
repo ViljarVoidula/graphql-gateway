@@ -400,6 +400,19 @@ Migration `1759000000000-AddPerformanceIndexes` adds supporting indexes; `175900
 
 Retention cleanup automatically drops expired partitions when partitioning is enabled; otherwise it performs batched deletes driven by retention metadata.
 
+## 🗜️ MessagePack Optimization
+
+The gateway supports MessagePack as a transport optimization.
+
+Quick facts:
+
+- Per-service toggle: enable `useMsgPack` in Admin UI to turn on downstream MsgPack responses.
+- Client opt-in: send header `x-msgpack-enabled: 1` to receive MsgPack-encoded GraphQL responses from the gateway.
+- Transparent internal decode: gateway decodes downstream MsgPack back into normal JS objects before stitching.
+- Fully backwards compatible: no header, no change; services default to disabled.
+
+Detailed documentation: `packages/gateway/docs/MSG_PACK_SUPPORT.md`.
+
 ### Environment Variables (Defaults)
 
 ```

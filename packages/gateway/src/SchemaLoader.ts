@@ -18,6 +18,7 @@ import { classifyDiff, diffSchemas, semanticClassify } from './utils/schema-diff
 interface LoadedEndpoint {
   url: string;
   sdl: string;
+  useMsgPack?: boolean; // capability flag sourced from Service table
 }
 
 interface EndpointCache {
@@ -96,7 +97,14 @@ export class SchemaLoader {
             }
 
             const sdl = printSchema(buildClientSchema(data));
-            loadedEndpoints.push({ url, sdl });
+            // fetch useMsgPack from service table (best effort)
+            let useMsgPack: boolean | undefined;
+            try {
+              const serviceRepo = dataSource.getRepository(Service);
+              const svc = await serviceRepo.findOne({ where: { url } });
+              useMsgPack = svc?.useMsgPack;
+            } catch {}
+            loadedEndpoints.push({ url, sdl, useMsgPack });
 
             // Persist change if SDL differs from saved service.sdl
             try {
@@ -138,7 +146,14 @@ export class SchemaLoader {
             // Try to use cached schema even if expired
             if (cachedSchema) {
               log.warn(`Using expired cached schema for ${url}`);
-              loadedEndpoints.push({ url, sdl: cachedSchema.sdl });
+              // Attempt to still include useMsgPack flag via service lookup
+              let useMsgPack: boolean | undefined;
+              try {
+                const serviceRepo = dataSource.getRepository(Service);
+                const svc = await serviceRepo.findOne({ where: { url } });
+                useMsgPack = svc?.useMsgPack;
+              } catch {}
+              loadedEndpoints.push({ url, sdl: cachedSchema.sdl, useMsgPack });
             } else {
               log.warn(`No cached schema available for ${url}, skipping`);
             }

@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use async_graphql::{EmptySubscription, Schema};
-use axum::{response::Html, routing::get, Router, Extension, http::StatusCode};
+use axum::{response::{Html, IntoResponse}, routing::get, Router, Extension, http::{StatusCode, HeaderMap}};
 use axum::body::Bytes;
 use tracing_subscriber::{fmt, EnvFilter};
 use tower_http::trace::{TraceLayer, DefaultOnRequest, DefaultOnResponse};
@@ -94,7 +94,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Manual GraphQL POST handler to surface parse errors (returns standard GraphQL JSON)
-    async fn graphql_post(Extension(schema): Extension<SearchSchema>, body: Bytes) -> (StatusCode, axum::Json<async_graphql::Response>) {
+    async fn graphql_post(Extension(schema): Extension<SearchSchema>, headers: HeaderMap, body: Bytes) -> (StatusCode, axum::response::Response) {
         let req_id = nanoid::nanoid!(10);
         let started = std::time::Instant::now();
         let raw = String::from_utf8_lossy(&body);
@@ -104,21 +104,21 @@ async fn main() -> anyhow::Result<()> {
             Err(e) => {
                 tracing::error!(target="graphql.parse", req.id=%req_id, error=%e, body.preview=%raw.chars().take(200).collect::<String>(), "invalid request JSON");
                 let resp = async_graphql::Response::from_errors(vec![async_graphql::ServerError::new("invalid JSON body", None)]);
-                return (StatusCode::BAD_REQUEST, axum::Json(resp));
+                return (StatusCode::BAD_REQUEST, axum::Json(resp).into_response());
             }
         };
         let query = json.get("query").and_then(|v| v.as_str());
         if query.is_none() {
             tracing::error!(target="graphql.parse", req.id=%req_id, "missing query field");
             let resp = async_graphql::Response::from_errors(vec![async_graphql::ServerError::new("missing 'query' field", None)]);
-            return (StatusCode::BAD_REQUEST, axum::Json(resp));
+            return (StatusCode::BAD_REQUEST, axum::Json(resp).into_response());
         }
         let op_name = json.get("operationName").and_then(|v| v.as_str()).map(|s| s.to_string());
         let vars = json.get("variables").cloned().unwrap_or(serde_json::Value::Null);
         let mut gql_req = async_graphql::Request::new(query.unwrap().to_string())
             .variables(async_graphql::Variables::from_json(vars));
         if let Some(op) = op_name.clone() { gql_req = gql_req.operation_name(op); }
-        let resp = schema.execute(gql_req).await;
+    let resp = schema.execute(gql_req).await;
         let took_ms = started.elapsed().as_millis();
         if !resp.errors.is_empty() {
             for err in &resp.errors {
@@ -129,7 +129,22 @@ async fn main() -> anyhow::Result<()> {
         } else {
             tracing::info!(target="graphql.exec", req.id=%req_id, took.ms=took_ms as u64, op.name=?op_name, "graphql request ok");
         }
-        (StatusCode::OK, axum::Json(resp))
+        // If client signals msgpack support
+        let wants_msgpack = headers.get("x-msgpack-enabled").and_then(|v| v.to_str().ok()).map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false);
+        if wants_msgpack {
+            match rmp_serde::to_vec_named(&resp) {
+                Ok(bin) => {
+                    let mut response = axum::response::Response::new(bin.into());
+                    *response.status_mut() = StatusCode::OK;
+                    response.headers_mut().insert(axum::http::header::CONTENT_TYPE, axum::http::HeaderValue::from_static("application/x-msgpack"));
+                    return (StatusCode::OK, response)
+                }
+                Err(e) => {
+                    tracing::error!(error=%e, "failed to encode msgpack response");
+                }
+            }
+        }
+        (StatusCode::OK, axum::Json(resp).into_response())
     }
 
     // Simple metrics endpoint (JSON) to surface embedding latency histogram

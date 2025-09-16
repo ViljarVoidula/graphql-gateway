@@ -1,9 +1,9 @@
-import { describe, it, beforeEach, afterEach, mock } from 'node:test';
-import assert from 'node:assert';
-import { buildHMACExecutor, createHMACValidationMiddleware, generateServiceKey } from './hmacExecutor';
-import { keyManager } from '../security/keyManager';
-import { HMACUtils } from '../security/hmac';
 import { parse } from 'graphql';
+import assert from 'node:assert';
+import { afterEach, beforeEach, describe, it, mock } from 'node:test';
+import { HMACUtils } from '../security/hmac';
+import { keyManager } from '../security/keyManager';
+import { buildHMACExecutor, createHMACValidationMiddleware, generateServiceKey } from './hmacExecutor';
 
 // Mock Date.now() to have predictable timestamps
 const MOCK_TIMESTAMP = 1672531200000; // 2023-01-01T00:00:00.000Z
@@ -196,6 +196,14 @@ describe('hmacExecutor', () => {
 
       const fetchOptions = mockFetch.mock.calls[0].arguments[1];
       assert.strictEqual(fetchOptions.headers['x-hmac-signature'], undefined, 'Should not add HMAC headers on error');
+    });
+
+    it('should always send x-msgpack-enabled when service useMsgPack is true (independent of client header)', async () => {
+      const executor = buildHMACExecutor({ endpoint: 'http://service.com/graphql', useMsgPack: true });
+      const request = { document: parse('query { test }'), variables: {}, extensions: {}, context: { req: { headers: {} } } };
+      await executor(request);
+      const fetchOptions = mockFetch.mock.calls[0].arguments[1];
+      assert.strictEqual(fetchOptions.headers['x-msgpack-enabled'], '1');
     });
   });
 

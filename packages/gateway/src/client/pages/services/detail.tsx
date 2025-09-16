@@ -341,6 +341,15 @@ export const ServiceDetail: React.FC = () => {
 
             <Group position="apart">
               <Text size="sm" color="dimmed">
+                MessagePack
+              </Text>
+              <Badge color={service.useMsgPack ? 'green' : 'red'} variant="light">
+                {service.useMsgPack ? 'Enabled' : 'Disabled'}
+              </Badge>
+            </Group>
+
+            <Group position="apart">
+              <Text size="sm" color="dimmed">
                 Created
               </Text>
               <Text size="sm">{new Date(service.createdAt).toLocaleString()}</Text>

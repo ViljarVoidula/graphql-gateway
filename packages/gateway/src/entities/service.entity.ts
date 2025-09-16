@@ -65,6 +65,10 @@ export class Service {
   enableBatching: boolean;
 
   @Field()
+  @Column({ default: false })
+  useMsgPack: boolean;
+
+  @Field()
   @Column({ default: true })
   @Index()
   externally_accessible: boolean; // Gateway admins control this
