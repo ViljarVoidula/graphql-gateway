@@ -6,13 +6,15 @@ import { ErrorComponent, notificationProvider } from '@refinedev/mantine';
 import routerProvider from '@refinedev/react-router-v6';
 import { IconAdjustments, IconApps, IconFingerprint, IconServer, IconUserCircle } from '@tabler/icons-react';
 import { useEffect } from 'react';
-import { BrowserRouter, Outlet, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 
 import { CustomLayout } from './components/CustomLayout';
 import { ApplicationList } from './pages/applications';
 import { ApplicationCreate } from './pages/applications/create';
 import { ApplicationDetail } from './pages/applications/detail';
 import { Dashboard } from './pages/dashboard';
+import { DocsContentManager } from './pages/docs/content';
+import { DocsThemeEditor } from './pages/docs/theme';
 import { Login } from './pages/login';
 import { ServiceList } from './pages/services';
 import { ServiceCreate } from './pages/services/create';
@@ -143,6 +145,11 @@ function App() {
                   <Route path="/services/:id/edit" element={<ServiceEdit />} />
                   <Route path="/sessions" element={<SessionList />} />
                   <Route path="/settings" element={<SessionSettings />} />
+                  <Route path="/admin/docs/theme" element={<DocsThemeEditor />} />
+                  <Route path="/admin/docs/content" element={<DocsContentManager />} />
+                  {/* Legacy paths redirect if still linked/bookmarked */}
+                  <Route path="/docs/theme" element={<Navigate to="/admin/docs/theme" replace />} />
+                  <Route path="/docs/content" element={<Navigate to="/admin/docs/content" replace />} />
                 </Route>
                 <Route path="/login" element={<Login />} />
                 <Route path="*" element={<ErrorComponent />} />

@@ -4,6 +4,12 @@ import { ApplicationServiceRateLimit } from '../entities/application-service-rat
 import { ApplicationUsage } from '../entities/application-usage.entity';
 import { Application } from '../entities/application.entity';
 import { AuditLog } from '../entities/audit-log.entity';
+import { ChatMessage } from '../entities/chat/message.entity';
+import { ChatThread } from '../entities/chat/thread.entity';
+import { DocCategory } from '../entities/docs/category.entity';
+import { DocDocument } from '../entities/docs/document.entity';
+import { DocEmbeddingChunk } from '../entities/docs/embedding-chunk.entity';
+import { DocRevision } from '../entities/docs/revision.entity';
 import { SchemaChange } from '../entities/schema-change.entity';
 import { ServiceKey } from '../entities/service-key.entity';
 import { Service } from '../entities/service.entity';
@@ -30,7 +36,13 @@ export const dataSource = new TypeORM.DataSource({
     AuditLog,
     ApplicationServiceRateLimit,
     Setting,
-    SchemaChange
+    SchemaChange,
+    DocDocument,
+    DocRevision,
+    DocCategory,
+    DocEmbeddingChunk,
+    ChatThread,
+    ChatMessage
   ],
   migrations: ['src/migrations/*.ts'],
   migrationsRun: process.env.NODE_ENV === 'production', // Auto-run migrations in production

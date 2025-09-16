@@ -7,6 +7,18 @@
 			"command": "npm run build -- --watch",
 			"isBackground": true,
 			"group": "build"
+		},
+		{
+			"label": "TypeScript: Check Server",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"tsc",
+				"--noEmit",
+				"--project",
+				"tsconfig.json"
+			],
+			"group": "build"
 		}
 	]
 }

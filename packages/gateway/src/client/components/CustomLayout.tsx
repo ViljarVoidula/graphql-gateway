@@ -21,6 +21,7 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconDashboard,
+  IconFileText,
   IconFingerprint,
   IconLogout,
   IconServer,
@@ -71,6 +72,18 @@ const menuItems = [
     label: 'Settings',
     icon: IconAdjustments,
     path: '/settings'
+  },
+  {
+    id: 'docs-theme',
+    label: 'Docs Theme',
+    icon: IconAdjustments,
+    path: '/admin/docs/theme'
+  },
+  {
+    id: 'docs-content',
+    label: 'Docs Content',
+    icon: IconFileText,
+    path: '/admin/docs/content'
   }
 ];
 

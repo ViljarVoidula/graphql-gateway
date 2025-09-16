@@ -22,6 +22,26 @@ module.exports = {
   module: {
     rules: [
       {
+        test: /\.mdx?$/,
+        use: [
+          // Custom loader to extract YAML frontmatter into a named export before MDX compilation
+          path.resolve(__dirname, 'scripts/mdx-frontmatter-loader.cjs'),
+          {
+            loader: require.resolve('@mdx-js/loader'),
+            options: {
+              // MDX v3: providerImportSource still used for <MDXProvider/>, remove legacy jsx flag
+              providerImportSource: '@mdx-js/react',
+              // Some remark/rehype plugins ship ESM; accessing .default when present avoids empty preset errors.
+              remarkPlugins: [require('remark-gfm').default || require('remark-gfm')],
+              rehypePlugins: [
+                require('rehype-slug').default || require('rehype-slug'),
+                require('rehype-autolink-headings').default || require('rehype-autolink-headings')
+              ]
+            }
+          }
+        ]
+      },
+      {
         test: /\.(ts|tsx)$/,
         use: {
           loader: 'ts-loader',
@@ -54,7 +74,7 @@ module.exports = {
       excludeChunks: ['docs']
     }),
     new HtmlWebpackPlugin({
-      template: './src/client/public/index.html',
+      template: './src/client/public/docs.html',
       filename: 'docs.html',
       chunks: ['docs'],
       excludeChunks: ['admin']
@@ -92,7 +112,7 @@ module.exports = {
     },
     proxy: [
       {
-        context: ['/graphql', '/health'],
+        context: ['/graphql', '/health', '/docs-theme.css'],
         target: 'http://localhost:4000',
         changeOrigin: true
       }

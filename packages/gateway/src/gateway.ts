@@ -2,7 +2,7 @@ import { stitchSchemas } from '@graphql-tools/stitch';
 // Use local compat wrapper to avoid TS type conflicts across @graphql-tools packages
 import cors from '@koa/cors';
 import * as fs from 'fs';
-import { buildSchema, GraphQLSchema } from 'graphql';
+import { GraphQLSchema, buildSchema } from 'graphql';
 import { createYoga } from 'graphql-yoga';
 import Koa from 'koa';
 import compress from 'koa-compress';
@@ -19,6 +19,7 @@ import { Application } from './entities/application.entity';
 import { ServiceKey } from './entities/service-key.entity';
 import { Service } from './entities/service.entity';
 import { Session } from './entities/session.entity';
+import { Setting, coerceSettingValue } from './entities/setting.entity';
 import { createRateLimitPlugin } from './middleware/rate-limit.middleware';
 import { createUsageTrackingPlugin } from './middleware/usage-tracking.plugin';
 import { SchemaLoader } from './SchemaLoader';
@@ -29,9 +30,13 @@ import { loadSecurityConfig } from './config/security.config';
 import './services/applications/application-service-rate-limit.resolver';
 import { cleanupExpiredAuditLogs } from './services/audit/audit-log.retention';
 import { AuditLogService } from './services/audit/audit-log.service';
+import './services/chat/chat.resolver';
 import { ConfigurationService } from './services/config/configuration.service';
+import './services/docs/docs.resolver';
+import './services/search/search.resolver';
 import { ServiceCacheManager, ServiceRegistryService } from './services/service-registry/service-registry.service';
 import { SessionService } from './services/sessions/session.service';
+import './services/theme/theme.resolver';
 import { ApplicationUsageService } from './services/usage/application-usage.service';
 import { User } from './services/users/user.entity';
 import { buildHMACExecutor } from './utils/hmacExecutor';
@@ -117,6 +122,20 @@ async function checkHealth() {
     health.components.services.status = 'unhealthy';
     health.status = 'degraded';
   }
+
+  // Include service health monitor snapshot
+  try {
+    const { healthMonitor } = require('./utils/service-health');
+    const summary = healthMonitor.summary();
+    (health as any).serviceMonitor = {
+      unhealthyCount: summary.unhealthyCount,
+      unhealthy: summary.unhealthy,
+      totalTracked: summary.totalTracked
+    };
+    if (summary.unhealthyCount > 0 && health.status === 'healthy') {
+      health.status = 'degraded';
+    }
+  } catch {}
 
   return health;
 }
@@ -306,8 +325,143 @@ app.use(async (ctx, next) => {
     return;
   }
 
-  // Documentation pages gating & static file serving
-  if (ctx.path === '/docs' || ctx.path.startsWith('/docs/')) {
+  // Dynamic docs theme CSS endpoint
+  if (ctx.path.startsWith('/docs-theme.css')) {
+    // In future support multi-tenant via query param `?tenant=<id>`; for now single global token set
+    try {
+      // Keys namespace: docs.theme.token.<name>
+      const repo = dataSource.getRepository(Setting);
+      const rows = await repo.createQueryBuilder('s').where('s.key LIKE :prefix', { prefix: 'docs.theme.token.%' }).getMany();
+
+      const tokens: Record<string, string> = {};
+      for (const row of rows) {
+        const name = row.key.replace('docs.theme.token.', '');
+        const coerced = coerceSettingValue(row);
+        if (coerced === null || coerced === undefined) continue;
+        // Persisted values may be string/number/boolean/json; stringify scalars only
+        if (typeof coerced === 'object') {
+          // For JSON values we skip unless it's a primitive-like stored as JSON; stringify as fallback
+          tokens[name] = JSON.stringify(coerced);
+        } else {
+          tokens[name] = String(coerced);
+        }
+      }
+
+      // Always provide defaults for missing tokens, then override with saved values
+      const allTokens = {
+        // Primary brand colors - TESTING WITH GREEN
+        'color-primary': '#059669',
+        'color-primary-hover': '#047857',
+        'color-primary-light': '#d1fae5',
+        'color-secondary': '#0891b2',
+        'color-success': '#10b981',
+        'color-warning': '#f59e0b',
+        'color-error': '#ef4444',
+
+        // Text colors
+        'color-text-primary': '#1f2937',
+        'color-text-secondary': '#6b7280',
+        'color-text-muted': '#9ca3af',
+        'color-text-inverse': '#ffffff',
+
+        // Background colors
+        'color-background': '#ffffff',
+        'color-background-secondary': '#f9fafb',
+        'color-background-tertiary': '#f3f4f6',
+        'color-background-code': '#1e293b',
+
+        // Border colors
+        'color-border': '#e5e7eb',
+        'color-border-light': '#f3f4f6',
+        'color-border-dark': '#d1d5db',
+
+        // Typography
+        'font-family-sans':
+          '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+        'font-family-mono': '"JetBrains Mono", "Fira Code", Consolas, "Liberation Mono", Menlo, Courier, monospace',
+        'font-size-xs': '0.75rem',
+        'font-size-sm': '0.875rem',
+        'font-size-base': '1rem',
+        'font-size-lg': '1.125rem',
+        'font-size-xl': '1.25rem',
+        'font-size-2xl': '1.5rem',
+        'font-size-3xl': '1.875rem',
+        'font-weight-normal': '400',
+        'font-weight-medium': '500',
+        'font-weight-semibold': '600',
+        'font-weight-bold': '700',
+        'line-height-tight': '1.25',
+        'line-height-normal': '1.5',
+        'line-height-relaxed': '1.625',
+
+        // Spacing
+        'spacing-xs': '0.25rem',
+        'spacing-sm': '0.5rem',
+        'spacing-md': '1rem',
+        'spacing-lg': '1.5rem',
+        'spacing-xl': '2rem',
+        'spacing-2xl': '3rem',
+        'spacing-3xl': '4rem',
+
+        // Border radius
+        'border-radius-sm': '0.25rem',
+        'border-radius-md': '0.375rem',
+        'border-radius-lg': '0.5rem',
+        'border-radius-xl': '0.75rem',
+        'border-radius-full': '9999px',
+
+        // Shadows
+        'shadow-sm': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+        'shadow-md': '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+        'shadow-lg': '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+        'shadow-xl': '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+
+        // Layout
+        'max-width-prose': '65ch',
+        'max-width-container': '1200px',
+        'sidebar-width': '280px',
+        'header-height': '64px',
+
+        // Transitions
+        'transition-fast': '150ms ease-in-out',
+        'transition-normal': '300ms ease-in-out',
+        'transition-slow': '500ms ease-in-out'
+      };
+
+      // Override defaults with saved tokens
+      Object.assign(allTokens, tokens);
+
+      // Provide a few compatibility aliases if not explicitly set
+      if (!('color-surface' in allTokens)) {
+        allTokens['color-surface'] = allTokens['color-background-secondary'] || allTokens['color-background'];
+      }
+      if (!('color-code-bg' in allTokens)) {
+        allTokens['color-code-bg'] = allTokens['color-background-code'] || '#0f172a';
+      }
+      if (!('color-code-text' in allTokens)) {
+        allTokens['color-code-text'] = '#e2e8f0';
+      }
+      if (!('color-primary-foreground' in allTokens)) {
+        // Default readable foreground for primary surfaces
+        allTokens['color-primary-foreground'] = '#ffffff';
+      }
+
+      ctx.type = 'text/css; charset=utf-8';
+      ctx.set('Cache-Control', 'no-store');
+      ctx.body = `:root{${Object.entries(allTokens)
+        .map(([k, v]) => `--${k}:${String(v)}`)
+        .join(';')}}`;
+    } catch (e) {
+      console.error('Failed to load theme tokens for /docs-theme.css', e);
+      ctx.status = 500;
+      ctx.type = 'text/css';
+      ctx.body = ':root{--color-bg:#fff;--color-fg:#000;}';
+    }
+    return;
+  }
+
+  // Documentation pages gating & static file serving (public). Avoid capturing admin docs management now under /admin/docs.
+  if ((ctx.path === '/docs' || ctx.path.startsWith('/docs/')) && !ctx.path.startsWith('/admin/docs/')) {
     const config = Container.get(ConfigurationService);
     const mode = await config.getPublicDocumentationMode();
     if (mode === 'disabled') {

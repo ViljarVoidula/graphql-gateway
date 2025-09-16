@@ -10,10 +10,11 @@ import {
 } from 'graphql';
 import { dataSource } from './db/datasource';
 import { SchemaChange, SchemaChangeClassification } from './entities/schema-change.entity';
-import { Service } from './entities/service.entity';
+import { Service, ServiceStatus } from './entities/service.entity';
 import { buildHMACExecutor } from './utils/hmacExecutor';
 import { log } from './utils/logger';
 import { classifyDiff, diffSchemas, semanticClassify } from './utils/schema-diff';
+import { healthMonitor } from './utils/service-health';
 
 interface LoadedEndpoint {
   url: string;
@@ -72,6 +73,24 @@ export class SchemaLoader {
           // Check schema cache first
           const now = Date.now();
           const cachedSchema = schemaCache.get(url);
+          // If service is currently unhealthy and backoff says skip, try to use cache and skip fetch
+          if (!healthMonitor.shouldAttempt(url)) {
+            log.warn('Skipping schema fetch due to backoff (service unhealthy)', {
+              operation: 'schemaLoader.reload',
+              metadata: { url, nextRetryInMs: healthMonitor.nextRetryDelay(url) }
+            });
+            if (cachedSchema) {
+              // Include any known capability flags
+              let useMsgPack: boolean | undefined;
+              try {
+                const serviceRepo = dataSource.getRepository(Service);
+                const svc = await serviceRepo.findOne({ where: { url } });
+                useMsgPack = svc?.useMsgPack;
+              } catch {}
+              loadedEndpoints.push({ url, sdl: cachedSchema.sdl, useMsgPack });
+            }
+            return;
+          }
           if (cachedSchema && now - cachedSchema.lastUpdated < SCHEMA_CACHE_TTL) {
             log.debug(`Using cached schema for ${url}`);
             loadedEndpoints.push({ url, sdl: cachedSchema.sdl });
@@ -105,6 +124,20 @@ export class SchemaLoader {
               useMsgPack = svc?.useMsgPack;
             } catch {}
             loadedEndpoints.push({ url, sdl, useMsgPack });
+
+            // Health success
+            const recovered = healthMonitor.recordSuccess(url);
+            if (recovered) {
+              // Persist status ACTIVE on recovery
+              try {
+                const repo = dataSource.getRepository(Service);
+                const svc = await repo.findOne({ where: { url } });
+                // Only flip from INACTIVE -> ACTIVE automatically; respect MAINTENANCE
+                if (svc && svc.status === ServiceStatus.INACTIVE) await repo.update(svc.id, { status: ServiceStatus.ACTIVE });
+              } catch (e) {
+                log.warn('Failed to persist service recovery status', e);
+              }
+            }
 
             // Persist change if SDL differs from saved service.sdl
             try {
@@ -142,6 +175,19 @@ export class SchemaLoader {
             schemaCache.set(url, { sdl, lastUpdated: now });
           } catch (err) {
             log.error(`Failed to load schema from ${url}:`, err);
+            // Health failure
+            const becameUnhealthy = healthMonitor.recordFailure(url, err);
+            if (becameUnhealthy) {
+              // Persist status INACTIVE when transitioning to unhealthy
+              try {
+                const repo = dataSource.getRepository(Service);
+                const svc = await repo.findOne({ where: { url } });
+                // Only flip from ACTIVE -> INACTIVE automatically; respect MAINTENANCE
+                if (svc && svc.status === ServiceStatus.ACTIVE) await repo.update(svc.id, { status: ServiceStatus.INACTIVE });
+              } catch (e) {
+                log.warn('Failed to persist service unhealthy status', e);
+              }
+            }
 
             // Try to use cached schema even if expired
             if (cachedSchema) {
