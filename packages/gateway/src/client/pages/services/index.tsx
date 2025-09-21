@@ -7,6 +7,7 @@ import {
   LoadingOverlay,
   Modal,
   Paper,
+  Select,
   Stack,
   Table,
   Text,
@@ -23,6 +24,7 @@ import { useNavigate } from 'react-router-dom';
 export const ServiceList: React.FC = () => {
   const navigate = useNavigate();
   const [searchValue, setSearchValue] = React.useState('');
+  const [statusFilter, setStatusFilter] = React.useState<'all' | 'active' | 'inactive' | 'maintenance'>('all');
   const [serviceToDelete, setServiceToDelete] = React.useState<any>(null);
 
   const { data, isLoading, isError, error, refetch } = useList({
@@ -33,7 +35,9 @@ export const ServiceList: React.FC = () => {
 
   const services = data?.data || [];
 
-  const filteredServices = services.filter((service: any) => service.name.toLowerCase().includes(searchValue.toLowerCase()));
+  const filteredServices = services
+    .filter((service: any) => service.name.toLowerCase().includes(searchValue.toLowerCase()))
+    .filter((service: any) => (statusFilter === 'all' ? true : service.status?.toLowerCase() === statusFilter));
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -101,9 +105,25 @@ export const ServiceList: React.FC = () => {
             onChange={(event) => setSearchValue(event.target.value)}
             style={{ minWidth: 300 }}
           />
-          <Button variant="light" leftIcon={<IconRefresh size={16} />} onClick={() => refetch()}>
-            Refresh
-          </Button>
+          <Group>
+            <Select
+              data={[
+                { value: 'all', label: 'All' },
+                { value: 'active', label: 'Active' },
+                { value: 'inactive', label: 'Inactive' },
+                { value: 'maintenance', label: 'Maintenance' }
+              ]}
+              value={statusFilter}
+              onChange={(v: string | null) => setStatusFilter((v as any) ?? 'all')}
+              label="Status"
+              placeholder="All"
+              clearable={false}
+              style={{ width: 180 }}
+            />
+            <Button variant="light" leftIcon={<IconRefresh size={16} />} onClick={() => refetch()}>
+              Refresh
+            </Button>
+          </Group>
         </Group>
 
         <Paper withBorder>

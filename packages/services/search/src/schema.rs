@@ -47,7 +47,51 @@ impl QueryRoot {
         let resp = vespa.search(request).await?;
         let elapsed = start.elapsed().as_millis() as i32;
 
-    let out = crate::vespa::mapping::map_search_response(enriched_input, resp, elapsed)?;
+        let mut out = crate::vespa::mapping::map_search_response(enriched_input.clone(), resp, elapsed)?;
+        // Populate autocomplete suggestions via Redis (fast path)
+        if let Some(ac) = ctx.data_opt::<crate::autocomplete::AutocompleteClient>() {
+                // Decide tenant and fields
+                let tenant = enriched_input.tenant_id.as_deref().unwrap_or(&cfg.default_tenant_id);
+                // Choose source fields: default to ["name", "brand"] if not provided
+                // Prefer index config's autocompletePaths if available from embeddings service
+                let idx_cfg_opt = index_config::get_index_config_cached(enriched_input.app_id.as_deref().unwrap_or(&cfg.app_id), cfg.embeddings_service_url.as_deref()).await.ok().flatten();
+                let default_fields: Vec<String> = idx_cfg_opt.as_ref().and_then(|ic| if ic.autocomplete_paths.is_empty() { None } else { Some(ic.autocomplete_paths.clone()) })
+                    .unwrap_or_else(|| vec!["name".into(), "brand".into()]);
+                let fields: Vec<String> = input
+                    .suggest
+                    .as_ref()
+                    .and_then(|s| s.source_fields.clone())
+                    .unwrap_or(default_fields);
+                let limit = input.suggest.as_ref().and_then(|s| s.limit).unwrap_or(10) as usize;
+                let prefix = enriched_input.query.as_deref().unwrap_or("");
+                if !prefix.is_empty() {
+                    let mut agg: Vec<crate::models::Suggestion> = Vec::new();
+                    for f in fields.iter() {
+                        match ac.get_suggestions(tenant, f, prefix, limit, input.typo.as_ref().and_then(|t| t.fuzzy).unwrap_or(false)).await {
+                            Ok(hits) => {
+                                for h in hits.into_iter() {
+                                    let text = h.display.unwrap_or_else(|| h.term);
+                                    agg.push(crate::models::Suggestion { text, r#type: crate::models::SuggestType::Term, score: Some(h.score as f32) });
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(target="autocomplete", error=%e, "autocomplete fetch failed");
+                            }
+                        }
+                    }
+                    // Dedup suggestions by text and keep top N
+                    use std::collections::HashMap;
+                    let mut by_text: HashMap<String, crate::models::Suggestion> = HashMap::new();
+                    for s in agg.into_iter() {
+                        let replace = match by_text.get(&s.text) { None => true, Some(prev) => s.score.unwrap_or(0.0) > prev.score.unwrap_or(0.0) };
+                        if replace { by_text.insert(s.text.clone(), s); }
+                    }
+                    let mut merged: Vec<crate::models::Suggestion> = by_text.into_values().collect();
+                    merged.sort_by(|a,b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+                    merged.truncate(limit);
+                    out.suggestions = merged;
+                }
+        }
         if let Some(err) = embedding_error { // Attach extension by wrapping into a GraphQL error extension-like field in meta.query if free
             // (Simplest: log; real extension injection would require custom Response build. We'll piggy-back meta.query)
             tracing::info!(embedding.error=%err, "embedding fetch error attached");
@@ -178,6 +222,60 @@ impl MutationRoot {
             } else {
                 map.entry("tenant_id").or_insert_with(|| serde_json::Value::String(cfg.default_tenant_id.clone()));
             }
+
+            // Accept precomputed vectors from ingestion: normalize common vector shapes into `embedding`
+            // Supported inputs:
+            // - { embedding: [f32,...] }
+            // - { vector: [f32,...] }
+            // - { vector: { embedding|values|data|vector: [f32,...] } }
+            // - { vectors: { text: [f32,...], ... } } -> prefer `text` or first entry
+            if map.get("embedding").is_none() {
+                // vector: Array or Object
+                if let Some(vec_val) = map.remove("vector") {
+                    match vec_val {
+                        serde_json::Value::Array(arr) => {
+                            map.insert("embedding".into(), serde_json::Value::Array(arr));
+                        }
+                        serde_json::Value::Object(mut obj) => {
+                            if let Some(inner) = obj.remove("embedding")
+                                .or_else(|| obj.remove("values"))
+                                .or_else(|| obj.remove("data"))
+                                .or_else(|| obj.remove("vector"))
+                            {
+                                if inner.is_array() { map.insert("embedding".into(), inner); }
+                            }
+                        }
+                        _ => { /* ignore */ }
+                    }
+                } else if let Some(vectors_any) = map.get_mut("vectors") {
+                    // vectors: pick a sensible default (text) or first
+                    let chosen = match vectors_any {
+                        serde_json::Value::Object(obj) => {
+                            if let Some(v) = obj.remove("text") { Some(v) }
+                            else { obj.values().next().cloned() }
+                        }
+                        other => Some(other.clone()),
+                    };
+                    if let Some(val) = chosen {
+                        match val {
+                            serde_json::Value::Array(arr) => {
+                                map.insert("embedding".into(), serde_json::Value::Array(arr));
+                            }
+                            serde_json::Value::Object(mut obj) => {
+                                if let Some(inner) = obj.remove("embedding")
+                                    .or_else(|| obj.remove("values"))
+                                    .or_else(|| obj.remove("data"))
+                                {
+                                    if inner.is_array() { map.insert("embedding".into(), inner); }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    // Remove to avoid unknown field noise
+                    map.remove("vectors");
+                }
+            }
             // If embedding not supplied and we have index config + embeddings client, build weighted embedding
             if map.get("embedding").is_none() {
                 if let (Some(ic), Some(client)) = (index_cfg.as_ref(), embeddings_client_opt.as_ref()) {
@@ -271,6 +369,43 @@ impl MutationRoot {
                     }
                 } else {
                     map.entry("tenant_id").or_insert_with(|| serde_json::Value::String(cfg.default_tenant_id.clone()));
+                }
+
+                // Normalize precomputed vectors into `embedding` to avoid regenerating embeddings
+                if map.get("embedding").is_none() {
+                    if let Some(vec_val) = map.remove("vector") {
+                        match vec_val {
+                            serde_json::Value::Array(arr) => { map.insert("embedding".into(), serde_json::Value::Array(arr)); }
+                            serde_json::Value::Object(mut obj) => {
+                                if let Some(inner) = obj.remove("embedding")
+                                    .or_else(|| obj.remove("values"))
+                                    .or_else(|| obj.remove("data"))
+                                    .or_else(|| obj.remove("vector"))
+                                { if inner.is_array() { map.insert("embedding".into(), inner); } }
+                            }
+                            _ => {}
+                        }
+                    } else if let Some(vectors_any) = map.get_mut("vectors") {
+                        let chosen = match vectors_any {
+                            serde_json::Value::Object(obj) => {
+                                if let Some(v) = obj.remove("text") { Some(v) } else { obj.values().next().cloned() }
+                            }
+                            other => Some(other.clone()),
+                        };
+                        if let Some(val) = chosen {
+                            match val {
+                                serde_json::Value::Array(arr) => { map.insert("embedding".into(), serde_json::Value::Array(arr)); }
+                                serde_json::Value::Object(mut obj) => {
+                                    if let Some(inner) = obj.remove("embedding")
+                                        .or_else(|| obj.remove("values"))
+                                        .or_else(|| obj.remove("data"))
+                                    { if inner.is_array() { map.insert("embedding".into(), inner); } }
+                                }
+                                _ => {}
+                            }
+                        }
+                        map.remove("vectors");
+                    }
                 }
                 if map.get("embedding").is_none() {
                     if let (Some(ic), Some(client)) = (index_cfg.as_ref(), embeddings_client_opt.as_ref()) {

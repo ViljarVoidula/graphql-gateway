@@ -38,6 +38,21 @@ export class ServiceRegistryService {
     });
   }
 
+  // Returns services for an owner regardless of status (active/inactive/maintenance)
+  async getServicesByOwnerIncludingInactive(ownerId: string): Promise<ServiceEntity[]> {
+    return this.serviceRepository.find({
+      where: { ownerId },
+      relations: ['keys', 'owner']
+    });
+  }
+
+  // Returns all services regardless of status
+  async getAllServicesIncludingInactive(): Promise<ServiceEntity[]> {
+    return this.serviceRepository.find({
+      relations: ['keys', 'owner']
+    });
+  }
+
   async getServiceByUrl(url: string): Promise<ServiceEntity | null> {
     return this.serviceRepository.findOne({
       where: { url },

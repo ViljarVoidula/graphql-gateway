@@ -3,6 +3,7 @@ import { Arg, Field, ID, InputType, Mutation, ObjectType, Query, Resolver } from
 import { Service } from 'typedi';
 import { dataSource } from '../../db/datasource';
 import { DocDocument } from '../../entities/docs/document.entity';
+import { DocEmbeddingChunk } from '../../entities/docs/embedding-chunk.entity';
 import { DocRevision } from '../../entities/docs/revision.entity';
 import { compileMDX } from './mdx-compile';
 import { chunkAndStoreRevision } from './revision-chunking';
@@ -47,6 +48,16 @@ class UpdateRevisionInput {
   mdxRaw?: string;
   @Field({ nullable: true })
   title?: string;
+}
+
+@InputType()
+class UpdateDocumentInput {
+  @Field()
+  documentId!: string;
+  @Field({ nullable: true })
+  title?: string;
+  @Field({ nullable: true })
+  slug?: string;
 }
 
 @ObjectType()
@@ -286,6 +297,38 @@ export class DocsAuthoringResolver {
     return { id: rev.id, version: rev.version, state: rev.state, mdxRaw: rev.mdxRaw };
   }
 
+  @Mutation(() => DocDTO)
+  async updateDocument(@Arg('input') input: UpdateDocumentInput): Promise<DocDTO> {
+    const doc = await this.docRepo.findOne({ where: { id: input.documentId } });
+    if (!doc) throw new Error('Document not found');
+
+    // Update slug if provided and changed
+    if (input.slug && input.slug !== doc.slug) {
+      const exists = await this.docRepo.findOne({ where: { slug: input.slug } });
+      if (exists) throw new Error('Slug already exists');
+      const oldSlug = doc.slug;
+      doc.slug = input.slug;
+      // Update embedding chunks to new slug
+      try {
+        const chunkRepo = dataSource.getRepository(DocEmbeddingChunk);
+        await chunkRepo
+          .createQueryBuilder()
+          .update(DocEmbeddingChunk)
+          .set({ docSlug: input.slug })
+          .where('doc_slug = :oldSlug', { oldSlug })
+          .execute();
+      } catch {}
+    }
+
+    // Update title if provided
+    if (typeof input.title === 'string' && input.title.length > 0 && input.title !== doc.title) {
+      doc.title = input.title;
+    }
+
+    await this.docRepo.save(doc);
+    return { id: doc.id, slug: doc.slug, title: doc.title };
+  }
+
   @Mutation(() => PublishResult)
   async publishRevision(@Arg('revisionId') revisionId: string): Promise<PublishResult> {
     const rev = await this.revRepo.findOne({ where: { id: revisionId }, relations: { document: true } });
@@ -364,6 +407,25 @@ export class DocsAuthoringResolver {
     if (doc.status !== 'ARCHIVED') return true;
     doc.status = 'ACTIVE';
     await this.docRepo.save(doc);
+    return true;
+  }
+
+  @Mutation(() => Boolean)
+  async deleteDocument(@Arg('documentId') documentId: string): Promise<boolean> {
+    // Find the document first to obtain slug for cleanup
+    const doc = await this.docRepo.findOne({ where: { id: documentId } });
+    if (!doc) throw new Error('Document not found');
+
+    // Delete embedding chunks for this document slug (best-effort)
+    try {
+      const chunkRepo = dataSource.getRepository(DocEmbeddingChunk);
+      await chunkRepo.delete({ docSlug: doc.slug });
+    } catch (e) {
+      // Swallow errors to ensure hard delete proceeds
+    }
+
+    // Delete the document; revisions cascade via FK ON DELETE CASCADE
+    await this.docRepo.delete({ id: documentId });
     return true;
   }
 }

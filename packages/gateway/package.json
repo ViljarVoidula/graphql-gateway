@@ -80,6 +80,7 @@
     "koa-helmet": "8.0.1",
     "koa-response-time": "2.1.0",
     "nodemailer": "7.0.6",
+    "openai": "^5.20.3",
     "pg": "8.16.3",
     "react": "18.2.0",
     "react-ace": "^14.0.1",

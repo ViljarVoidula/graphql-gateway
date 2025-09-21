@@ -117,7 +117,7 @@ export class ServiceRegistryResolver {
   @Query(() => [ServiceEntity])
   async myServices(@Ctx() ctx: YogaContext): Promise<ServiceEntity[]> {
     if (!ctx.user) throw new Error('User not authenticated');
-    return this.serviceRegistryService.getServicesByOwner(ctx.user.id);
+    return this.serviceRegistryService.getServicesByOwnerIncludingInactive(ctx.user.id);
   }
 
   @Query(() => ServiceEntity, { nullable: true })

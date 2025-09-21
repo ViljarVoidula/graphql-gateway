@@ -36,7 +36,6 @@ import {
 } from '@tabler/icons-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../../utils/auth';
-import { DOCS_PREVIEW_HTML } from './preview-template';
 import { DEFAULT_THEME_TOKENS, THEME_PRESETS, type ThemePreset, type ThemeToken } from './theme-defaults';
 
 interface TokenRow extends ThemeToken {
@@ -77,6 +76,19 @@ export const DocsThemeEditor: React.FC = () => {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [lastAppliedHash, setLastAppliedHash] = useState('');
+  // We load the real docs app and allow navigation inside the iframe
+  // Import helpers state
+  const [importUrl, setImportUrl] = useState('');
+  const [importImageUrl, setImportImageUrl] = useState('');
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<Array<{ name: string; value: string; confidence?: number }>>([]);
+  const [selectedSuggest, setSelectedSuggest] = useState<Record<string, boolean>>({});
+  const [importNote, setImportNote] = useState<string | null>(null);
+  const [importUsedLLM, setImportUsedLLM] = useState<boolean>(false);
+  const [importPalette, setImportPalette] = useState<string[] | null>(null);
+  const observerRef = useRef<MutationObserver | null>(null);
 
   // Helper function to merge defaults with loaded tokens
   const mergeWithDefaults = (loadedTokens: { name: string; value: string }[]): TokenRow[] => {
@@ -293,19 +305,10 @@ export const DocsThemeEditor: React.FC = () => {
             setTokens(mergeWithDefaults(detailed));
           }
 
-          // Use enhanced preview HTML template
+          // Use real docs app for preview
           if (iframeRef.current) {
             setPreviewLoading(true);
-            const doc = iframeRef.current.contentDocument;
-            if (doc) {
-              doc.open();
-              doc.write(DOCS_PREVIEW_HTML);
-              doc.close();
-            }
-            requestAnimationFrame(() => {
-              applyOverrides();
-              setPreviewLoading(false);
-            });
+            // src will be set via effect based on previewSlug
           }
         } else {
           throw new Error(msg);
@@ -323,17 +326,7 @@ export const DocsThemeEditor: React.FC = () => {
 
         if (iframeRef.current) {
           setPreviewLoading(true);
-          const doc = iframeRef.current.contentDocument;
-          if (doc) {
-            doc.open();
-            // Use the enhanced preview template or fallback to server response
-            doc.write(json.data.docsThemePreviewHtml || DOCS_PREVIEW_HTML);
-            doc.close();
-          }
-          requestAnimationFrame(() => {
-            applyOverrides();
-            setPreviewLoading(false);
-          });
+          // src will be set via effect based on previewSlug
         }
       }
     } catch (e: any) {
@@ -351,6 +344,8 @@ export const DocsThemeEditor: React.FC = () => {
   useEffect(() => {
     load();
   }, []);
+
+  // No separate dropdown; navigate inside the iframe using docs app sidebar/links
 
   async function saveToken(idx: number) {
     setTokens((prev) => prev.map((t, i) => (i === idx ? { ...t, saving: true, error: null } : t)));
@@ -397,21 +392,31 @@ export const DocsThemeEditor: React.FC = () => {
     // Get all tokens with their current values
     const activeTokens = tokens.filter((t) => t.value && t.value.trim() !== '');
     const css = `:root{${activeTokens.map((t) => `--${t.name}:${t.value};`).join('')}}`;
+    const adjustCss = `/* Theme Editor preview adjustments */
+      /* Hide floating debug toggle button inside preview to avoid overlap */
+      .docs-shell > button { display: none !important; }
+    `;
 
     const hash = computeHash(tokens);
-    if (hash === lastAppliedHash) return;
-
-    // Remove existing override styles
+    // If style tag already present with same hash, skip; otherwise (new doc load) continue
     let styleTag = doc.getElementById('override-vars');
-    if (styleTag) {
-      styleTag.remove();
-    }
+    if (hash === lastAppliedHash && styleTag) return;
+    // Remove existing override styles if any
+    if (styleTag) styleTag.remove();
 
     // Create new style tag with current tokens
     styleTag = doc.createElement('style');
     styleTag.id = 'override-vars';
     styleTag.textContent = css;
     doc.head.appendChild(styleTag);
+
+    // Ensure layout adjustments style is present or refreshed
+    let adjustTag = doc.getElementById('theme-preview-adjustments');
+    if (adjustTag) adjustTag.remove();
+    adjustTag = doc.createElement('style');
+    adjustTag.id = 'theme-preview-adjustments';
+    adjustTag.textContent = adjustCss;
+    doc.head.appendChild(adjustTag);
 
     setLastAppliedHash(hash);
 
@@ -421,11 +426,161 @@ export const DocsThemeEditor: React.FC = () => {
       doc.body.offsetHeight; // Force reflow
       doc.body.style.display = '';
     }
+
+    // Ensure our override style stays last in <head> (in case SPA injects styles later)
+    try {
+      if (observerRef.current) observerRef.current.disconnect();
+      const head = doc.head;
+      const ensureLast = () => {
+        const st = doc.getElementById('override-vars');
+        if (st && head.lastElementChild !== st) {
+          head.appendChild(st);
+        }
+      };
+      // Run once immediately
+      ensureLast();
+      const obs = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          if (m.type === 'childList') {
+            // Defer to end of microtask to avoid thrash
+            setTimeout(ensureLast, 0);
+            break;
+          }
+        }
+      });
+      obs.observe(head, { childList: true });
+      observerRef.current = obs;
+    } catch {
+      // best-effort only
+    }
   }
 
   useEffect(() => {
     applyOverrides();
   }, [tokens]);
+
+  // --- Import Theme Logic ---
+  function paletteAutoMap(palette?: string[] | null, existingNames?: Set<string>) {
+    const result: Array<{ name: string; value: string }> = [];
+    if (!palette || !palette.length) return result;
+    const addIfMissing = (name: string, idx: number) => {
+      if (existingNames && existingNames.has(name)) return;
+      const val = palette[idx] ?? palette[0];
+      if (typeof val === 'string' && val.trim()) result.push({ name, value: val.trim() });
+    };
+    // Heuristic mapping
+    addIfMissing('color-primary', 0);
+    addIfMissing('color-primary-hover', 1);
+    addIfMissing('color-primary-light', 3);
+    addIfMissing('color-secondary', 2);
+    // Background/text fallbacks (best-effort)
+    addIfMissing('color-background', 4);
+    addIfMissing('color-text-primary', 5);
+    addIfMissing('color-text-inverse', 6);
+    return result;
+  }
+
+  function applyImportResult(data: any) {
+    setSuggestions(data.tokens || []);
+    setSelectedSuggest(Object.fromEntries((data.tokens || []).map((t: any) => [t.name, true])));
+    setImportNote(data.note || null);
+    setImportUsedLLM(!!data.usedLLM);
+    setImportPalette(data.palette || null);
+
+    // Build combined list: explicit suggestions + palette-based fallbacks for missing key tokens
+    const explicit: Array<{ name: string; value: string }> = (data.tokens || []).filter((t: any) => t && t.name && t.value);
+    const nameSet = new Set(explicit.map((t) => t.name));
+    const paletteMapped = paletteAutoMap(data.palette || null, nameSet);
+    const combined = [...explicit, ...paletteMapped];
+
+    if (combined.length) {
+      setTokens((prev) =>
+        prev.map((t) => {
+          const match = combined.find((s) => s.name === t.name);
+          return match ? { ...t, value: match.value, dirty: true } : t;
+        })
+      );
+    }
+  }
+  async function importFromUrl() {
+    if (!importUrl) return;
+    setImportLoading(true);
+    setImportError(null);
+    try {
+      const res = await authenticatedFetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation($url:String!){ aiImportThemeFromUrl(url:$url){ usedLLM note palette tokens{ name value confidence } } }`,
+          variables: { url: importUrl }
+        })
+      });
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message);
+      const data = json.data.aiImportThemeFromUrl;
+      applyImportResult(data);
+    } catch (e: any) {
+      setImportError(e.message || 'Import failed');
+    } finally {
+      setImportLoading(false);
+    }
+  }
+
+  async function importFromImage() {
+    if (!importImageUrl && !imageBase64) return;
+    setImportLoading(true);
+    setImportError(null);
+    try {
+      const res = await authenticatedFetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation($imageUrl:String,$imageBase64:String){ aiImportThemeFromImage(imageUrl:$imageUrl,imageBase64:$imageBase64){ usedLLM note palette tokens{ name value confidence } } }`,
+          variables: { imageUrl: importImageUrl || null, imageBase64: imageBase64 || null }
+        })
+      });
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message);
+      const data = json.data.aiImportThemeFromImage;
+      applyImportResult(data);
+    } catch (e: any) {
+      setImportError(e.message || 'Import failed');
+    } finally {
+      setImportLoading(false);
+    }
+  }
+
+  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return setImageBase64(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(',')[1] || result; // handle data URL
+      setImageBase64(base64);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function applySelectedSuggestions() {
+    if (!suggestions.length) return;
+    const selected = suggestions.filter((s) => selectedSuggest[s.name]);
+    if (!selected.length) return;
+    setTokens((prev) =>
+      prev.map((t) => {
+        const match = selected.find((s) => s.name === t.name);
+        return match ? { ...t, value: match.value, dirty: true } : t;
+      })
+    );
+  }
+
+  function clearSuggestions() {
+    setSuggestions([]);
+    setSelectedSuggest({});
+    setImportNote(null);
+    setImportPalette(null);
+    setImportUsedLLM(false);
+  }
 
   return (
     <Stack>
@@ -443,6 +598,144 @@ export const DocsThemeEditor: React.FC = () => {
 
       <Group align="flex-start" spacing="lg" grow noWrap>
         <Stack style={{ flex: 1, minWidth: 400 }} spacing="md">
+          {/* Import Theme Section */}
+          <Card withBorder shadow="sm" p="md">
+            <Group position="apart" mb="sm">
+              <Group spacing="xs">
+                <IconPalette size={20} />
+                <Text weight={600}>Import Theme</Text>
+                {importUsedLLM && (
+                  <Badge color="grape" variant="light" radius="sm">
+                    AI assisted
+                  </Badge>
+                )}
+              </Group>
+            </Group>
+            <Stack spacing="xs">
+              <Group align="flex-end" grow>
+                <TextInput
+                  label="From Page URL"
+                  placeholder="https://example.com"
+                  value={importUrl}
+                  onChange={(e) => setImportUrl(e.target.value)}
+                />
+                <Button onClick={importFromUrl} loading={importLoading} disabled={!importUrl}>
+                  Import from URL
+                </Button>
+              </Group>
+              <Group align="flex-end" grow>
+                <TextInput
+                  label="From Image URL (optional)"
+                  placeholder="https://example.com/logo.png"
+                  value={importImageUrl}
+                  onChange={(e) => setImportImageUrl(e.target.value)}
+                />
+                <input type="file" accept="image/*" onChange={onFileChange} />
+                <Button onClick={importFromImage} loading={importLoading} disabled={!importImageUrl && !imageBase64}>
+                  Import from Image
+                </Button>
+              </Group>
+              {importError && (
+                <Alert color="red" title="Import Error">
+                  {importError}
+                </Alert>
+              )}
+              {importPalette && importPalette.length > 0 && (
+                <Group spacing={6}>
+                  <Text size="xs" color="dimmed">
+                    Palette:
+                  </Text>
+                  {importPalette.map((c, idx) => (
+                    <div
+                      key={idx}
+                      title={c}
+                      style={{ width: 18, height: 18, borderRadius: 3, background: c, border: '1px solid #ddd' }}
+                    />
+                  ))}
+                </Group>
+              )}
+              {importNote && (
+                <Text size="xs" color="dimmed">
+                  {importNote}
+                </Text>
+              )}
+            </Stack>
+            {suggestions.length > 0 && (
+              <Card withBorder shadow="xs" p="sm" mt="sm">
+                <Group position="apart" mb="xs">
+                  <Text weight={600} size="sm">
+                    Suggestions ({suggestions.length})
+                  </Text>
+                  <Group spacing={6}>
+                    <Button
+                      size="xs"
+                      variant="light"
+                      onClick={() => setSelectedSuggest(Object.fromEntries(suggestions.map((s) => [s.name, true])))}
+                    >
+                      Select All
+                    </Button>
+                    <Button size="xs" variant="light" onClick={() => setSelectedSuggest({})}>
+                      Clear
+                    </Button>
+                    <Button size="xs" color="green" onClick={applySelectedSuggestions}>
+                      Apply Selected
+                    </Button>
+                    <Button size="xs" variant="outline" onClick={clearSuggestions}>
+                      Dismiss
+                    </Button>
+                  </Group>
+                </Group>
+                <ScrollArea style={{ maxHeight: 220 }}>
+                  <Stack spacing={6}>
+                    {suggestions.map((s) => {
+                      const isColor = /^#|^(rgb|hsl)a?\(/i.test(s.value);
+                      return (
+                        <Group key={s.name} position="apart" align="center" noWrap>
+                          <Group spacing={8} align="center" style={{ minWidth: 0, flex: 1 }}>
+                            <input
+                              type="checkbox"
+                              checked={!!selectedSuggest[s.name]}
+                              onChange={(e) => setSelectedSuggest((prev) => ({ ...prev, [s.name]: e.target.checked }))}
+                              style={{ marginRight: 6 }}
+                            />
+                            <Text
+                              size="sm"
+                              style={{ width: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                            >
+                              {s.name}
+                            </Text>
+                            {isColor && (
+                              <div
+                                title={s.value}
+                                style={{
+                                  width: 16,
+                                  height: 16,
+                                  borderRadius: 3,
+                                  background: s.value,
+                                  border: '1px solid #ddd'
+                                }}
+                              />
+                            )}
+                            <Text size="sm" style={{ fontFamily: 'monospace' }}>
+                              {s.value}
+                            </Text>
+                          </Group>
+                          {typeof s.confidence === 'number' && (
+                            <Badge
+                              color={s.confidence >= 80 ? 'green' : s.confidence >= 50 ? 'yellow' : 'gray'}
+                              variant="light"
+                            >
+                              {s.confidence}%
+                            </Badge>
+                          )}
+                        </Group>
+                      );
+                    })}
+                  </Stack>
+                </ScrollArea>
+              </Card>
+            )}
+          </Card>
           {/* Theme Presets Section */}
           <Card withBorder shadow="sm" p="md">
             <Group position="apart" mb="sm">
@@ -665,7 +958,12 @@ export const DocsThemeEditor: React.FC = () => {
         </Stack>
 
         {/* Preview Panel */}
-        <Card withBorder shadow="sm" p={0} style={{ flex: 2, minHeight: '70vh', position: 'relative' }}>
+        <Card
+          withBorder
+          shadow="sm"
+          p={0}
+          style={{ flex: 2, height: '78vh', minHeight: 480, position: 'relative', display: 'flex', flexDirection: 'column' }}
+        >
           <Group p="sm" position="apart" style={{ borderBottom: '1px solid #eee' }}>
             <Group spacing="xs">
               <IconEye size={16} />
@@ -684,18 +982,40 @@ export const DocsThemeEditor: React.FC = () => {
                   </Tooltip>
                 )}
               </CopyButton>
-              <Button size="xs" variant="outline" onClick={() => load()} leftIcon={<IconRefresh size={14} />}>
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() => {
+                  if (iframeRef.current) {
+                    setPreviewLoading(true);
+                    // Force reload iframe
+                    iframeRef.current.src = iframeRef.current.src;
+                  } else {
+                    load();
+                  }
+                }}
+                leftIcon={<IconRefresh size={14} />}
+              >
                 Reload
               </Button>
             </Group>
           </Group>
-          <div style={{ position: 'relative', height: 'calc(100% - 60px)' }}>
+          <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
             <LoadingOverlay visible={previewLoading} />
             <iframe
               ref={iframeRef}
               title="Docs Theme Preview"
-              style={{ width: '100%', height: '100%', border: '0' }}
+              style={{ display: 'block', width: '100%', height: '100%', border: '0' }}
               sandbox="allow-scripts allow-same-origin"
+              src={'/docs#/home'}
+              onLoad={() => {
+                // Apply overrides after docs app loads
+                try {
+                  applyOverrides();
+                } finally {
+                  setPreviewLoading(false);
+                }
+              }}
             />
           </div>
         </Card>

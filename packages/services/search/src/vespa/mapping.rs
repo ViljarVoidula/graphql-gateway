@@ -402,15 +402,8 @@ pub fn map_search_response(input: SearchInput, vespa: Value, elapsed_ms: i32) ->
         }
     }
 
-    // Suggestions mapping (expects array root.suggestions)
-    let mut suggestions = vec![];
-    if let Some(arr) = root.get("suggestions").and_then(|s| s.as_array()) {
-        for s in arr {
-            if let Some(text) = s.get("text").and_then(|t| t.as_str()) {
-                suggestions.push(Suggestion { text: text.to_string(), r#type: SuggestType::Term, score: s.get("score").and_then(|x| x.as_f64()).map(|f| f as f32) });
-            }
-        }
-    }
+    // Suggestions retired from Vespa mapping; will be populated by Redis autocomplete in resolver.
+    let suggestions = vec![];
 
     // Fallback: enrich range facet counts from result set if Vespa returned zeros
     if !facets.is_empty() {

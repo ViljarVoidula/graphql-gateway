@@ -7,3 +7,4 @@ pub mod indexer;
 pub mod embeddings;
 pub mod metrics;
 pub mod index_config;
+pub mod autocomplete;

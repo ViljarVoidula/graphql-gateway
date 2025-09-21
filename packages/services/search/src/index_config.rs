@@ -21,6 +21,7 @@ pub struct IndexConfig {
     pub application_id: String,
     pub active_model: Option<String>,
     pub vector_fields: Vec<VectorFieldConfig>,
+    pub autocomplete_paths: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -40,7 +41,7 @@ pub async fn get_index_config_cached(app_id: &str, base_url_opt: Option<&str>) -
         }
     }
     // Need to fetch fresh
-    let query = r#"query GetIndexConfig($applicationId: String!) { indexConfig(applicationId: $applicationId) { id tenantId clusterId applicationId activeModel vectorFields { name weight dimensions } } }"#;
+    let query = r#"query GetIndexConfig($applicationId: String!) { indexConfig(applicationId: $applicationId) { id tenantId clusterId applicationId activeModel vectorFields { name weight dimensions } autocompletePaths } }"#;
     let body = serde_json::json!({
         "query": query,
         "variables": {"applicationId": app_id}
@@ -62,6 +63,8 @@ pub async fn get_index_config_cached(app_id: &str, base_url_opt: Option<&str>) -
                 dimensions: vf.get("dimensions").and_then(|d| d.as_i64()).unwrap_or(768) as i32,
             })
         }).collect();
+    let autocomplete_paths: Vec<String> = idx.get("autocompletePaths").and_then(|v| v.as_array()).unwrap_or(&Vec::new())
+        .iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect();
     let cfg = IndexConfig { 
         id: idx.get("id").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
         tenant_id: idx.get("tenantId").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
@@ -69,6 +72,7 @@ pub async fn get_index_config_cached(app_id: &str, base_url_opt: Option<&str>) -
         application_id: idx.get("applicationId").and_then(|v| v.as_str()).unwrap_or_else(|| app_id).to_string(),
         active_model: idx.get("activeModel").and_then(|v| v.as_str()).map(|s| s.to_string()),
         vector_fields,
+        autocomplete_paths,
     };
     {
         let mut guard = CACHE.lock().unwrap();
@@ -103,7 +107,7 @@ mod tests {
         let cfg = IndexConfig { id: "1".into(), tenant_id: "t".into(), cluster_id: "c".into(), application_id: "a".into(), active_model: None, vector_fields: vec![
             VectorFieldConfig { name: "name".into(), weight: 0.5, dimensions: 10 },
             VectorFieldConfig { name: "categories".into(), weight: 0.5, dimensions: 10 }
-        ]};
+        ], autocomplete_paths: vec![] };
         let doc = serde_json::json!({"name": "Cool Shoe", "categories": ["shoe","sport"], "other": "x"});
         let wt = build_weighted_texts(&doc, &cfg).unwrap();
         assert_eq!(wt.len(), 2);

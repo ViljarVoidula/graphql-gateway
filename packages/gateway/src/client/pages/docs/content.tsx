@@ -24,7 +24,9 @@ import {
   IconFileText,
   IconMaximize,
   IconPlus,
-  IconSearch
+  IconSearch,
+  IconTrash,
+  IconWand
 } from '@tabler/icons-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { authenticatedFetch } from '../../utils/auth';
@@ -107,8 +109,10 @@ export const DocsContentManager: React.FC = () => {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [duplicateDoc, setDuplicateDoc] = useState<DocItem | null>(null);
   const [archiveDoc, setArchiveDoc] = useState<DocItem | null>(null);
+  const [deleteDoc, setDeleteDoc] = useState<DocItem | null>(null);
   const [newDocSlug, setNewDocSlug] = useState('');
   const [newDocTitle, setNewDocTitle] = useState('');
   const [duplicateSlug, setDuplicateSlug] = useState('');
@@ -121,6 +125,7 @@ export const DocsContentManager: React.FC = () => {
   const [duplicating, setDuplicating] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Live preview state
   const [compiledElement, setCompiledElement] = useState<React.ReactNode>(null);
@@ -130,11 +135,57 @@ export const DocsContentManager: React.FC = () => {
   const mdxRuntimeRef = useRef<any>(null); // cache for imported mdx compiler
   const [clientReady, setClientReady] = useState(false);
   const [themeCSS, setThemeCSS] = useState<string>('');
+  const scopedThemeCSS = useMemo(() => {
+    if (!themeCSS) return '';
+    const scope = '.mdx-preview';
+    try {
+      // Prefix non-at-rule selectors with the scope. Works inside @media blocks too because of the leading '}' alternative.
+      // Pattern: (start of string or '}') followed by optional whitespace, then a selector group not starting with @ or {, until '{'
+      const re = /(^|\})\s*([^@{}][^{]+)\{/gm;
+      return themeCSS.replace(re, (m, p1, selectors) => {
+        // Split selectors by comma and prefix each
+        const scoped = selectors
+          .split(',')
+          .map((sel: string) => sel.trim())
+          .filter((sel: string) => sel.length > 0)
+          .map((sel: string) => (sel.startsWith(scope) ? sel : `${scope} ${sel}`))
+          .join(', ');
+        return `${p1} ${scoped}{`;
+      });
+    } catch {
+      return themeCSS; // fallback unscoped if something goes wrong
+    }
+  }, [themeCSS]);
   const [fullscreenPreview, setFullscreenPreview] = useState(false);
   // Editor mode & parse errors
   const [parseError, setParseError] = useState<string | null>(null);
   const [sourceMode, setSourceMode] = useState<boolean>(false);
   const autoForcedRef = useRef(false);
+  // Inline rename state
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [editingSlug, setEditingSlug] = useState(false);
+  const [titleInput, setTitleInput] = useState('');
+  const [slugInput, setSlugInput] = useState('');
+  const [renaming, setRenaming] = useState(false);
+  // AI Assist state
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiInstruction, setAiInstruction] = useState(
+    'Draft a Quickstart section with a minimal query, curl, and integration snippets.'
+  );
+  const [aiMode, setAiMode] = useState<'APPEND' | 'REPLACE' | 'SECTION'>('APPEND');
+  const [aiStyle, setAiStyle] = useState<'CONCISE' | 'TUTORIAL' | 'REFERENCE' | 'MARKETING'>('CONCISE');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiPreview, setAiPreview] = useState<string>('');
+  const [editorSelection, setEditorSelection] = useState<string>('');
+  // Split view state (resizable divider between editor and preview)
+  const [paneRatio, setPaneRatio] = useState<number>(() => {
+    const saved = typeof window !== 'undefined' ? window.localStorage.getItem('docs.paneRatio') : null;
+    const v = saved ? parseFloat(saved) : 0.5;
+    return Number.isFinite(v) && v > 0.15 && v < 0.85 ? v : 0.5;
+  });
+  const isResizingRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   // Normalization info
   const [normalizationApplied, setNormalizationApplied] = useState<number>(0);
   const [persistingNormalization, setPersistingNormalization] = useState<boolean>(false);
@@ -203,6 +254,13 @@ export const DocsContentManager: React.FC = () => {
     return () => window.clearTimeout(t);
   }, [normalizationPersistedAt]);
 
+  // Persist pane ratio
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('docs.paneRatio', String(paneRatio));
+    } catch {}
+  }, [paneRatio]);
+
   // Render preview content with proper styling
   const renderPreview = (isFullscreen = false) => {
     if (!compiledElement && !previewError) {
@@ -222,8 +280,8 @@ export const DocsContentManager: React.FC = () => {
     }
 
     return (
-      <div className="mdx-preview" style={{ width: '100%', lineHeight: 1.5 }}>
-        <style dangerouslySetInnerHTML={{ __html: themeCSS }} />
+      <div className="mdx-preview" style={{ width: '100%', lineHeight: 1.5, overflowX: 'hidden' }}>
+        <style dangerouslySetInnerHTML={{ __html: scopedThemeCSS }} />
         <div
           className="doc-article"
           style={{
@@ -237,18 +295,23 @@ export const DocsContentManager: React.FC = () => {
             margin: isFullscreen ? '0 auto' : '0',
             minHeight: isFullscreen ? 'calc(100vh - 4rem)' : 'auto',
             wordWrap: 'break-word',
-            overflowWrap: 'break-word'
+            overflowWrap: 'break-word',
+            width: '100%',
+            boxSizing: 'border-box'
           }}
         >
           <style
             dangerouslySetInnerHTML={{
               __html: `
+            .mdx-preview { overflow-x: hidden !important; }
             .mdx-preview .doc-article h1 {
               font-size: var(--font-size-2xl, 1.5rem) !important;
               font-weight: var(--font-weight-bold, 700) !important;
               color: var(--color-primary, #3b82f6) !important;
               margin: 0 0 var(--spacing-lg, 1.5rem) 0 !important;
               line-height: var(--line-height-tight, 1.25) !important;
+              word-break: break-word !important;
+              overflow-wrap: anywhere !important;
             }
             .mdx-preview .doc-article h2 {
               font-size: var(--font-size-xl, 1.25rem) !important;
@@ -256,17 +319,23 @@ export const DocsContentManager: React.FC = () => {
               color: var(--color-text-primary, #1f2937) !important;
               margin: var(--spacing-xl, 2rem) 0 var(--spacing-md, 1rem) 0 !important;
               line-height: var(--line-height-tight, 1.25) !important;
+              word-break: break-word !important;
+              overflow-wrap: anywhere !important;
             }
             .mdx-preview .doc-article h3 {
               font-size: var(--font-size-lg, 1.125rem) !important;
               font-weight: var(--font-weight-semibold, 600) !important;
               color: var(--color-text-primary, #1f2937) !important;
               margin: var(--spacing-lg, 1.5rem) 0 var(--spacing-sm, 0.5rem) 0 !important;
+              word-break: break-word !important;
+              overflow-wrap: anywhere !important;
             }
             .mdx-preview .doc-article p {
               margin: 0 0 var(--spacing-md, 1rem) 0 !important;
               color: var(--color-text-secondary, #6b7280) !important;
               line-height: var(--line-height-normal, 1.5) !important;
+              word-break: break-word !important;
+              overflow-wrap: anywhere !important;
             }
             .mdx-preview .doc-article ul, .mdx-preview .doc-article ol {
               margin: 0 0 var(--spacing-md, 1rem) 0 !important;
@@ -276,6 +345,8 @@ export const DocsContentManager: React.FC = () => {
             .mdx-preview .doc-article li {
               margin-bottom: var(--spacing-xs, 0.25rem) !important;
               line-height: var(--line-height-normal, 1.5) !important;
+              word-break: break-word !important;
+              overflow-wrap: anywhere !important;
             }
             .mdx-preview .doc-article a {
               color: var(--color-primary, #3b82f6) !important;
@@ -291,6 +362,9 @@ export const DocsContentManager: React.FC = () => {
               font-size: var(--font-size-sm, 0.875rem) !important;
               font-family: var(--font-family-mono, monospace) !important;
               color: var(--color-primary, #3b82f6) !important;
+              white-space: normal !important;
+              word-break: break-word !important;
+              overflow-wrap: anywhere !important;
             }
             .mdx-preview .doc-article pre {
               background-color: var(--color-background-code, #1e293b) !important;
@@ -301,12 +375,16 @@ export const DocsContentManager: React.FC = () => {
               font-family: var(--font-family-mono, monospace) !important;
               font-size: var(--font-size-sm, 0.875rem) !important;
               margin: var(--spacing-lg, 1.5rem) 0 !important;
+              max-width: 100% !important;
             }
             .mdx-preview .doc-article pre code {
               background: none !important;
               padding: 0 !important;
               color: inherit !important;
+              white-space: pre !important;
             }
+            .mdx-preview .doc-article table { max-width: 100% !important; display: block; overflow-x: auto; }
+            .mdx-preview .doc-article img { max-width: 100% !important; height: auto !important; }
             .mdx-preview .doc-article blockquote {
               margin: var(--spacing-lg, 1.5rem) 0 !important;
               padding: var(--spacing-md, 1rem) var(--spacing-lg, 1.5rem) !important;
@@ -314,6 +392,9 @@ export const DocsContentManager: React.FC = () => {
               background-color: var(--color-primary-light, #dbeafe) !important;
               color: var(--color-text-primary, #1f2937) !important;
               border-radius: 0 var(--border-radius-md, 0.375rem) var(--border-radius-md, 0.375rem) 0 !important;
+            }
+            .mdx-preview .doc-article *, .mdx-preview .doc-article *::before, .mdx-preview .doc-article *::after {
+              min-width: 0 !important;
             }
           `
             }}
@@ -354,37 +435,65 @@ export const DocsContentManager: React.FC = () => {
 
   // Load documents
   const loadDocs = useCallback(async (): Promise<DocItem[] | null> => {
-    setLoading(true);
-    setError(null);
     try {
       const res = await authenticatedFetch('/graphql', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: `query DocsWithLatest { docsWithLatestRevision { id slug title status latestRevision { id version state mdxRaw updatedAt publishedAt } } }`
+          query: `query Docs {
+            docsWithLatestRevision {
+              id
+              slug
+              title
+              status
+              latestRevision { id version state mdxRaw updatedAt publishedAt }
+            }
+          }`
         })
       });
       const json = await res.json();
       if (json.errors) throw new Error(json.errors[0].message);
       const list: DocItem[] = json.data.docsWithLatestRevision;
       setDocs(list);
+      setError(null);
       return list;
     } catch (e: any) {
       setError(e.message || 'Failed to load docs');
       return null;
-    } finally {
-      setLoading(false);
     }
   }, []);
 
+  // Kick off initial load
   useEffect(() => {
-    loadDocs();
+    let mounted = true;
+    (async () => {
+      setLoading(true);
+      const list = await loadDocs();
+      if (!mounted) return;
+      setLoading(false);
+      // If there is an active doc id referenced but no list loaded, clear active to reveal empty state
+      if (!list || list.length === 0) {
+        setActive(null);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
   }, [loadDocs]);
 
-  // Persist normalization (replace active.mdx with normalized version & save)
+  // Helper to refresh with spinner on demand
+  const refreshDocs = useCallback(async () => {
+    setLoading(true);
+    try {
+      await loadDocs();
+    } finally {
+      setLoading(false);
+    }
+  }, [loadDocs]);
+
+  // Persist normalized code fence languages into current revision
   const persistNormalization = useCallback(async () => {
     if (!active) return;
-    if (normalizationApplied === 0 || active.mdx === editorMarkdown) return;
     setPersistingNormalization(true);
     try {
       const normalized = editorMarkdown;
@@ -393,7 +502,9 @@ export const DocsContentManager: React.FC = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            query: `mutation CreateDoc($input:CreateDocumentInput!){ createDocument(input:$input){ id version state mdxRaw } }`,
+            query: `mutation CreateDoc($input:CreateDocumentInput!){
+              createDocument(input:$input){ id version state mdxRaw }
+            }`,
             variables: { input: { slug: active.document.slug, title: active.document.title, mdxRaw: normalized } }
           })
         });
@@ -418,7 +529,9 @@ export const DocsContentManager: React.FC = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            query: `mutation UpdateRev($input:UpdateRevisionInput!){ updateRevision(input:$input){ id version state } }`,
+            query: `mutation UpdateRev($input:UpdateRevisionInput!){
+              updateRevision(input:$input){ id version state }
+            }`,
             variables: { input: { revisionId: active.revisionId, mdxRaw: normalized } }
           })
         });
@@ -433,7 +546,7 @@ export const DocsContentManager: React.FC = () => {
     } finally {
       setPersistingNormalization(false);
     }
-  }, [active, normalizationApplied, editorMarkdown, loadDocs]);
+  }, [active, editorMarkdown, loadDocs]);
 
   // Derived filtered list
   const filteredDocs = useMemo(() => {
@@ -492,6 +605,65 @@ export const DocsContentManager: React.FC = () => {
       setError(e.message || 'Failed to save');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveTitleInline() {
+    if (!active) return;
+    const newTitle = titleInput.trim();
+    if (!newTitle || newTitle === active.document.title) {
+      setEditingTitle(false);
+      return;
+    }
+    setRenaming(true);
+    try {
+      const res = await authenticatedFetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation UpdateRev($input:UpdateRevisionInput!){ updateRevision(input:$input){ id } }`,
+          variables: { input: { revisionId: active.revisionId, title: newTitle } }
+        })
+      });
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message);
+      await loadDocs();
+      setActive((prev) => (prev ? { ...prev, document: { ...prev.document, title: newTitle } } : prev));
+      setEditingTitle(false);
+    } catch (e: any) {
+      setError(e.message || 'Failed to rename title');
+    } finally {
+      setRenaming(false);
+    }
+  }
+
+  async function saveSlugInline() {
+    if (!active) return;
+    const newSlug = slugInput.trim();
+    if (!newSlug || newSlug === active.document.slug) {
+      setEditingSlug(false);
+      return;
+    }
+    setRenaming(true);
+    try {
+      const res = await authenticatedFetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation UpdateDoc($input:UpdateDocumentInput!){ updateDocument(input:$input){ id slug title } }`,
+          variables: { input: { documentId: active.document.id, slug: newSlug } }
+        })
+      });
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message);
+      const updated = json.data.updateDocument;
+      await loadDocs();
+      setActive((prev) => (prev ? { ...prev, document: { ...prev.document, slug: updated.slug } } : prev));
+      setEditingSlug(false);
+    } catch (e: any) {
+      setError(e.message || 'Failed to rename slug');
+    } finally {
+      setRenaming(false);
     }
   }
 
@@ -715,6 +887,30 @@ export const DocsContentManager: React.FC = () => {
     }
   }
 
+  async function hardDelete(doc: DocItem) {
+    setDeleting(true);
+    try {
+      const res = await authenticatedFetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation Del($id:String!){ deleteDocument(documentId:$id) }`,
+          variables: { id: doc.id }
+        })
+      });
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message);
+      if (active?.document.id === doc.id) setActive(null);
+      await loadDocs();
+      setDeleteModalOpen(false);
+      setDeleteDoc(null);
+    } catch (e: any) {
+      setError(e.message || 'Delete failed');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   // Debounced MDX compilation for live preview
   useEffect(() => {
     if (!clientReady) return; // wait until mounted
@@ -809,7 +1005,7 @@ export const DocsContentManager: React.FC = () => {
           {error}
         </Alert>
       )}
-      <div style={{ display: 'flex', gap: '1rem', height: 'calc(100vh - 200px)' }}>
+      <div style={{ display: 'flex', gap: '1rem', height: 'calc(100vh - 200px)', overflowX: 'hidden' }}>
         {/* Left column: list */}
         <div style={{ width: 320, display: 'flex', flexDirection: 'column' }}>
           <Card withBorder p="sm" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -824,7 +1020,7 @@ export const DocsContentManager: React.FC = () => {
                   </Button>
                 </Tooltip>
                 <Tooltip label="Reload">
-                  <Button variant="subtle" size="xs" onClick={loadDocs} compact>
+                  <Button variant="subtle" size="xs" onClick={refreshDocs} compact>
                     ↻
                   </Button>
                 </Tooltip>
@@ -839,7 +1035,12 @@ export const DocsContentManager: React.FC = () => {
               mb={6}
             />
             {loading && <Loader size="sm" />}
-            {!loading && (
+            {!loading && filteredDocs.length === 0 && (
+              <Text size="sm" color="dimmed">
+                No documents found.
+              </Text>
+            )}
+            {!loading && filteredDocs.length > 0 && (
               <ScrollArea style={{ flex: 1 }}>
                 <Stack spacing={4}>
                   {filteredDocs.map((d) => {
@@ -912,38 +1113,74 @@ export const DocsContentManager: React.FC = () => {
                             </Tooltip>
                           </Group>
                           {d.status !== 'ARCHIVED' ? (
-                            <Tooltip label="Archive">
-                              <Button
-                                size="xs"
-                                variant="subtle"
-                                color="red"
-                                compact
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setArchiveDoc(d);
-                                  setArchiveModalOpen(true);
-                                }}
-                                loading={archiving}
-                              >
-                                <IconArchive size={14} />
-                              </Button>
-                            </Tooltip>
+                            <Group spacing={4}>
+                              <Tooltip label="Archive">
+                                <Button
+                                  size="xs"
+                                  variant="subtle"
+                                  color="red"
+                                  compact
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setArchiveDoc(d);
+                                    setArchiveModalOpen(true);
+                                  }}
+                                  loading={archiving}
+                                >
+                                  <IconArchive size={14} />
+                                </Button>
+                              </Tooltip>
+                              <Tooltip label="Delete permanently">
+                                <Button
+                                  size="xs"
+                                  variant="subtle"
+                                  color="red"
+                                  compact
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteDoc(d);
+                                    setDeleteModalOpen(true);
+                                  }}
+                                  loading={deleting}
+                                >
+                                  <IconTrash size={14} />
+                                </Button>
+                              </Tooltip>
+                            </Group>
                           ) : (
-                            <Tooltip label="Restore">
-                              <Button
-                                size="xs"
-                                variant="subtle"
-                                color="green"
-                                compact
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  restore(d);
-                                }}
-                                loading={restoring}
-                              >
-                                <IconArrowBackUp size={14} />
-                              </Button>
-                            </Tooltip>
+                            <Group spacing={4}>
+                              <Tooltip label="Restore">
+                                <Button
+                                  size="xs"
+                                  variant="subtle"
+                                  color="green"
+                                  compact
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    restore(d);
+                                  }}
+                                  loading={restoring}
+                                >
+                                  <IconArrowBackUp size={14} />
+                                </Button>
+                              </Tooltip>
+                              <Tooltip label="Delete permanently">
+                                <Button
+                                  size="xs"
+                                  variant="subtle"
+                                  color="red"
+                                  compact
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteDoc(d);
+                                    setDeleteModalOpen(true);
+                                  }}
+                                  loading={deleting}
+                                >
+                                  <IconTrash size={14} />
+                                </Button>
+                              </Tooltip>
+                            </Group>
                           )}
                         </Group>
                       </Card>
@@ -961,20 +1198,91 @@ export const DocsContentManager: React.FC = () => {
           <Card withBorder p="sm" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
             {active ? (
               <>
-                <Group position="apart" mb="sm" align="flex-start">
-                  <Stack spacing={2} style={{ flex: 1 }}>
+                <Group position="apart" mb="sm" align="flex-start" style={{ flexWrap: 'wrap', rowGap: 8 }}>
+                  <Stack spacing={2} style={{ flex: '1 1 auto', minWidth: 0 }}>
                     <Title order={4} style={{ marginBottom: 0 }}>
-                      {active.document.title}{' '}
+                      {editingTitle ? (
+                        <TextInput
+                          size="xs"
+                          value={titleInput}
+                          onChange={(e) => setTitleInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') saveTitleInline();
+                            if (e.key === 'Escape') setEditingTitle(false);
+                          }}
+                          onBlur={saveTitleInline}
+                          autoFocus
+                          style={{ maxWidth: 'min(720px, 100%)', width: '100%', display: 'inline-block' }}
+                        />
+                      ) : (
+                        <span
+                          style={{ cursor: 'text', overflowWrap: 'anywhere', wordBreak: 'break-word', whiteSpace: 'normal' }}
+                          onClick={() => {
+                            setTitleInput(active.document.title);
+                            setEditingTitle(true);
+                          }}
+                          title="Click to rename title"
+                        >
+                          {active.document.title}
+                        </span>
+                      )}{' '}
                       {active.state === 'DRAFT' && (
                         <Badge color={active.dirty ? 'yellow' : 'blue'}>{active.dirty ? 'Unsaved Draft' : 'Draft'}</Badge>
                       )}
                       {active.state === 'PUBLISHED' && <Badge color="green">Published v{active.version}</Badge>}
                     </Title>
                     <Text size="xs" color="dimmed">
-                      slug: {active.document.slug} • version: {active.version}
+                      slug:{' '}
+                      {editingSlug ? (
+                        <TextInput
+                          size="xs"
+                          value={slugInput}
+                          onChange={(e) => setSlugInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') saveSlugInline();
+                            if (e.key === 'Escape') setEditingSlug(false);
+                          }}
+                          onBlur={saveSlugInline}
+                          autoFocus
+                          style={{ maxWidth: 'min(360px, 100%)', width: '100%', display: 'inline-block' }}
+                        />
+                      ) : (
+                        <span
+                          style={{ cursor: 'text', textDecoration: 'underline dotted' }}
+                          onClick={() => {
+                            setSlugInput(active.document.slug);
+                            setEditingSlug(true);
+                          }}
+                          title="Click to rename slug"
+                        >
+                          {active.document.slug}
+                        </span>
+                      )}{' '}
+                      • version: {active.version}
                     </Text>
                   </Stack>
-                  <Group spacing={6}>
+                  <Group spacing={6} style={{ flexShrink: 0 }}>
+                    <Tooltip label="AI Assist (generate or improve content)">
+                      <Button
+                        size="xs"
+                        variant="light"
+                        leftIcon={<IconWand size={14} />}
+                        onClick={() => {
+                          try {
+                            const sel = window.getSelection?.()?.toString?.() || '';
+                            setEditorSelection(sel);
+                          } catch {}
+                          setAiOpen(true);
+                        }}
+                      >
+                        AI Assist
+                      </Button>
+                    </Tooltip>
+                    {renaming && (
+                      <Badge color="violet" variant="light">
+                        Renaming…
+                      </Badge>
+                    )}
                     {normalizationApplied > 0 && !parseError && active.mdx !== editorMarkdown && (
                       <Tooltip label="Persist normalized code fence languages (aliases → canonical)">
                         <Button
@@ -1026,6 +1334,7 @@ export const DocsContentManager: React.FC = () => {
 
                 {/* Responsive Editor and Preview Layout */}
                 <div
+                  ref={containerRef}
                   className="editor-preview-container"
                   style={{
                     flex: 1,
@@ -1039,23 +1348,14 @@ export const DocsContentManager: React.FC = () => {
                     @media (min-width: 1200px) {
                       .editor-preview-container {
                         flex-direction: row !important;
-                        flex-wrap: wrap !important;
+                        flex-wrap: nowrap !important;
                         height: 600px !important;
                       }
-                      .editor-section {
-                        flex: 1 !important;
-                        min-width: 0 !important;
-                        height: 100% !important;
-                        display: flex !important;
-                        flex-direction: column !important;
-                      }
-                      .preview-section {
-                        flex: 1 !important;
-                        min-width: 0 !important;
-                        height: 100% !important;
-                        display: flex !important;
-                        flex-direction: column !important;
-                      }
+                      .editor-section { min-width: 0 !important; height: 100% !important; display: flex !important; flex-direction: column !important; }
+                      .preview-section { min-width: 0 !important; height: 100% !important; display: flex !important; flex-direction: column !important; }
+                      .split-resizer { width: 8px; cursor: col-resize; background: var(--mantine-color-gray-3); border-left: 1px solid var(--mantine-color-gray-4); border-right: 1px solid var(--mantine-color-gray-4); }
+                      .split-resizer:hover { background: var(--mantine-color-gray-4); }
+                      .split-resizer.active { background: var(--mantine-color-blue-1); }
                       .toc-section {
                         flex: 1 1 100% !important;
                         order: 3 !important;
@@ -1065,17 +1365,24 @@ export const DocsContentManager: React.FC = () => {
                       .editor-preview-container {
                         max-height: 80vh !important;
                       }
-                      .editor-section {
-                        max-height: 40vh !important;
-                      }
-                      .preview-section {
-                        max-height: 40vh !important;
-                      }
+                      .editor-section { max-height: 40vh !important; }
+                      .preview-section { max-height: 40vh !important; }
+                      .split-resizer { display: none !important; }
                     }
                   `}</style>
 
                   {/* Editor Section */}
-                  <div className="editor-section" style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                  <div
+                    className="editor-section"
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      minHeight: 0,
+                      flexBasis: `calc(${paneRatio * 100}% - 4px)`,
+                      flexGrow: 0,
+                      flexShrink: 0
+                    }}
+                  >
                     <Text size="xs" color="dimmed" mb={4}>
                       MDX Editor
                     </Text>
@@ -1129,7 +1436,37 @@ export const DocsContentManager: React.FC = () => {
                                 line-height: 1.5 !important;
                                 min-height: 300px !important;
                                 overflow-y: auto !important;
+                                overflow-x: hidden !important;
+                                word-break: break-word !important;
+                                overflow-wrap: anywhere !important;
                                 padding: 0 0 1rem 0 !important;
+                              }
+                              /* Ensure CodeMirror code blocks don't expand the page width */
+                              .mdx-editor-wrapper .cm-editor {
+                                max-width: 100% !important;
+                              }
+                              .mdx-editor-wrapper .cm-scroller {
+                                overflow: auto !important;
+                                max-width: 100% !important;
+                              }
+                              .mdx-editor-wrapper .cm-content {
+                                min-width: 0 !important;
+                                word-break: break-word !important;
+                                overflow-wrap: anywhere !important;
+                              }
+                              /* Inline code and tables/images inside editor */
+                              .mdx-editor-wrapper .mdx-editor-content code {
+                                white-space: pre-wrap !important;
+                                word-break: break-word !important;
+                              }
+                              .mdx-editor-wrapper .mdx-editor-content table {
+                                display: block !important;
+                                max-width: 100% !important;
+                                overflow-x: auto !important;
+                              }
+                              .mdx-editor-wrapper .mdx-editor-content img {
+                                max-width: 100% !important;
+                                height: auto !important;
                               }
                               .mdx-editor-wrapper .mdx-editor .mdx-toolbar {
                                 border-bottom: 1px solid var(--mantine-color-gray-4) !important;
@@ -1216,8 +1553,45 @@ export const DocsContentManager: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Resizer (only meaningful on large screens) */}
+                  <div
+                    className="split-resizer"
+                    role="separator"
+                    aria-orientation="vertical"
+                    onMouseDown={(e) => {
+                      isResizingRef.current = true;
+                      (e.currentTarget as HTMLDivElement).classList.add('active');
+                      const onMove = (ev: MouseEvent) => {
+                        if (!isResizingRef.current || !containerRef.current) return;
+                        const rect = containerRef.current.getBoundingClientRect();
+                        let ratio = (ev.clientX - rect.left) / rect.width;
+                        ratio = Math.max(0.2, Math.min(0.8, ratio));
+                        setPaneRatio(ratio);
+                      };
+                      const onUp = () => {
+                        isResizingRef.current = false;
+                        (e.currentTarget as HTMLDivElement).classList.remove('active');
+                        window.removeEventListener('mousemove', onMove);
+                        window.removeEventListener('mouseup', onUp);
+                      };
+                      window.addEventListener('mousemove', onMove);
+                      window.addEventListener('mouseup', onUp);
+                    }}
+                    onDoubleClick={() => setPaneRatio(0.5)}
+                  />
+
                   {/* Preview Section */}
-                  <div className="preview-section" style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                  <div
+                    className="preview-section"
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      minHeight: 0,
+                      flexBasis: `calc(${(1 - paneRatio) * 100}% - 4px)`,
+                      flexGrow: 0,
+                      flexShrink: 0
+                    }}
+                  >
                     <Group position="apart" mb={4} spacing={4} align="center">
                       <Text size="xs" color="dimmed">
                         Live Preview
@@ -1251,7 +1625,9 @@ export const DocsContentManager: React.FC = () => {
                         flexDirection: 'column'
                       }}
                     >
-                      <div style={{ flex: 1, overflow: 'auto' }}>{renderPreview()}</div>
+                      <div key={active?.revisionId || active?.document.id} style={{ flex: 1, overflow: 'auto' }}>
+                        {renderPreview()}
+                      </div>
                     </Card>
                   </div>
 
@@ -1490,6 +1866,40 @@ export const DocsContentManager: React.FC = () => {
         </Stack>
       </Modal>
 
+      {/* Delete Document Modal */}
+      <Modal
+        opened={deleteModalOpen}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setDeleteDoc(null);
+        }}
+        title="Delete Document"
+        size="md"
+      >
+        <Stack spacing="md">
+          <Alert color="red" title="This action is permanent" variant="filled">
+            <Text size="sm">
+              You are about to permanently delete "{deleteDoc?.title}". This will remove the document, all its revisions, and
+              any search index entries. This cannot be undone.
+            </Text>
+          </Alert>
+          <Group position="right" spacing="sm">
+            <Button
+              variant="subtle"
+              onClick={() => {
+                setDeleteModalOpen(false);
+                setDeleteDoc(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button color="red" onClick={() => deleteDoc && hardDelete(deleteDoc)} loading={deleting}>
+              Delete Permanently
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
       {/* Fullscreen Preview Modal */}
       <Modal
         opened={fullscreenPreview}
@@ -1522,6 +1932,197 @@ export const DocsContentManager: React.FC = () => {
         >
           {renderPreview(true)}
         </div>
+      </Modal>
+
+      {/* AI Assist Modal */}
+      <Modal opened={aiOpen} onClose={() => setAiOpen(false)} title="AI Assist" size="xl">
+        <Stack spacing="md">
+          <Text size="sm" color="dimmed">
+            Describe what you’d like to generate or improve. Choose Append to add a new section, Replace to rewrite the page, or
+            Improve Selection to only modify highlighted text.
+          </Text>
+          <TextInput
+            label="Instruction"
+            placeholder="e.g., Add a Troubleshooting section with common errors and fixes"
+            value={aiInstruction}
+            onChange={(e) => setAiInstruction(e.target.value)}
+          />
+          <Group spacing="sm" align="center">
+            <Text size="sm">Mode:</Text>
+            <Button size="xs" variant={aiMode === 'APPEND' ? 'filled' : 'light'} onClick={() => setAiMode('APPEND')}>
+              Append
+            </Button>
+            <Button size="xs" variant={aiMode === 'REPLACE' ? 'filled' : 'light'} onClick={() => setAiMode('REPLACE')}>
+              Replace
+            </Button>
+            <Button size="xs" variant={aiMode === 'SECTION' ? 'filled' : 'light'} onClick={() => setAiMode('SECTION')}>
+              Improve Selection
+            </Button>
+            <Divider orientation="vertical" />
+            <Text size="sm">Style:</Text>
+            <Button size="xs" variant={aiStyle === 'CONCISE' ? 'filled' : 'light'} onClick={() => setAiStyle('CONCISE')}>
+              Concise
+            </Button>
+            <Button size="xs" variant={aiStyle === 'TUTORIAL' ? 'filled' : 'light'} onClick={() => setAiStyle('TUTORIAL')}>
+              Tutorial
+            </Button>
+            <Button size="xs" variant={aiStyle === 'REFERENCE' ? 'filled' : 'light'} onClick={() => setAiStyle('REFERENCE')}>
+              Reference
+            </Button>
+            <Button size="xs" variant={aiStyle === 'MARKETING' ? 'filled' : 'light'} onClick={() => setAiStyle('MARKETING')}>
+              Marketing-lite
+            </Button>
+          </Group>
+          <Group spacing="xs">
+            <Text size="xs" color="dimmed">
+              Presets:
+            </Text>
+            <Button
+              size="xs"
+              variant="subtle"
+              onClick={() => setAiInstruction('Draft a Quickstart with a minimal GraphQL query, curl, and environment setup.')}
+            >
+              Quickstart
+            </Button>
+            <Button
+              size="xs"
+              variant="subtle"
+              onClick={() =>
+                setAiInstruction(
+                  'Add Integration Guides with TypeScript (fetch), Python (requests), Java (HttpClient), and PHP (cURL).'
+                )
+              }
+            >
+              Integrations
+            </Button>
+            <Button
+              size="xs"
+              variant="subtle"
+              onClick={() => setAiInstruction('Create a Troubleshooting section with 5 common errors, causes, and fixes.')}
+            >
+              Troubleshooting
+            </Button>
+            <Button
+              size="xs"
+              variant="subtle"
+              onClick={() => setAiInstruction('Add a concise FAQ section answering 5 frequent questions.')}
+            >
+              FAQ
+            </Button>
+          </Group>
+          {aiMode === 'SECTION' && (
+            <Text size="xs" color="dimmed">
+              Selection: {editorSelection ? `${editorSelection.length} characters selected` : 'No selection detected'}
+            </Text>
+          )}
+          <Group position="right" spacing="sm">
+            <Button
+              onClick={async () => {
+                if (!active) return;
+                setAiLoading(true);
+                setAiError(null);
+                setAiPreview('');
+                try {
+                  const currentMdx = aiMode === 'SECTION' && editorSelection ? editorSelection : active.mdx;
+                  const res = await authenticatedFetch('/graphql', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      query: `mutation Assist($input:AIDocAssistInput!){ aiDocAssist(input:$input){ snippet usedLLM note } }`,
+                      variables: {
+                        input: {
+                          instruction: aiInstruction,
+                          mode: aiMode,
+                          style: aiStyle,
+                          title: active.document.title,
+                          currentMdx
+                          // sdl omitted here; can be added if needed from server
+                        }
+                      }
+                    })
+                  });
+                  const json = await res.json();
+                  if (json.errors) throw new Error(json.errors[0].message);
+                  const { snippet, usedLLM, note } = json.data.aiDocAssist as {
+                    snippet: string;
+                    usedLLM: boolean;
+                    note?: string;
+                  };
+                  if (note) console.debug('AI Assist note:', note);
+                  setAiPreview(snippet);
+                } catch (e: any) {
+                  const msg = e.message || 'AI Assist failed';
+                  if (msg.includes('Unknown type "AIDocAssistInput"')) {
+                    setAiError(
+                      'AI Assist is not available on the server yet. Please restart/update the gateway to include the new schema.'
+                    );
+                  } else {
+                    setAiError(msg);
+                  }
+                } finally {
+                  setAiLoading(false);
+                }
+              }}
+              loading={aiLoading}
+            >
+              Generate
+            </Button>
+          </Group>
+          {aiError && (
+            <Alert color="red" withCloseButton onClose={() => setAiError(null)}>
+              {aiError}
+            </Alert>
+          )}
+          {aiPreview && (
+            <Card withBorder p="sm">
+              <Text size="xs" color="dimmed" mb={6}>
+                Preview (MDX fragment)
+              </Text>
+              <ScrollArea style={{ maxHeight: 260 }}>
+                <pre style={{ whiteSpace: 'pre-wrap' }}>{aiPreview}</pre>
+              </ScrollArea>
+              <Group position="right" spacing="sm" mt={8}>
+                <Button
+                  variant="light"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(aiPreview).catch(() => {});
+                  }}
+                  leftIcon={<IconCopy size={14} />}
+                >
+                  Copy
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (!active) return;
+                    const sep = active.mdx.endsWith('\n') ? '\n' : '\n\n';
+                    let next: string;
+                    if (aiMode === 'REPLACE') {
+                      next = aiPreview;
+                    } else if (aiMode === 'SECTION' && editorSelection) {
+                      const safeSel = editorSelection.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                      const re = new RegExp(safeSel);
+                      next = active.mdx.replace(re, aiPreview);
+                    } else {
+                      const tailMatch = active.mdx.match(/##\s+([^\n]+)\s*$/);
+                      const headMatch = aiPreview.match(/^##\s+([^\n]+)/);
+                      let append = aiPreview;
+                      if (tailMatch && headMatch && tailMatch[1].trim() === headMatch[1].trim()) {
+                        append = aiPreview.replace(/^##\s+[^\n]+\n?/, '');
+                      }
+                      next = active.mdx + sep + append + '\n';
+                    }
+                    setActive({ ...active, mdx: next, dirty: true });
+                    setAiOpen(false);
+                    setAiPreview('');
+                  }}
+                  color="green"
+                >
+                  {aiMode === 'REPLACE' ? 'Replace Content' : aiMode === 'SECTION' ? 'Replace Selection' : 'Insert at End'}
+                </Button>
+              </Group>
+            </Card>
+          )}
+        </Stack>
       </Modal>
     </Stack>
   );

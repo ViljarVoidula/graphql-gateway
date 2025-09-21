@@ -7,8 +7,6 @@ from datetime import datetime
 from ..repositories import IndexConfigRepository, SystemModelRepository
 from ..models import ApplicationIndexConfig, VectorFieldConfig, SystemModel
 from ..embeddings.model_manager import models_manager
-from ..integration.search import push_index_config_to_search
-
 
 @strawberry.type
 class VectorFieldType:
@@ -28,6 +26,7 @@ class IndexConfigType:
     servicesXml: Optional[str]
     hostsXml: Optional[str]
     vectorFields: List[VectorFieldType]
+    autocompletePaths: List[str]
     createdAt: datetime
     updatedAt: datetime
 
@@ -109,6 +108,7 @@ class UpsertIndexConfigInput:
     servicesXml: Optional[str] = None
     hostsXml: Optional[str] = None
     vectorFields: List[VectorFieldInput]
+    autocompletePaths: Optional[List[str]] = None
 
 
 @strawberry.input
@@ -130,10 +130,11 @@ def _to_type(cfg: ApplicationIndexConfig) -> IndexConfigType:
         tenantId=cfg.tenantId,
         clusterId=cfg.clusterId,
         activeModel=cfg.activeModel,
-    schema=cfg.schemaText,
-    servicesXml=cfg.servicesXml,
-    hostsXml=cfg.hostsXml,
+        schema=cfg.schemaText,
+        servicesXml=cfg.servicesXml,
+        hostsXml=cfg.hostsXml,
         vectorFields=[VectorFieldType(**vf.model_dump()) for vf in cfg.vectorFields],
+        autocompletePaths=list(getattr(cfg, "autocompletePaths", []) or []),
         createdAt=cfg.createdAt,
         updatedAt=cfg.updatedAt,
     )
@@ -201,13 +202,13 @@ class Mutation:
             servicesXml=input.servicesXml,
             hostsXml=input.hostsXml,
             vectorFields=[VectorFieldConfig(**vf.__dict__) for vf in input.vectorFields],
+            autocompletePaths=list(input.autocompletePaths or []),
         )
         # Only set activeModel explicitly if provided; else allow model default_factory to populate
         if input.activeModel is not None:
             cfg_kwargs["activeModel"] = input.activeModel
         cfg = ApplicationIndexConfig(**cfg_kwargs)
         saved = await IndexConfigRepository.upsert(cfg)
-        await push_index_config_to_search(saved.applicationId, saved.model_dump(by_alias=True))
         return _to_type(saved)
 
     @strawberry.mutation

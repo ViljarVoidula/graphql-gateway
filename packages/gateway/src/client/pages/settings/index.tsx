@@ -13,7 +13,7 @@ import {
   Text,
   Title
 } from '@mantine/core';
-import { IconClock, IconDatabase, IconInfoCircle, IconSettings, IconShield } from '@tabler/icons-react';
+import { IconClock, IconDatabase, IconInfoCircle, IconRobot, IconSettings, IconShield } from '@tabler/icons-react';
 import React, { useEffect, useState } from 'react';
 import {
   authenticatedFetch,
@@ -38,6 +38,17 @@ export const SessionSettings: React.FC = () => {
   const [docsModeInitial, setDocsModeInitial] = useState<'DISABLED' | 'PREVIEW' | 'ENABLED' | null>(null);
   const [docsModeSaving, setDocsModeSaving] = useState(false);
   const [docsModeError, setDocsModeError] = useState<string | null>(null);
+  // AI docs generation config
+  const [aiProvider, setAiProvider] = useState<'OPENAI'>('OPENAI');
+  const [aiBaseUrl, setAiBaseUrl] = useState<string>('');
+  const [aiModel, setAiModel] = useState<string>('');
+  const [aiApiKey, setAiApiKey] = useState<string>('');
+  const [aiLoading, setAiLoading] = useState<boolean>(true);
+  const [aiSaving, setAiSaving] = useState<boolean>(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiKeySet, setAiKeySet] = useState<boolean>(false);
+  const [genBusy, setGenBusy] = useState<boolean>(false);
+  const [genMsg, setGenMsg] = useState<string | null>(null);
 
   useEffect(() => {
     // Load current settings
@@ -72,6 +83,28 @@ export const SessionSettings: React.FC = () => {
         setAuditError(e?.message || 'Failed to load settings');
       } finally {
         setAuditLoading(false);
+      }
+    })();
+
+    // Load AI docs config (best-effort; ignore errors in non-admin contexts)
+    (async () => {
+      try {
+        const res = await authenticatedFetch('/graphql', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: `query { aiDocsConfig { provider baseUrl model apiKeySet } }` })
+        });
+        const json = await res.json();
+        if (json?.data?.aiDocsConfig) {
+          setAiProvider('OPENAI');
+          setAiBaseUrl(json.data.aiDocsConfig.baseUrl || '');
+          setAiModel(json.data.aiDocsConfig.model || 'gpt-4o-mini');
+          setAiKeySet(!!json.data.aiDocsConfig.apiKeySet);
+        }
+      } catch (e) {
+        // ignore silently for non-admin users
+      } finally {
+        setAiLoading(false);
       }
     })();
 
@@ -144,6 +177,154 @@ export const SessionSettings: React.FC = () => {
                 Manual mode - you'll need to refresh your session manually or re-login when it expires
               </Text>
             </Group>
+          )}
+        </Stack>
+      </Card>
+
+      <Card shadow="sm" p="lg" radius="md" withBorder>
+        <Stack spacing="md">
+          <Group spacing="sm">
+            <IconRobot size={20} />
+            <Text weight={500} size="md">
+              AI Doc Generation
+            </Text>
+          </Group>
+          {aiLoading ? (
+            <Group>
+              <Loader size="sm" /> <Text size="sm">Loading AI configuration...</Text>
+            </Group>
+          ) : (
+            <>
+              {aiError && (
+                <Alert color="red" title="Error" icon={<IconInfoCircle size={16} />}>
+                  {aiError}
+                </Alert>
+              )}
+              <Select
+                label="Provider"
+                value={aiProvider}
+                data={[{ value: 'OPENAI', label: 'OpenAI compatible' }]}
+                onChange={(val) => setAiProvider((val as any) || 'OPENAI')}
+              />
+              <NumberInput
+                label="Model (as text)"
+                description="For OpenAI-compatible APIs, set model id."
+                value={undefined}
+                styles={{ input: { display: 'none' } }}
+              />
+              <Stack spacing={4}>
+                <Text size="sm">Model</Text>
+                <input
+                  value={aiModel}
+                  onChange={(e) => setAiModel(e.target.value)}
+                  placeholder="gpt-4o-mini"
+                  style={{ padding: 8, border: '1px solid #e5e7eb', borderRadius: 6 }}
+                />
+              </Stack>
+              <Stack spacing={4}>
+                <Text size="sm">Base URL (optional)</Text>
+                <input
+                  value={aiBaseUrl}
+                  onChange={(e) => setAiBaseUrl(e.target.value)}
+                  placeholder="https://api.openai.com/v1"
+                  style={{ padding: 8, border: '1px solid #e5e7eb', borderRadius: 6 }}
+                />
+              </Stack>
+              <Stack spacing={4}>
+                <Text size="sm">
+                  API Key{' '}
+                  {aiKeySet && (
+                    <Badge color="green" ml={8}>
+                      Stored
+                    </Badge>
+                  )}
+                </Text>
+                <input
+                  value={aiApiKey}
+                  onChange={(e) => setAiApiKey(e.target.value)}
+                  placeholder={aiKeySet ? '•••••••••••••••••••••' : 'sk-...'}
+                  type="password"
+                  style={{ padding: 8, border: '1px solid #e5e7eb', borderRadius: 6 }}
+                />
+              </Stack>
+              <Group spacing="sm">
+                <Button
+                  size="xs"
+                  loading={aiSaving}
+                  onClick={async () => {
+                    setAiSaving(true);
+                    setAiError(null);
+                    try {
+                      const res = await authenticatedFetch('/graphql', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          query: `mutation Set($input:SetAIDocsConfigInput!) { setAIDocsConfig(input:$input) }`,
+                          variables: {
+                            input: {
+                              provider: 'OPENAI',
+                              baseUrl: aiBaseUrl || null,
+                              model: aiModel || null,
+                              apiKey: aiApiKey || null
+                            }
+                          }
+                        })
+                      });
+                      const json = await res.json();
+                      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to save');
+                      setAiApiKey('');
+                      setAiKeySet(true);
+                    } catch (e: any) {
+                      setAiError(e?.message || 'Failed to save');
+                    } finally {
+                      setAiSaving(false);
+                    }
+                  }}
+                >
+                  Save
+                </Button>
+                <Button
+                  variant="light"
+                  size="xs"
+                  loading={genBusy}
+                  onClick={async () => {
+                    setGenBusy(true);
+                    setGenMsg(null);
+                    try {
+                      const res = await authenticatedFetch('/graphql', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          query: `mutation { generateDocsFromSDL(options: { publish: true }) { created updated } }`
+                        })
+                      });
+                      const json = await res.json();
+                      if (json.errors) throw new Error(json.errors[0]?.message || 'Generation failed');
+                      setGenMsg(
+                        `Generated: ${json.data.generateDocsFromSDL.created} created, ${json.data.generateDocsFromSDL.updated} updated`
+                      );
+                    } catch (e: any) {
+                      setGenMsg(e?.message || 'Failed to generate');
+                    } finally {
+                      setGenBusy(false);
+                    }
+                  }}
+                >
+                  Seed docs from services
+                </Button>
+              </Group>
+              {genMsg && (
+                <Alert color="blue" icon={<IconInfoCircle size={16} />}>
+                  {genMsg}
+                </Alert>
+              )}
+              <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+                <Text size="xs">
+                  Seeding reads each registered service SDL and creates an overview page. Add an API key to enable future
+                  LLM-powered enrichment.
+                </Text>
+              </Alert>
+            </>
           )}
         </Stack>
       </Card>

@@ -31,6 +31,7 @@ import { ApplicationUsageResolver } from './usage/application-usage.resolver';
 import { User } from './users/user.entity';
 import { UserResolver } from './users/user.resolver';
 // Additional resolvers (docs, theme, search, chat) to expose new admin features in primary schema
+import { AIResolver } from './ai/ai.resolver';
 import { ChatResolver } from './chat/chat.resolver';
 import { DocsAuthoringResolver } from './docs/docs.resolver';
 import { DocsSearchResolver } from './search/search.resolver';
@@ -74,6 +75,7 @@ export function makeEndpointsSchema(loader: SchemaLoader): GraphQLSchema {
       DocsAuthoringResolver,
       ThemeResolver,
       DocsSearchResolver,
+      AIResolver,
       ChatResolver
     ],
     container: Container,

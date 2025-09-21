@@ -42,6 +42,8 @@ class ApplicationIndexConfig(BaseModel):
     servicesXml: Optional[str] = None  # backup of generated services.xml
     hostsXml: Optional[str] = None  # backup of generated hosts.xml
     vectorFields: List[VectorFieldConfig]
+    # List of document field paths whose values are extracted and concatenated to build autocomplete suggestions
+    autocompletePaths: List[str] = Field(default_factory=list)
     createdAt: datetime = Field(default_factory=datetime.utcnow)
     updatedAt: datetime = Field(default_factory=datetime.utcnow)
 

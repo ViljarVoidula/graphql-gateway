@@ -319,6 +319,18 @@ export const dataProvider: DataProvider = {
       `;
     }
 
+    // For services, normalize enum fields expected by GraphQL
+    const inputVariables =
+      resource === 'services'
+        ? (() => {
+            const v: any = { ...(variables as any) };
+            if (v.status) {
+              v.status = String(v.status).toUpperCase();
+            }
+            return v;
+          })()
+        : variables;
+
     const response = await authenticatedFetch(API_URL, {
       method: 'POST',
       headers: {
@@ -327,7 +339,7 @@ export const dataProvider: DataProvider = {
       credentials: 'include',
       body: JSON.stringify({
         query: mutation,
-        variables: resource === 'services' ? { id, input: variables } : { id, data: variables }
+        variables: resource === 'services' ? { id, input: inputVariables } : { id, data: variables }
       })
     });
 

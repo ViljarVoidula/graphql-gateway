@@ -1,0 +1,57 @@
+[package]
+name = "ingestion-service"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web framework (align with async-graphql-axum)
+axum = "0.8"
+tokio = { version = "1.0", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["trace", "cors"] }
+
+# GraphQL
+async-graphql = { version = "7.0", features = ["chrono", "bson"] }
+async-graphql-axum = "7.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# MongoDB
+mongodb = { version = "2.8", features = ["tokio-runtime"] }
+bson = { version = "2.9", features = ["chrono-0_4"] }
+
+# HTTP client
+reqwest = { version = "0.11", features = ["json"] }
+
+# Redis
+redis = { version = "0.24", features = ["tokio-comp", "connection-manager"] }
+
+# Data parsing
+csv = "1.3"
+quick-xml = { version = "0.31", features = ["serialize"] }
+
+# Scheduling
+tokio-cron-scheduler = "0.10"
+
+# Utilities
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4"] }
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+
+# Async utilities
+futures = "0.3"
+async-trait = "0.1"
+inventory = "0.3"
+
+# Config
+config = "0.14"
+dotenvy = "0.15"
+cron = "0.12"
+
+# Migrations (shared crate)
+mongodb-migrator = { path = "../../shared/mongodb-migrator" }

@@ -27,6 +27,7 @@ import { keyManager } from './security/keyManager';
 import { makeEndpointsSchema } from './services/endpoints';
 // Ensure side-effect import of new resolvers so type-graphql can pick them up if schema build scans metadata
 import { loadSecurityConfig } from './config/security.config';
+import './services/ai/ai.resolver';
 import './services/applications/application-service-rate-limit.resolver';
 import { cleanupExpiredAuditLogs } from './services/audit/audit-log.retention';
 import { AuditLogService } from './services/audit/audit-log.service';

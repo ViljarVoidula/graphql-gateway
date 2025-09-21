@@ -16,6 +16,7 @@ mod indexer;
 mod metrics;
 mod embeddings;
 mod index_config;
+mod autocomplete;
 
 use crate::schema::{MutationRoot, QueryRoot, SearchSchema};
 
@@ -47,12 +48,25 @@ async fn main() -> anyhow::Result<()> {
         embeddings::EmbeddingsClient::new(url, cfg.embeddings_use_msgpack, cfg.embeddings_timeout_ms)
     });
 
-    let schema: SearchSchema = Schema::build(QueryRoot, MutationRoot, EmptySubscription)
+    let mut schema_builder = Schema::build(QueryRoot, MutationRoot, EmptySubscription)
         .data(cfg.clone())
         .data(vespa_client.clone())
         .data(deploy_client.clone())
-        .data(embeddings_client.clone())
-        .finish();
+        .data(embeddings_client.clone());
+
+    // Optional: Redis autocomplete client (enabled if REDIS_URL is provided)
+    if let Some(url) = cfg.redis_url.as_ref() {
+        match autocomplete::AutocompleteClient::new(url).await {
+            Ok(client) => {
+                schema_builder = schema_builder.data(client);
+                tracing::info!("autocomplete: enabled via Redis");
+            }
+            Err(e) => {
+                tracing::error!(error=%e, "failed to init Redis autocomplete client; autocomplete disabled");
+            }
+        }
+    }
+    let schema: SearchSchema = schema_builder.finish();
 
     // Optionally auto-deploy an application package on startup (idempotent for simple use-case)
     if cfg.auto_deploy {

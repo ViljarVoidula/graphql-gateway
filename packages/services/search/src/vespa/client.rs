@@ -162,65 +162,230 @@ impl VespaClient {
         Ok(body)
     }
 
-    /// Feed multiple documents using Vespa's bulk API (newline separated JSON operations).
-    pub async fn feed_documents_batch(&self, app_id: &str, destination_cluster: &str, docs: Vec<serde_json::Value>, max_conc: usize) -> Result<()> {
+    /// Feed multiple documents using Vespa's JSON Lines feed API in a single POST to /document/v1/.
+    /// Each line is a JSON object like: {"put":"id:<namespace>:<doctype>::<docid>", "fields":{...}}
+    async fn feed_documents_jsonl(&self, app_id: &str, destination_cluster: &str, docs: Vec<serde_json::Value>) -> Result<()> {
         if docs.is_empty() { return Ok(()); }
-        use futures::stream::{self, StreamExt};
-        let total = docs.len();
-        let successes = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let failures = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let s_clone = successes.clone();
-        let f_clone = failures.clone();
-        stream::iter(docs.into_iter().map(|doc| {
-            let client = self.clone();
-            let app = app_id.to_string();
-            let succ = s_clone.clone();
-            let fail = f_clone.clone();
-            async move {
-                let id_dbg = doc.get("id").and_then(|v| v.as_str()).unwrap_or("<missing>");
-                // Retry with exponential backoff up to 3 attempts for transient errors
-                const MAX_ATTEMPTS: usize = 3;
-                let mut attempt = 0;
-                loop {
-                    let res = client.feed_document(&app, doc.clone()).await;
-                    match res {
-                        Ok(_) => {
-                            tracing::event!(Level::DEBUG, target="vespa.feed.batch.doc", app_id=%app, doc.id=%id_dbg, dest.cluster=%destination_cluster, attempt=attempt+1, status="ok");
-                            succ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                            crate::metrics::record_batch_doc_success();
-                            break;
-                        }
-                        Err(e) => {
-                            attempt += 1;
-                            crate::metrics::record_batch_doc_failure();
-                            if attempt >= MAX_ATTEMPTS {
-                                tracing::event!(Level::ERROR, target="vespa.feed.batch.doc", app_id=%app, doc.id=%id_dbg, attempts=attempt, error=%e, "batch doc feed failed (give up)");
-                                fail.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                crate::metrics::record_batch_giveup();
-                                break;
-                            } else {
-                                tracing::event!(Level::WARN, target="vespa.feed.batch.doc", app_id=%app, doc.id=%id_dbg, attempt=attempt, error=%e, "retrying doc feed");
-                                crate::metrics::record_batch_retry();
-                                // simple backoff: 50ms * 2^(attempt-1)
-                                let backoff_ms = 50u64 * (1u64 << (attempt as u64 - 1));
-                                tokio::time::sleep(std::time::Duration::from_millis(backoff_ms.min(800))).await;
-                                continue;
-                            }
+        // Build JSONL string
+        let mut body = String::new();
+        let mut total: usize = 0;
+        for mut doc in docs.into_iter() {
+            let id = doc
+                .get("id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| SearchError::InvalidInput("document.id required".into()))?;
+            let doc_type = doc.get("type").and_then(|v| v.as_str()).unwrap_or("product");
+            // Prepare fields: clone object, drop type, stringify payload if needed, normalize embedding
+            let mut obj = doc
+                .as_object()
+                .cloned()
+                .ok_or_else(|| SearchError::InvalidInput("document must be a JSON object".into()))?;
+            obj.remove("type");
+            if let Some(payload_val) = obj.get_mut("payload") {
+                if !payload_val.is_string() {
+                    *payload_val = serde_json::Value::String(payload_val.to_string());
+                }
+            }
+            if let Some(embedding_val) = obj.get_mut("embedding") {
+                if let Some(arr) = embedding_val.as_array() {
+                    let mut nums: Vec<f64> = Vec::with_capacity(arr.len());
+                    let mut sum_sq: f64 = 0.0;
+                    for v in arr { if let Some(f) = v.as_f64() { nums.push(f); sum_sq += f * f; } }
+                    if nums.len() == arr.len() && sum_sq > 0.0 {
+                        let norm = sum_sq.sqrt();
+                        if (norm - 1.0).abs() > 1e-4 {
+                            let normalized: Vec<serde_json::Value> = nums.into_iter().map(|x| (x / norm) as f32).map(serde_json::Value::from).collect();
+                            *embedding_val = serde_json::Value::Array(normalized);
                         }
                     }
                 }
             }
-        }))
-        .buffer_unordered(max_conc)
-        .for_each(|_| async {})
-        .await;
-
-        let ok = successes.load(std::sync::atomic::Ordering::Relaxed);
-        let fail = failures.load(std::sync::atomic::Ordering::Relaxed);
-        if fail > 0 {
-            return Err(SearchError::Vespa(format!("batch feed partial failure: {} succeeded, {} failed of {}", ok, fail, total)));
+            let full_id = format!("id:{}:{}::{}", app_id, doc_type, id);
+            let line_obj = serde_json::json!({
+                "put": full_id,
+                "fields": serde_json::Value::Object(obj)
+            });
+            body.push_str(&line_obj.to_string());
+            body.push('\n');
+            total += 1;
         }
+
+        // Best-effort warning if destinationCluster looks wrong (common mistake: using app_id instead of content cluster id)
+        if destination_cluster == app_id {
+            tracing::event!(
+                Level::DEBUG,
+                target="vespa.feed.jsonl",
+                app_id=%app_id,
+                dest.cluster=%destination_cluster,
+                "destinationCluster equals app_id (ok if content id matches services.xml)"
+            );
+        }
+
+        let url = format!(
+            "{}/document/v1/?destinationCluster={}",
+            self.base_url.trim_end_matches('/'),
+            urlencoding::encode(destination_cluster)
+        );
+        let resp = self.http
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .body(body)
+            .send()
+            .await?;
+        let status = resp.status();
+        let resp_text = resp.text().await.unwrap_or_default();
+        if !status.is_success() {
+            let (codes, messages) = Self::parse_error_body(&resp_text);
+            let (preview, truncated) = Self::truncate_body(&resp_text);
+            tracing::event!(
+                Level::ERROR,
+                target = "vespa.feed.jsonl",
+                http.status = %status,
+                app_id = %app_id,
+                dest.cluster = %destination_cluster,
+                error.codes = ?codes,
+                error.messages = ?messages,
+                body.truncated = truncated,
+                body.preview = preview,
+                "vespa JSONL feed failed"
+            );
+            return Err(SearchError::Vespa(format!("jsonl feed failed: {}", messages.first().cloned().unwrap_or(preview))));
+        }
+
+        // Parse per-line results; Vespa can return HTTP 200 with per-line failures
+        let mut ok = 0usize;
+        let mut failures: Vec<String> = Vec::new();
+        for line in resp_text.lines().map(str::trim).filter(|l| !l.is_empty()) {
+            match serde_json::from_str::<serde_json::Value>(line) {
+                Ok(v) => {
+                    // Heuristics based on common fields
+                    let msg = v.get("message").and_then(|m| m.as_str()).unwrap_or("");
+                    let status_str = v.get("status").and_then(|s| s.as_str()).unwrap_or("");
+                    let status_num = v.get("status").and_then(|s| s.as_i64());
+                    let line_id = v.get("id").and_then(|m| m.as_str()).unwrap_or("").to_string();
+                    // Some responses may include "code"/"errors" or error text in message
+                    let has_errors_arr = v.get("errors").and_then(|e| e.as_array()).map(|a| !a.is_empty()).unwrap_or(false);
+                    let mut is_ok = msg.eq_ignore_ascii_case("ok")
+                        || msg.eq_ignore_ascii_case("processed")
+                        || status_str.eq_ignore_ascii_case("ok")
+                        || status_str.eq_ignore_ascii_case("success");
+                    if !is_ok {
+                        if let Some(code) = status_num { if (200..300).contains(&(code as i64)) { is_ok = true; } }
+                    }
+                    // Some feeds include type: "error" for failures
+                    let is_error_type = v.get("type").and_then(|t| t.as_str()).map(|s| s.eq_ignore_ascii_case("error")).unwrap_or(false);
+                    if has_errors_arr {
+                        failures.push(format!("{}: {}", line_id, msg));
+                    } else if is_ok {
+                        ok += 1;
+                    } else {
+                        let ml = msg.to_ascii_lowercase();
+                        if status_str.eq_ignore_ascii_case("failed")
+                            || ml.contains("fail")
+                            || ml.contains("error")
+                            || ml.contains("exception")
+                            || ml.contains("rejected")
+                            || is_error_type
+                        {
+                            failures.push(format!("{}: {}", line_id, msg));
+                        } else {
+                            // Unknown/empty message: assume success to avoid false negatives
+                            ok += 1;
+                        }
+                    }
+                }
+                Err(_) => {
+                    failures.push(format!("invalid response line: {}", line));
+                }
+            }
+        }
+
+        if !failures.is_empty() || ok != total {
+            let failed_count = if failures.is_empty() { total.saturating_sub(ok) } else { failures.len() };
+            let summary = format!("jsonl feed partial failure: {} ok, {} failed of {}", ok, failed_count, total);
+            tracing::event!(
+                Level::ERROR,
+                target="vespa.feed.jsonl",
+                app_id=%app_id,
+                dest.cluster=%destination_cluster,
+                ok=%ok,
+                failed=%failed_count,
+                failures=?failures,
+                "{}",
+                summary
+            );
+            return Err(SearchError::Vespa(format!("{}; first error: {}", summary, failures.get(0).cloned().unwrap_or_default())));
+        }
+
+        tracing::event!(Level::INFO, target="vespa.feed.jsonl", app_id=%app_id, dest.cluster=%destination_cluster, docs=ok, "bulk feed ok");
         Ok(())
+    }
+
+    /// Feed multiple documents using Vespa's bulk API. Prefer JSONL feed endpoint; fall back to per-document if needed.
+    pub async fn feed_documents_batch(&self, app_id: &str, destination_cluster: &str, docs: Vec<serde_json::Value>, max_conc: usize) -> Result<()> {
+        if docs.is_empty() { return Ok(()); }
+        // First try JSONL feed for the entire batch
+        match self.feed_documents_jsonl(app_id, destination_cluster, docs.clone()).await {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                tracing::event!(Level::WARN, target="vespa.feed.batch", app_id=%app_id, dest.cluster=%destination_cluster, error=%e, "jsonl feed failed; falling back to per-document");
+                // Fallback: feed documents individually with retry (legacy path)
+                use futures::stream::{self, StreamExt};
+                let total = docs.len();
+                let successes = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+                let failures = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+                let s_clone = successes.clone();
+                let f_clone = failures.clone();
+                stream::iter(docs.into_iter().map(|doc| {
+                    let client = self.clone();
+                    let app = app_id.to_string();
+                    let succ = s_clone.clone();
+                    let fail = f_clone.clone();
+                    async move {
+                        let id_dbg = doc.get("id").and_then(|v| v.as_str()).unwrap_or("<missing>");
+                        const MAX_ATTEMPTS: usize = 3;
+                        let mut attempt = 0;
+                        loop {
+                            let res = client.feed_document(&app, doc.clone()).await;
+                            match res {
+                                Ok(_) => {
+                                    tracing::event!(Level::DEBUG, target="vespa.feed.batch.doc", app_id=%app, doc.id=%id_dbg, dest.cluster=%destination_cluster, attempt=attempt+1, status="ok");
+                                    succ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                    crate::metrics::record_batch_doc_success();
+                                    break;
+                                }
+                                Err(e) => {
+                                    attempt += 1;
+                                    crate::metrics::record_batch_doc_failure();
+                                    if attempt >= MAX_ATTEMPTS {
+                                        tracing::event!(Level::ERROR, target="vespa.feed.batch.doc", app_id=%app, doc.id=%id_dbg, attempts=attempt, error=%e, "batch doc feed failed (give up)");
+                                        fail.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                        crate::metrics::record_batch_giveup();
+                                        break;
+                                    } else {
+                                        tracing::event!(Level::WARN, target="vespa.feed.batch.doc", app_id=%app, doc.id=%id_dbg, attempt=attempt, error=%e, "retrying doc feed");
+                                        crate::metrics::record_batch_retry();
+                                        let backoff_ms = 50u64 * (1u64 << (attempt as u64 - 1));
+                                        tokio::time::sleep(std::time::Duration::from_millis(backoff_ms.min(800))).await;
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }))
+                .buffer_unordered(max_conc.max(1))
+                .for_each(|_| async {})
+                .await;
+
+                let ok = successes.load(std::sync::atomic::Ordering::Relaxed);
+                let fail = failures.load(std::sync::atomic::Ordering::Relaxed);
+                if fail > 0 {
+                    return Err(SearchError::Vespa(format!("batch feed partial failure: {} succeeded, {} failed of {}", ok, fail, total)));
+                }
+                Ok(())
+            }
+        }
     }
 }
 

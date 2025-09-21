@@ -35,6 +35,9 @@ pub struct Config {
     // Hybrid ranking weights defaults
     pub hybrid_lexical_weight: f32,
     pub hybrid_vector_weight: f32,
+    // Autocomplete
+    pub redis_url: Option<String>,
+    pub enable_autocomplete: bool,
 }
 
 impl Config {
@@ -66,6 +69,9 @@ impl Config {
     let ngram_min_len = env::var("SEARCH_NGRAM_MIN_LEN").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
     let hybrid_lexical_weight = env::var("HYBRID_LEXICAL_WEIGHT").ok().and_then(|v| v.parse().ok()).unwrap_or(0.5);
     let hybrid_vector_weight = env::var("HYBRID_VECTOR_WEIGHT").ok().and_then(|v| v.parse().ok()).unwrap_or(0.5);
-    Self { vespa_endpoint, vespa_deploy_endpoint, app_id, content_cluster_id, schema_version, auto_deploy, default_tensor_dim, default_geo_enabled, default_tenant_id, feed_batch_size, feed_max_concurrency, embeddings_service_url, enable_remote_embeddings, embeddings_use_msgpack, embeddings_text_model, embeddings_image_model, embeddings_timeout_ms, bulk_allow_partial, bulk_fallback_single, partial_min_token_len, partial_fields, enable_ngram_fields, ngram_min_len, hybrid_lexical_weight, hybrid_vector_weight }
+    // Autocomplete: enable automatically if REDIS_URL is configured
+    let redis_url = env::var("REDIS_URL").ok();
+    let enable_autocomplete = redis_url.is_some();
+    Self { vespa_endpoint, vespa_deploy_endpoint, app_id, content_cluster_id, schema_version, auto_deploy, default_tensor_dim, default_geo_enabled, default_tenant_id, feed_batch_size, feed_max_concurrency, embeddings_service_url, enable_remote_embeddings, embeddings_use_msgpack, embeddings_text_model, embeddings_image_model, embeddings_timeout_ms, bulk_allow_partial, bulk_fallback_single, partial_min_token_len, partial_fields, enable_ngram_fields, ngram_min_len, hybrid_lexical_weight, hybrid_vector_weight, redis_url, enable_autocomplete }
     }
 }

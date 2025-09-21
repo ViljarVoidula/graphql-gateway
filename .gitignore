@@ -119,3 +119,4 @@ packages/services/**/.models-cache/**
 packages/services/**/__pycache__/**
 packages/services/**/.hf-cache/**
 packages/gateway/mini-introspection.json
+**/target/**
