@@ -6,6 +6,7 @@ import { Application } from '../entities/application.entity';
 import { AuditLog } from '../entities/audit-log.entity';
 import { ChatMessage } from '../entities/chat/message.entity';
 import { ChatThread } from '../entities/chat/thread.entity';
+import { ApiKeyUsage } from '../entities/api-key-usage.entity';
 import { DocCategory } from '../entities/docs/category.entity';
 import { DocDocument } from '../entities/docs/document.entity';
 import { DocEmbeddingChunk } from '../entities/docs/embedding-chunk.entity';
@@ -32,6 +33,7 @@ export const dataSource = new TypeORM.DataSource({
     ServiceKey,
     Application,
     ApiKey,
+    ApiKeyUsage,
     ApplicationUsage,
     AuditLog,
     ApplicationServiceRateLimit,

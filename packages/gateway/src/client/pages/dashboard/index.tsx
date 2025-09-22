@@ -114,6 +114,14 @@ export const Dashboard: React.FC = () => {
   const [stats, setStats] = React.useState<DashboardStats | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  // Local state for usage widgets
+  const [daily, setDaily] = React.useState<Array<{ date: string; requestCount: number }>>([]);
+  const [topKeys, setTopKeys] = React.useState<Array<{ apiKeyId: string; requestCount: number }>>([]);
+  const [totals, setTotals] = React.useState<{ totalRequests: number; totalErrors: number; totalRateLimited: number }>({
+    totalRequests: 0,
+    totalErrors: 0,
+    totalRateLimited: 0
+  });
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -165,6 +173,9 @@ export const Dashboard: React.FC = () => {
                 email
                 permissions
               }
+              usageTotals: usageTotals(days: 7) { totalRequests totalErrors totalRateLimited }
+              usageDailyRequests: usageDailyRequests(days: 14) { date requestCount }
+              usageTopApiKeys: usageTopApiKeys(days: 7, limit: 5) { apiKeyId requestCount }
             }
           `
         })
@@ -176,7 +187,7 @@ export const Dashboard: React.FC = () => {
         throw new Error(result.errors[0].message);
       }
 
-      const { users, myServices, me } = result.data;
+      const { users, myServices, me, usageTotals, usageDailyRequests, usageTopApiKeys } = result.data;
 
       // Calculate user statistics
       const userStats = {
@@ -222,6 +233,11 @@ export const Dashboard: React.FC = () => {
         recentUsers,
         recentSessions
       });
+
+      // Usage widgets data
+      setDaily(usageDailyRequests || []);
+      setTopKeys(usageTopApiKeys || []);
+      setTotals(usageTotals || { totalRequests: 0, totalErrors: 0, totalRateLimited: 0 });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch dashboard data');
     } finally {
@@ -381,6 +397,70 @@ export const Dashboard: React.FC = () => {
                 <StatusBadge status="maintenance" />
                 <Text size="sm">{stats.services.maintenance}</Text>
               </Group>
+            </Stack>
+          </Card>
+        </Grid.Col>
+      </Grid>
+
+      {/* Usage charts */}
+      <Grid>
+        <Grid.Col span={8}>
+          <Card shadow="sm" p="lg" radius="md" withBorder>
+            <Group position="apart" mb="md">
+              <Text weight={500}>API Requests (14 days)</Text>
+              <Badge variant="light">
+                Total {totals.totalRequests.toLocaleString()} • Errors {totals.totalErrors.toLocaleString()} • RL{' '}
+                {totals.totalRateLimited.toLocaleString()}
+              </Badge>
+            </Group>
+            {/* Simple inline SVG line chart without extra deps */}
+            {daily.length ? (
+              <svg
+                width="100%"
+                height="140"
+                viewBox={`0 0 ${Math.max(1, daily.length - 1) * 20} 100`}
+                preserveAspectRatio="none"
+              >
+                {(() => {
+                  const max = Math.max(1, ...daily.map((d) => d.requestCount));
+                  const points = daily.map((d, i) => {
+                    const x = i * 20;
+                    const y = 100 - Math.round((d.requestCount / max) * 90);
+                    return `${x},${y}`;
+                  });
+                  return (
+                    <>
+                      <polyline fill="none" stroke="#1c7ed6" strokeWidth="2" points={points.join(' ')} />
+                    </>
+                  );
+                })()}
+              </svg>
+            ) : (
+              <Text size="sm" color="dimmed">
+                No usage data
+              </Text>
+            )}
+          </Card>
+        </Grid.Col>
+        <Grid.Col span={4}>
+          <Card shadow="sm" p="lg" radius="md" withBorder>
+            <Group position="apart" mb="md">
+              <Text weight={500}>Top API Keys (7 days)</Text>
+              <IconKey size={18} />
+            </Group>
+            <Stack spacing="xs">
+              {topKeys.length ? (
+                topKeys.map((k) => (
+                  <Group key={k.apiKeyId} position="apart">
+                    <Text size="sm">{k.apiKeyId.slice(0, 8)}…</Text>
+                    <Badge variant="light">{k.requestCount.toLocaleString()} req</Badge>
+                  </Group>
+                ))
+              ) : (
+                <Text size="sm" color="dimmed">
+                  No data
+                </Text>
+              )}
             </Stack>
           </Card>
         </Grid.Col>

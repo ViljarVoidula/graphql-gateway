@@ -13,6 +13,9 @@ class Settings {
 
   @Field(() => PublicDocumentationMode)
   publicDocumentationMode!: PublicDocumentationMode;
+
+  @Field()
+  enforceDownstreamAuth!: boolean;
 }
 
 export enum PublicDocumentationMode {
@@ -34,7 +37,8 @@ export class ConfigurationResolver {
     return {
       auditLogRetentionDays: await this.config.getAuditLogRetentionDays(),
       publicDocumentationEnabled: await this.config.isPublicDocumentationEnabled(),
-      publicDocumentationMode: (await this.config.getPublicDocumentationMode()) as PublicDocumentationMode
+      publicDocumentationMode: (await this.config.getPublicDocumentationMode()) as PublicDocumentationMode,
+      enforceDownstreamAuth: await this.config.isDownstreamAuthEnforced()
     };
   }
 
@@ -59,5 +63,11 @@ export class ConfigurationResolver {
     const internal = (mode as string).toLowerCase() as 'disabled' | 'preview' | 'enabled';
     const stored = await this.config.setPublicDocumentationMode(internal);
     return stored as PublicDocumentationMode;
+  }
+
+  @Mutation(() => Boolean)
+  @Directive('@authz(rules: ["isAdmin"])')
+  async setEnforceDownstreamAuth(@Arg('enabled') enabled: boolean): Promise<boolean> {
+    return this.config.setDownstreamAuthEnforced(enabled);
   }
 }

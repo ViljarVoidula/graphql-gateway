@@ -6,6 +6,7 @@ import { Application } from '../entities/application.entity';
 import { AuditLogService } from '../services/audit/audit-log.service';
 import { ApplicationUsageService } from '../services/usage/application-usage.service';
 import { gatewayInternalLog, log } from '../utils/logger';
+import { ApiKeyUsageCounterService } from '../services/usage/api-key-usage.counter';
 
 interface UsageTrackingOptions {
   enabled?: boolean;
@@ -87,6 +88,18 @@ export function createUsageTrackingPlugin(options: UsageTrackingOptions = {}): P
               });
             } else {
               log.warn('Failed to get gateway service ID for usage tracking');
+            }
+
+            // Additionally track per-API-key counters in Redis (non-blocking)
+            try {
+              if (context.authType === 'api-key' && (context as any).apiKey && gatewayServiceId && applicationToTrack?.id) {
+                const counter = Container.get(ApiKeyUsageCounterService);
+                // Fire and forget
+                void counter.incr(applicationToTrack.id, gatewayServiceId, (context as any).apiKey.id, { error: hasErrors });
+              }
+            } catch (e) {
+              // counters must not impact request path
+              log.debug('Per-API-key usage counter error (ignored)', e);
             }
 
             // Track in audit log

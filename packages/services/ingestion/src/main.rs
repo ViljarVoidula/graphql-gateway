@@ -12,6 +12,7 @@ mod storage;
 mod handlers;
 mod mapping;
 mod sync;
+mod processing;
 mod config;
 mod schema;
 mod migrations; // ensure migrations module is compiled so inventory registers

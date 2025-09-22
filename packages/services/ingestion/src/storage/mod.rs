@@ -293,6 +293,22 @@ impl StorageManager {
         Ok(documents)
     }
 
+    pub async fn update_processed_document(&self, document: &ProcessedDocument) -> Result<()> {
+        let collection: Collection<ProcessedDocument> = self.db.collection("processed_documents");
+        let filter = doc! { 
+            "snapshot_id": document.snapshot_id,
+            "source_id": &document.source_id
+        };
+        
+        // Update the document, creating it if it doesn't exist
+        let options = mongodb::options::ReplaceOptions::builder()
+            .upsert(true)
+            .build();
+            
+        collection.replace_one(filter, document, options).await?;
+        Ok(())
+    }
+
     // Cleanup operations
     pub async fn cleanup_old_snapshots(
         &self,

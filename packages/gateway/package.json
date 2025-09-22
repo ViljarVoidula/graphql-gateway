@@ -26,7 +26,8 @@
     "bench:mix": "k6 run src/benchmarks/mutation-mix.js",
     "bench:search": "k6 run src/benchmarks/search-faceted.js",
     "bench:spike": "k6 run src/benchmarks/stress-spike.js",
-    "bench:soak": "k6 run src/benchmarks/soak-long.js"
+    "bench:soak": "k6 run src/benchmarks/soak-long.js",
+    "worker:api-key-usage": "ts-node -r tsconfig-paths/register src/workers/api-key-usage-consolidator.ts"
   },
   "dependencies": {
     "@escape.tech/graphql-armor": "3.1.6",
@@ -113,6 +114,14 @@
     "@types/bcrypt": "5.0.2",
     "@types/react": "^18.2.79",
     "@types/react-dom": "^18.2.25",
+    "@visx/annotation": "^3.12.0",
+    "@visx/axis": "^3.12.0",
+    "@visx/grid": "^3.12.0",
+    "@visx/legend": "^3.12.0",
+    "@visx/react-spring": "^3.12.0",
+    "@visx/scale": "^3.12.0",
+    "@visx/tooltip": "^3.12.0",
+    "@visx/xychart": "^3.12.0",
     "copy-webpack-plugin": "^13.0.0",
     "css-loader": "^6.11.0",
     "gray-matter": "^4.0.3",

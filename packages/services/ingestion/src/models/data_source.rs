@@ -36,6 +36,42 @@ pub struct DataSourceConfig {
     // Validation
     pub required_fields: Option<Vec<String>>, // additional required fields per datasource
     pub validation_strategy: Option<ValidationStrategy>, // SkipInvalid (default) or FailSync
+    // Image processing options
+    pub image_preprocessing: Option<bool>,
+    pub image_refitting: Option<bool>,
+    pub image_target_dimensions: Option<ImageDimensions>,
+    pub image_quality: Option<u8>, // JPEG quality 0-100
+    pub image_format: Option<ImageFormat>,
+    pub image_field_overrides: Option<Vec<String>>, // Manual field specification
+    pub image_s3_config: Option<S3ImageConfig>,
+    pub image_parallelism: Option<usize>, // Max concurrent image downloads/processing per document
+    pub embedding_parallelism: Option<usize>, // Max concurrent embedding generations across documents
+    pub image_use_etag_when_available: Option<bool>, // Use HEAD to origin to check ETag and skip downloads when processed exists
+    pub image_fast_resize: Option<bool>, // Use faster resize filter over highest quality
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImageDimensions {
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub max_dimension: Option<u32>, // Default: 1000
+    pub maintain_aspect_ratio: Option<bool>, // Default: true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ImageFormat {
+    Jpeg,
+    Png,
+    Webp,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct S3ImageConfig {
+    pub bucket: String,
+    pub prefix: String, // e.g., "processed-images/app-id/"
+    pub region: Option<String>,
+    pub endpoint: Option<String>, // For S3-compatible services
+    pub public_base_url: Option<String>, // For constructing public URLs
 }
 
 impl Default for DataSourceConfig {
@@ -50,6 +86,17 @@ impl Default for DataSourceConfig {
             max_snapshots: Some(10),
             required_fields: None,
             validation_strategy: None,
+            image_preprocessing: None,
+            image_refitting: None,
+            image_target_dimensions: None,
+            image_quality: Some(85), // Default JPEG quality
+            image_format: Some(ImageFormat::Webp),
+            image_field_overrides: None,
+            image_s3_config: None,
+            image_parallelism: Some(8),
+            embedding_parallelism: Some(8),
+            image_use_etag_when_available: Some(true),
+            image_fast_resize: Some(true),
         }
     }
 }

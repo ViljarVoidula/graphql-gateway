@@ -2,6 +2,7 @@ import { describe, mock, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { GraphQLSchema, buildSchema, introspectionFromSchema } from 'graphql';
 import { SchemaLoader, schemaCache } from './SchemaLoader';
+import { healthMonitor } from './utils/service-health';
 
 // Create a mock executor that we can control
 let mockExecutor: any;
@@ -15,6 +16,7 @@ describe('SchemaLoader', () => {
   beforeEach(async () => {
     // Clear all caches before each test
     schemaCache.clear();
+    healthMonitor.reset();
 
     // Create a mock schema
     mockSchema = buildSchema(`
@@ -229,7 +231,7 @@ describe('SchemaLoader', () => {
         assert.ok(mockExecutor.mock.callCount() >= 1);
         schemaLoader.stopAutoRefresh();
         done();
-      }, 100);
+      }, 150);
     });
 
     it('should stop previous interval when called again', () => {

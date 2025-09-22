@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Embeddings service integrating vector models with search service"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
+license = "MIT"
 authors = [ { name = "GraphQL Gateway Team" } ]
 dependencies = [
   "fastapi>=0.104.0",

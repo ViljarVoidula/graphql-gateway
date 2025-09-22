@@ -76,6 +76,7 @@ export class ConfigurationService {
   private readonly AUDIT_RETENTION_KEY = 'audit.log.retention.days';
   private readonly PUBLIC_DOCS_ENABLED_KEY = 'public.documentation.enabled';
   private readonly PUBLIC_DOCS_MODE_KEY = 'public.documentation.mode'; // 'disabled' | 'preview' | 'enabled'
+  private readonly ENFORCE_DOWNSTREAM_AUTH_KEY = 'security.enforceDownstreamAuth';
 
   /**
    * Returns audit log retention in days. Falls back to env or default if not yet configured.
@@ -157,5 +158,29 @@ export class ConfigurationService {
       metadata: { mode }
     });
     return mode;
+  }
+
+  /**
+   * When enabled, all downstream service requests must be authenticated by either
+   * an Application API key or a User token/session. Defaults to false.
+   * Can be bootstrapped from env ENFORCE_DOWNSTREAM_AUTH ("true"/"1").
+   */
+  async isDownstreamAuthEnforced(): Promise<boolean> {
+    const value = await this.load(this.ENFORCE_DOWNSTREAM_AUTH_KEY);
+    if (typeof value === 'boolean') return value;
+    const envVal = process.env.ENFORCE_DOWNSTREAM_AUTH;
+    if (envVal !== undefined) {
+      return ['true', '1', 'yes', 'on'].includes(envVal.toLowerCase());
+    }
+    return false;
+  }
+
+  async setDownstreamAuthEnforced(enabled: boolean): Promise<boolean> {
+    await this.upsert(this.ENFORCE_DOWNSTREAM_AUTH_KEY, enabled);
+    gatewayInternalLog.info('Updated enforce downstream authentication', {
+      operation: 'configurationUpdate',
+      metadata: { enabled }
+    });
+    return enabled;
   }
 }

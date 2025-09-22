@@ -6,16 +6,19 @@ import { ExtendedYogaContext } from '../../auth/auth.types';
 import { dataSource } from '../../db/datasource';
 import { Application } from '../../entities/application.entity';
 import { AuditCategory, AuditLog, AuditSeverity } from '../../entities/audit-log.entity';
+import { Service as ServiceEntity } from '../../entities/service.entity';
 
 @Service()
 @Resolver(AuditLog)
 export class AuditLogResolver {
   private readonly auditLogRepository: Repository<AuditLog>;
   private readonly applicationRepository: Repository<Application>;
+  private readonly serviceRepository: Repository<ServiceEntity>;
 
   constructor() {
     this.auditLogRepository = dataSource.getRepository(AuditLog);
     this.applicationRepository = dataSource.getRepository(Application);
+    this.serviceRepository = dataSource.getRepository(ServiceEntity);
   }
 
   @Query(() => [AuditLog])
@@ -84,6 +87,38 @@ export class AuditLogResolver {
     const where: any = { userId };
     if (category) where.category = category;
     if (severity) where.severity = severity;
+    return this.auditLogRepository.find({
+      where,
+      relations: ['user', 'application'],
+      order: { createdAt: 'DESC' },
+      take: Math.min(limit, 100)
+    });
+  }
+
+  @Query(() => [AuditLog])
+  @Directive('@authz(rules: ["isAuthenticated"])')
+  async serviceAuditLogs(
+    @Arg('serviceId', () => ID) serviceId: string,
+    @Arg('limit', () => Int, { defaultValue: 50, nullable: true }) limit: number,
+    @Arg('category', () => AuditCategory, { nullable: true }) category: AuditCategory | null,
+    @Arg('severity', () => AuditSeverity, { nullable: true }) severity: AuditSeverity | null,
+    @Ctx() context: ExtendedYogaContext
+  ): Promise<AuditLog[]> {
+    // Check if user owns the service or is admin
+    const service = await this.serviceRepository.findOne({ where: { id: serviceId } });
+
+    if (!service) {
+      throw new GraphQLError('Service not found');
+    }
+
+    if (service.ownerId !== context.user!.id && !context.user?.permissions?.includes('admin')) {
+      throw new GraphQLError('Insufficient permissions');
+    }
+
+    const where: any = { resourceType: 'service', resourceId: serviceId };
+    if (category) where.category = category;
+    if (severity) where.severity = severity;
+
     return this.auditLogRepository.find({
       where,
       relations: ['user', 'application'],

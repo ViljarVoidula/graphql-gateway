@@ -225,6 +225,10 @@ impl MutationRoot {
     let normalized = normalize_input(input.0);
         let ds_input: CreateDataSourceInput = serde_json::from_value(normalized)?;
         let mut data_source = DataSource::from(ds_input);
+        // Inject embedding defaults from index config if user didn't specify
+        if let Err(e) = sync_engine.inject_embedding_defaults_if_absent(&mut data_source).await {
+            tracing::warn!(error = %e, "Failed to inject embedding defaults during create; continuing");
+        }
         let id = sync_engine.storage.create_data_source(&data_source).await?;
         data_source.id = Some(id);
         
@@ -252,9 +256,7 @@ impl MutationRoot {
         if let Some(source_type) = input.source_type {
             data_source.source_type = source_type;
         }
-        if let Some(mapping) = input.mapping {
-            data_source.mapping = mapping;
-        }
+        if let Some(mapping) = input.mapping { data_source.mapping = mapping; }
         if let Some(sync_interval) = input.sync_interval {
             data_source.sync_interval = sync_interval;
         }
@@ -265,6 +267,10 @@ impl MutationRoot {
             data_source.config = config;
         }
         
+        // If embedding config still not provided, try to fill from index defaults
+        if let Err(e) = sync_engine.inject_embedding_defaults_if_absent(&mut data_source).await {
+            tracing::warn!(error = %e, "Failed to inject embedding defaults during update; continuing");
+        }
         data_source.updated_at = mongodb::bson::DateTime::now();
         sync_engine.storage.update_data_source(&data_source).await?;
         
@@ -338,6 +344,78 @@ impl MutationRoot {
             })
         }
     }
+
+    /// Process images for a specific data source independently of sync
+    async fn process_images(
+        &self,
+        ctx: &Context<'_>,
+        data_source_id: ID,
+        force_reprocess: Option<bool>,
+    ) -> GraphQLResult<ImageProcessingResult> {
+        let sync_engine = ctx.data::<SyncEngine>()?;
+        let object_id = ObjectId::parse_str(&data_source_id)?;
+        
+        // Load data source
+        let data_source = sync_engine.storage.get_data_source(object_id).await?;
+        
+        // Check if image processing is enabled
+        if !data_source.config.image_preprocessing.unwrap_or(false) 
+            && !data_source.config.image_refitting.unwrap_or(false) {
+            return Ok(ImageProcessingResult {
+                success: false,
+                processed_count: 0,
+                error_message: Some("Image processing is not enabled for this data source".to_string()),
+                processing_time_ms: Some(0),
+            });
+        }
+
+        let start_time = tokio::time::Instant::now();
+        
+        // Get current snapshot documents if available
+        if let Some(current_snapshot) = sync_engine.storage.get_current_snapshot(object_id).await? {
+            let documents = sync_engine.storage.load_snapshot_documents(current_snapshot.id.unwrap()).await?;
+            let mut processed_count = 0;
+            let mut error_messages = Vec::new();
+            
+            // Process images for each document
+            for mut doc in documents {
+                match sync_engine.process_document_images(&doc.document, &data_source).await {
+                    Ok(processed_doc) => {
+                        // Update the document in storage with processed images
+                        doc.document = processed_doc;
+                        if let Err(e) = sync_engine.storage.update_processed_document(&doc).await {
+                            error_messages.push(format!("Failed to update document {}: {}", doc.source_id, e));
+                        } else {
+                            processed_count += 1;
+                        }
+                    }
+                    Err(e) => {
+                        error_messages.push(format!("Failed to process images for document {}: {}", doc.source_id, e));
+                    }
+                }
+            }
+            
+            let processing_time = start_time.elapsed();
+            
+            Ok(ImageProcessingResult {
+                success: error_messages.is_empty(),
+                processed_count,
+                error_message: if error_messages.is_empty() { 
+                    None 
+                } else { 
+                    Some(error_messages.join("; ")) 
+                },
+                processing_time_ms: Some(processing_time.as_millis() as i64),
+            })
+        } else {
+            Ok(ImageProcessingResult {
+                success: false,
+                processed_count: 0,
+                error_message: Some("No current snapshot found for data source".to_string()),
+                processing_time_ms: Some(start_time.elapsed().as_millis() as i64),
+            })
+        }
+    }
 }
 
 // GraphQL input and output types
@@ -347,6 +425,14 @@ pub struct TestDataSourceResult {
     pub sample_data: Option<Vec<serde_json::Value>>,
     pub error_message: Option<String>,
     pub record_count: Option<i32>,
+}
+
+#[derive(async_graphql::SimpleObject)]
+pub struct ImageProcessingResult {
+    pub success: bool,
+    pub processed_count: i32,
+    pub error_message: Option<String>,
+    pub processing_time_ms: Option<i64>,
 }
 
 // Convert domain models to GraphQL objects

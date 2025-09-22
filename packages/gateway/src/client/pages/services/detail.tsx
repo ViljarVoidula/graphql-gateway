@@ -4,7 +4,10 @@ import {
   Badge,
   Box,
   Button,
+  Card,
+  Center,
   Code,
+  Grid,
   Group,
   LoadingOverlay,
   Modal,
@@ -12,6 +15,7 @@ import {
   Stack,
   Table,
   Text,
+  ThemeIcon,
   Title,
   Tooltip
 } from '@mantine/core';
@@ -27,12 +31,16 @@ import {
   IconEyeOff,
   IconKey,
   IconRefresh,
+  IconServer,
+  IconSettings,
+  IconShield,
   IconTrash
 } from '@tabler/icons-react';
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import SchemaChangesPanel from '../../components/SchemaChangesPanel';
 import { authenticatedFetch } from '../../utils/auth';
+import { ServiceAuditLog } from './components';
 
 interface ServiceKey {
   id: string;
@@ -231,191 +239,263 @@ export const ServiceDetail: React.FC = () => {
 
   if (isLoadingService) {
     return (
-      <Paper withBorder p="xl">
-        <LoadingOverlay visible />
-      </Paper>
+      <Box p="xl" style={{ backgroundColor: '#fafafa', minHeight: '100vh' }}>
+        <Card
+          shadow="xs"
+          p="xl"
+          radius="lg"
+          withBorder
+          style={{ backgroundColor: 'white', position: 'relative', minHeight: 200 }}
+        >
+          <LoadingOverlay visible />
+          <Text>Loading service details...</Text>
+        </Card>
+      </Box>
     );
   }
 
   if (loadError || !service) {
     return (
-      <Stack spacing="lg">
-        <Group>
-          <Button variant="subtle" leftIcon={<IconArrowLeft size={16} />} onClick={() => navigate('/services')}>
-            Back to Services
-          </Button>
-          <Title order={2}>Service Details</Title>
-        </Group>
-        <Alert icon={<IconAlertCircle size={16} />} color="red">
-          {loadError?.message || 'Service not found'}
-        </Alert>
-      </Stack>
+      <Box p="xl" style={{ backgroundColor: '#fafafa', minHeight: '100vh' }}>
+        <Stack spacing="xl">
+          <Paper p="xl" radius="lg" withBorder style={{ backgroundColor: 'white' }}>
+            <Group>
+              <Button variant="subtle" leftIcon={<IconArrowLeft size={16} />} onClick={() => navigate('/services')}>
+                Back to Services
+              </Button>
+              <Title order={2}>Service Details</Title>
+            </Group>
+          </Paper>
+          <Alert icon={<IconAlertCircle size={16} />} color="red">
+            {loadError?.message || 'Service not found'}
+          </Alert>
+        </Stack>
+      </Box>
     );
   }
 
   return (
     <>
-      <Stack spacing="lg">
-        <Group position="apart">
-          <Group>
-            <Button variant="subtle" leftIcon={<IconArrowLeft size={16} />} onClick={() => navigate('/services')}>
-              Back to Services
-            </Button>
-            <Title order={2}>{service.name}</Title>
-            <Badge color={getStatusColor(service.status)} variant="light">
-              {service.status}
-            </Badge>
-          </Group>
-          <Group>
-            <Button variant="light" leftIcon={<IconEdit size={16} />} onClick={() => navigate(`/services/${id}/edit`)}>
-              Edit
-            </Button>
-            <Button variant="light" color="red" leftIcon={<IconTrash size={16} />} onClick={() => setShowDeleteModal(true)}>
-              Delete
-            </Button>
-          </Group>
-        </Group>
-
-        <Paper withBorder p="xl">
-          <Stack spacing="md">
-            <Group position="apart">
-              <Text size="sm" color="dimmed">
-                Service ID
-              </Text>
-              <Text size="sm" style={{ fontFamily: 'monospace' }}>
-                {service.id}
-              </Text>
-            </Group>
-
-            <Group position="apart">
-              <Text size="sm" color="dimmed">
-                URL
-              </Text>
-              <Text size="sm" style={{ fontFamily: 'monospace' }} color="blue">
-                {service.url}
-              </Text>
-            </Group>
-
-            {service.description && (
-              <Group position="apart">
-                <Text size="sm" color="dimmed">
-                  Description
-                </Text>
-                <Text size="sm">{service.description}</Text>
+      <Box p="xl" style={{ backgroundColor: '#fafafa', minHeight: '100vh' }}>
+        <Stack spacing="xl">
+          <Paper p="xl" radius="lg" withBorder style={{ backgroundColor: 'white' }}>
+            <Group position="apart" align="center">
+              <Group spacing="md">
+                <Button variant="subtle" leftIcon={<IconArrowLeft size={16} />} onClick={() => navigate('/services')}>
+                  Back
+                </Button>
+                <ThemeIcon size="xl" radius="md" variant="light" color="green">
+                  <IconServer size={24} />
+                </ThemeIcon>
+                <div>
+                  <Group spacing="sm" align="center">
+                    <Title order={1} weight={600}>
+                      {service.name}
+                    </Title>
+                    <Badge color={getStatusColor(service.status)} variant="filled">
+                      {service.status}
+                    </Badge>
+                  </Group>
+                  <Text color="dimmed" size="sm">
+                    {service.description || 'No description provided'}
+                  </Text>
+                </div>
               </Group>
-            )}
-
-            {service.version && (
-              <Group position="apart">
-                <Text size="sm" color="dimmed">
-                  Version
-                </Text>
-                <Text size="sm">{service.version}</Text>
+              <Group spacing="sm">
+                <Button
+                  variant="light"
+                  size="md"
+                  leftIcon={<IconEdit size={16} />}
+                  onClick={() => navigate(`/services/${id}/edit`)}
+                >
+                  Edit
+                </Button>
+                <Button
+                  variant="light"
+                  color="red"
+                  size="md"
+                  leftIcon={<IconTrash size={16} />}
+                  onClick={() => setShowDeleteModal(true)}
+                >
+                  Delete
+                </Button>
               </Group>
-            )}
-
-            <Group position="apart">
-              <Text size="sm" color="dimmed">
-                HMAC Authentication
-              </Text>
-              <Badge color={service.enableHMAC ? 'green' : 'red'} variant="light">
-                {service.enableHMAC ? 'Enabled' : 'Disabled'}
-              </Badge>
             </Group>
+          </Paper>
 
-            <Group position="apart">
-              <Text size="sm" color="dimmed">
-                Timeout
-              </Text>
-              <Text size="sm">{service.timeout}ms</Text>
-            </Group>
+          <Grid gutter="xl">
+            <Grid.Col span={6}>
+              <Card shadow="xs" p="xl" radius="lg" withBorder style={{ backgroundColor: 'white' }}>
+                <Group spacing="sm" mb="xl">
+                  <ThemeIcon size="md" radius="md" variant="light" color="blue">
+                    <IconSettings size={18} />
+                  </ThemeIcon>
+                  <Title order={3} weight={600}>
+                    Service Configuration
+                  </Title>
+                </Group>
+                <Stack spacing="lg">
+                  <Group position="apart">
+                    <Text size="sm" color="dimmed" weight={500}>
+                      Service ID
+                    </Text>
+                    <Text size="sm" style={{ fontFamily: 'monospace' }}>
+                      {service.id}
+                    </Text>
+                  </Group>
+                  <Group position="apart">
+                    <Text size="sm" color="dimmed" weight={500}>
+                      URL
+                    </Text>
+                    <Text size="sm" style={{ fontFamily: 'monospace' }} color="blue">
+                      {service.url}
+                    </Text>
+                  </Group>
+                  {service.version && (
+                    <Group position="apart">
+                      <Text size="sm" color="dimmed" weight={500}>
+                        Version
+                      </Text>
+                      <Badge variant="light">{service.version}</Badge>
+                    </Group>
+                  )}
+                  <Group position="apart">
+                    <Text size="sm" color="dimmed" weight={500}>
+                      Timeout
+                    </Text>
+                    <Text size="sm">{service.timeout}ms</Text>
+                  </Group>
+                  {service.owner && (
+                    <Group position="apart">
+                      <Text size="sm" color="dimmed" weight={500}>
+                        Owner
+                      </Text>
+                      <Text size="sm">{service.owner.email}</Text>
+                    </Group>
+                  )}
+                </Stack>
+              </Card>
+            </Grid.Col>
 
-            <Group position="apart">
-              <Text size="sm" color="dimmed">
-                Batching
-              </Text>
-              <Badge color={service.enableBatching ? 'green' : 'red'} variant="light">
-                {service.enableBatching ? 'Enabled' : 'Disabled'}
-              </Badge>
-            </Group>
+            <Grid.Col span={6}>
+              <Card shadow="xs" p="xl" radius="lg" withBorder style={{ backgroundColor: 'white' }}>
+                <Group spacing="sm" mb="xl">
+                  <ThemeIcon size="md" radius="md" variant="light" color="violet">
+                    <IconShield size={18} />
+                  </ThemeIcon>
+                  <Title order={3} weight={600}>
+                    Security & Features
+                  </Title>
+                </Group>
+                <Stack spacing="lg">
+                  <Group position="apart">
+                    <Text size="sm" color="dimmed" weight={500}>
+                      HMAC Authentication
+                    </Text>
+                    <Badge color={service.enableHMAC ? 'green' : 'red'} variant="filled">
+                      {service.enableHMAC ? 'Enabled' : 'Disabled'}
+                    </Badge>
+                  </Group>
+                  <Group position="apart">
+                    <Text size="sm" color="dimmed" weight={500}>
+                      Batching
+                    </Text>
+                    <Badge color={service.enableBatching ? 'green' : 'gray'} variant="light">
+                      {service.enableBatching ? 'Enabled' : 'Disabled'}
+                    </Badge>
+                  </Group>
+                  <Group position="apart">
+                    <Text size="sm" color="dimmed" weight={500}>
+                      MessagePack
+                    </Text>
+                    <Badge color={service.useMsgPack ? 'blue' : 'gray'} variant="light">
+                      {service.useMsgPack ? 'Enabled' : 'Disabled'}
+                    </Badge>
+                  </Group>
+                  <Group position="apart">
+                    <Text size="sm" color="dimmed" weight={500}>
+                      Created
+                    </Text>
+                    <Text size="sm">{new Date(service.createdAt).toLocaleDateString()}</Text>
+                  </Group>
+                  <Group position="apart">
+                    <Text size="sm" color="dimmed" weight={500}>
+                      Updated
+                    </Text>
+                    <Text size="sm">{new Date(service.updatedAt).toLocaleDateString()}</Text>
+                  </Group>
+                </Stack>
+              </Card>
+            </Grid.Col>
+          </Grid>
 
-            <Group position="apart">
-              <Text size="sm" color="dimmed">
-                MessagePack
-              </Text>
-              <Badge color={service.useMsgPack ? 'green' : 'red'} variant="light">
-                {service.useMsgPack ? 'Enabled' : 'Disabled'}
-              </Badge>
-            </Group>
+          {/* Schema Changes Panel */}
+          <SchemaChangesPanel serviceId={service.id as string} />
 
-            <Group position="apart">
-              <Text size="sm" color="dimmed">
-                Created
-              </Text>
-              <Text size="sm">{new Date(service.createdAt).toLocaleString()}</Text>
-            </Group>
+          {/* Audit Log */}
+          <ServiceAuditLog serviceId={service.id as string} />
 
-            <Group position="apart">
-              <Text size="sm" color="dimmed">
-                Updated
-              </Text>
-              <Text size="sm">{new Date(service.updatedAt).toLocaleString()}</Text>
-            </Group>
-
-            {service.owner && (
-              <Group position="apart">
-                <Text size="sm" color="dimmed">
-                  Owner
-                </Text>
-                <Text size="sm">{service.owner.email}</Text>
-              </Group>
-            )}
-          </Stack>
-        </Paper>
-
-        {/* Schema Changes Panel */}
-        <SchemaChangesPanel serviceId={service.id as string} />
-
-        {service.enableHMAC && (
-          <Paper withBorder p="xl">
-            <Stack spacing="md">
-              <Group position="apart">
-                <Title order={3}>HMAC Keys</Title>
-                <Button variant="light" leftIcon={<IconRefresh size={16} />} onClick={handleRotateKey} loading={isRotating}>
+          {service.enableHMAC && (
+            <Card shadow="xs" p="xl" radius="lg" withBorder style={{ backgroundColor: 'white' }}>
+              <Group position="apart" align="center" mb="xl">
+                <Group spacing="sm">
+                  <ThemeIcon size="md" radius="md" variant="light" color="orange">
+                    <IconKey size={18} />
+                  </ThemeIcon>
+                  <Title order={3} weight={600}>
+                    HMAC Keys
+                  </Title>
+                </Group>
+                <Button
+                  variant="light"
+                  size="md"
+                  leftIcon={<IconRefresh size={16} />}
+                  onClick={handleRotateKey}
+                  loading={isRotating}
+                >
                   Rotate Key
                 </Button>
               </Group>
 
               {isLoadingKeys ? (
-                <LoadingOverlay visible />
+                <Center style={{ height: 200 }}>
+                  <LoadingOverlay visible />
+                </Center>
               ) : (
-                <Table striped highlightOnHover>
+                <Table highlightOnHover verticalSpacing="md">
                   <thead>
                     <tr>
-                      <th>Key ID</th>
-                      <th>Status</th>
-                      <th>Created</th>
-                      <th>Expires</th>
-                      <th>Actions</th>
+                      <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Key ID</th>
+                      <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Status</th>
+                      <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Created</th>
+                      <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Expires</th>
+                      <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {keys.length === 0 ? (
                       <tr>
-                        <td colSpan={5} style={{ textAlign: 'center', padding: '2rem' }}>
-                          <Text color="dimmed">No keys found</Text>
+                        <td colSpan={5} style={{ textAlign: 'center', padding: '3rem' }}>
+                          <Center>
+                            <Stack align="center" spacing="md">
+                              <IconKey size={48} color="#ced4da" />
+                              <Text size="lg" weight={500} color="dimmed">
+                                No keys found
+                              </Text>
+                            </Stack>
+                          </Center>
                         </td>
                       </tr>
                     ) : (
                       keys.map((key: ServiceKey) => (
                         <tr key={key.id}>
                           <td>
-                            <Text size="sm" style={{ fontFamily: 'monospace' }}>
+                            <Text size="sm" style={{ fontFamily: 'monospace' }} weight={500}>
                               {key.keyId}
                             </Text>
                           </td>
                           <td>
-                            <Badge color={getStatusColor(key.status)} variant="light" size="sm">
+                            <Badge color={getStatusColor(key.status)} variant="filled" size="sm">
                               {key.status}
                             </Badge>
                           </td>
@@ -426,13 +506,11 @@ export const ServiceDetail: React.FC = () => {
                             <Text size="sm">{key.expiresAt ? new Date(key.expiresAt).toLocaleDateString() : 'Never'}</Text>
                           </td>
                           <td>
-                            <Group spacing="xs">
-                              <Tooltip label="Copy Key ID">
-                                <ActionIcon color="blue" variant="light" size="sm" onClick={() => copyToClipboard(key.keyId)}>
-                                  <IconCopy size={14} />
-                                </ActionIcon>
-                              </Tooltip>
-                            </Group>
+                            <Tooltip label="Copy Key ID">
+                              <ActionIcon color="blue" variant="light" size="md" onClick={() => copyToClipboard(key.keyId)}>
+                                <IconCopy size={16} />
+                              </ActionIcon>
+                            </Tooltip>
                           </td>
                         </tr>
                       ))
@@ -440,10 +518,10 @@ export const ServiceDetail: React.FC = () => {
                   </tbody>
                 </Table>
               )}
-            </Stack>
-          </Paper>
-        )}
-      </Stack>
+            </Card>
+          )}
+        </Stack>
+      </Box>
 
       {/* Delete Confirmation Modal */}
       <Modal opened={showDeleteModal} onClose={() => setShowDeleteModal(false)} title="Delete Service" size="md">

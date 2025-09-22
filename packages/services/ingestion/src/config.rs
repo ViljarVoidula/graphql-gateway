@@ -16,6 +16,19 @@ pub struct Config {
     pub enable_scheduler: bool,
     pub default_batch_size: usize,
     pub max_concurrent_syncs: usize,
+    // Image processing and S3 configuration
+    pub aws_access_key_id: Option<String>,
+    pub aws_secret_access_key: Option<String>,
+    pub aws_region: String,
+    // Optional custom S3 endpoint (e.g., for MinIO: http://localhost:9000)
+    pub aws_endpoint: Option<String>,
+    // Optional public base URL for serving files (aka "accessPoint")
+    pub aws_public_base_url: Option<String>,
+    pub default_image_bucket: String,
+    pub image_processing_timeout_ms: u64,
+    pub max_image_size_mb: u64,
+    // Optional: skip S3 HEAD existence check (useful if MinIO/bucket policy denies HEAD)
+    pub s3_skip_head_check: bool,
 }
 
 impl Config {
@@ -36,6 +49,24 @@ impl Config {
     let enable_scheduler: bool = get("ENABLE_SCHEDULER").and_then(|s| s.parse().ok()).unwrap_or(true);
     let default_batch_size: usize = get("DEFAULT_BATCH_SIZE").and_then(|s| s.parse().ok()).unwrap_or(10);
     let max_concurrent_syncs: usize = get("MAX_CONCURRENT_SYNCS").and_then(|s| s.parse().ok()).unwrap_or(1);
+    
+    // Image processing and S3 configuration
+    // Defaults requested by user; env vars override these
+    let aws_access_key_id = get("AWS_ACCESS_KEY_ID").or_else(|| Some("username".to_string()));
+    let aws_secret_access_key = get("AWS_SECRET_ACCESS_KEY").or_else(|| Some("password".to_string()));
+    let aws_region = get("AWS_REGION").unwrap_or_else(|| "eu-central-1".to_string());
+    // Support multiple env var names for convenience
+    let aws_endpoint = get("AWS_S3_ENDPOINT").or_else(|| get("AWS_ENDPOINT")).or_else(|| Some("http://localhost:9000".to_string()));
+    // "accessPoint" naming compat (maps to public base URL used for downloads)
+    let aws_public_base_url = get("AWS_S3_PUBLIC_BASE_URL")
+        .or_else(|| get("AWS_S3_ACCESS_POINT"))
+        .or_else(|| get("AWS_ACCESS_POINT"))
+        // Default to MinIO Console download endpoint with query-style base (requires public access or valid session cookies)
+        .or_else(|| Some("http://localhost:9001/api/v1/buckets/forgemaster/objects/download?preview=true&prefix=".to_string()));
+    let default_image_bucket = get("DEFAULT_IMAGE_BUCKET").unwrap_or_else(|| "forgemaster".to_string());
+    let image_processing_timeout_ms: u64 = get("IMAGE_PROCESSING_TIMEOUT_MS").and_then(|s| s.parse().ok()).unwrap_or(30000);
+    let max_image_size_mb: u64 = get("MAX_IMAGE_SIZE_MB").and_then(|s| s.parse().ok()).unwrap_or(50);
+    let s3_skip_head_check: bool = get("S3_SKIP_HEAD_CHECK").and_then(|s| s.parse().ok()).unwrap_or(true);
 
         Self {
             port,
@@ -52,6 +83,15 @@ impl Config {
             enable_scheduler,
             default_batch_size,
             max_concurrent_syncs,
+            aws_access_key_id,
+            aws_secret_access_key,
+            aws_region,
+            aws_endpoint,
+            aws_public_base_url,
+            default_image_bucket,
+            image_processing_timeout_ms,
+            max_image_size_mb,
+            s3_skip_head_check,
         }
     }
 }

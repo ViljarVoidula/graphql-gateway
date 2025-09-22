@@ -13,6 +13,7 @@ import { dataSource } from '../db/datasource';
 import { ApiKey } from '../entities/api-key.entity';
 import { ApplicationUsage } from '../entities/application-usage.entity';
 import { Application } from '../entities/application.entity';
+import { ApiKeyUsage } from '../entities/api-key-usage.entity';
 import { AuditLog } from '../entities/audit-log.entity';
 import { SchemaChange } from '../entities/schema-change.entity';
 import { ServiceKey } from '../entities/service-key.entity';
@@ -28,6 +29,8 @@ import { HealthResolver } from './health/health.resolver';
 import { SchemaChangeResolver } from './schema-changes/schema-change.resolver';
 import { ServiceRegistryResolver } from './service-registry/service-registry.resolver';
 import { ApplicationUsageResolver } from './usage/application-usage.resolver';
+import { ApiKeyUsageResolver } from './usage/api-key-usage.resolver';
+import { UsageDashboardResolver } from './usage/usage-dashboard.resolver';
 import { User } from './users/user.entity';
 import { UserResolver } from './users/user.resolver';
 // Additional resolvers (docs, theme, search, chat) to expose new admin features in primary schema
@@ -59,6 +62,7 @@ export function makeEndpointsSchema(loader: SchemaLoader): GraphQLSchema {
   Container.set('AuditLogRepository', dataSource.getRepository(AuditLog));
   Container.set('SchemaChangeRepository', dataSource.getRepository(SchemaChange));
   Container.set('ApplicationUsageRepository', dataSource.getRepository(ApplicationUsage));
+  Container.set('ApiKeyUsageRepository', dataSource.getRepository(ApiKeyUsage));
 
   const { resolvers: coreResolvers, typeDefs: coreTypefs } = buildTypeDefsAndResolversSync({
     resolvers: [
@@ -68,6 +72,8 @@ export function makeEndpointsSchema(loader: SchemaLoader): GraphQLSchema {
       ApiKeyResolver,
       AuditLogResolver,
       ApplicationUsageResolver,
+      ApiKeyUsageResolver,
+      UsageDashboardResolver,
       SchemaChangeResolver,
       ConfigurationResolver,
       HealthResolver,
@@ -79,7 +85,7 @@ export function makeEndpointsSchema(loader: SchemaLoader): GraphQLSchema {
       ChatResolver
     ],
     container: Container,
-    orphanedTypes: [Application, ApiKey, Session, AuditLog, ApplicationUsage]
+    orphanedTypes: [Application, ApiKey, Session, AuditLog, ApplicationUsage, ApiKeyUsage]
   });
 
   let schema = authZDirectiveTransformer(

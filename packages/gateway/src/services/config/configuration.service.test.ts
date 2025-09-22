@@ -1,11 +1,23 @@
 import assert from 'node:assert';
-import { beforeEach, describe, it } from 'node:test';
+import { before, after, beforeEach, describe, it } from 'node:test';
 import { ConfigurationService } from './configuration.service';
+import { TestDatabaseManager } from '../../test/test-utils';
 
 // NOTE: This test relies on an initialized TypeORM dataSource in test environment.
 // If dataSource is not initialized in the broader test suite bootstrap, this test may need adjustment/mocking.
 
 describe('ConfigurationService public documentation mode', () => {
+  before(async () => {
+    await TestDatabaseManager.setupDatabase();
+  });
+
+  after(async () => {
+    await TestDatabaseManager.teardownDatabase();
+  });
+
+  beforeEach(async () => {
+    await TestDatabaseManager.clearDatabase();
+  });
   let service: ConfigurationService;
 
   beforeEach(async () => {

@@ -4,6 +4,7 @@ import { Container } from 'typedi';
 import { ExtendedYogaContext } from '../auth/auth.types';
 import { redisClient } from '../auth/session.config';
 import { dataSource } from '../db/datasource';
+import { ApiKeyUsageCounterService } from '../services/usage/api-key-usage.counter';
 import { ApplicationServiceRateLimit } from '../entities/application-service-rate-limit.entity';
 import { AuditEventType } from '../entities/audit-log.entity';
 import { AuditLogService } from '../services/audit/audit-log.service';
@@ -112,6 +113,16 @@ export async function enforceRateLimit(context: ExtendedYogaContext): Promise<Ra
         /* swallow for tests */
       }
     }
+    // Record per-API-key rate limit exceed
+    try {
+      const ctxAny: any = context as any;
+      const apiKey = ctxAny.apiKey;
+      const serviceId = ctxAny.serviceId || undefined;
+      if (apiKey && serviceId) {
+        const counter = Container.get(ApiKeyUsageCounterService);
+        void counter.incr(app.id, serviceId, apiKey.id, { rateLimited: true });
+      }
+    } catch {}
     return { allowed: false, reason: 'RATE_LIMIT_MINUTE_EXCEEDED', remainingMinute: 0 };
   }
   if (dayLimit && dayCount! > dayLimit) {
@@ -126,6 +137,16 @@ export async function enforceRateLimit(context: ExtendedYogaContext): Promise<Ra
         /* swallow for tests */
       }
     }
+    // Record per-API-key rate limit exceed
+    try {
+      const ctxAny: any = context as any;
+      const apiKey = ctxAny.apiKey;
+      const serviceId = ctxAny.serviceId || undefined;
+      if (apiKey && serviceId) {
+        const counter = Container.get(ApiKeyUsageCounterService);
+        void counter.incr(app.id, serviceId, apiKey.id, { rateLimited: true });
+      }
+    } catch {}
     return { allowed: false, reason: 'RATE_LIMIT_DAY_EXCEEDED', remainingDay: 0 };
   }
 

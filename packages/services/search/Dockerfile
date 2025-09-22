@@ -1,5 +1,5 @@
 ## Multi-stage build for search-service
-FROM rust:1.79 as builder
+FROM rust:1.86 AS builder
 WORKDIR /app
 
 # Cache deps

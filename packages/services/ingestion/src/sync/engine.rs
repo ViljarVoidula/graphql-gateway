@@ -10,12 +10,19 @@ use crate::clients::*;
 use crate::storage::*;
 use crate::handlers::*;
 use crate::mapping::*;
+use crate::processing::ImageProcessor;
 use crate::config::Config;
 
 // Output of processing stage: successful documents and collected validation errors
 pub struct ProcessOutput {
     pub processed_docs: Vec<ProcessedDocument>,
     pub validation_errors: Vec<ValidationError>,
+}
+
+// Result type for processing a single record end-to-end (module scope)
+enum RecordProcessResult {
+    Ok(ProcessedDocument),
+    ValidationError(ValidationError),
 }
 
 pub struct SyncEngine {
@@ -26,6 +33,7 @@ pub struct SyncEngine {
     redis_client: RedisClient,
     pub(crate) storage: StorageManager,
     field_mapper: FieldMapper,
+    image_processor: Arc<Mutex<Option<ImageProcessor>>>,
     cfg: Config,
     active_syncs: Arc<Mutex<std::collections::HashSet<ObjectId>>>,
     index_config_cache: Arc<Mutex<std::collections::HashMap<String, (Vec<(String, f32)>, Option<u32>)>>>,
@@ -51,7 +59,7 @@ impl SyncEngine {
         redis_client: RedisClient,
         cfg: Config,
     ) -> Self {
-    let storage = StorageManager::with_db(db.clone());
+        let storage = StorageManager::with_db(db.clone());
         Self {
             client,
             db,
@@ -60,10 +68,97 @@ impl SyncEngine {
             redis_client,
             storage,
             field_mapper: FieldMapper::new(),
+            image_processor: Arc::new(Mutex::new(None)),
             cfg,
             active_syncs: Arc::new(Mutex::new(std::collections::HashSet::new())),
             index_config_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
+    }
+
+    /// If a data source lacks explicit embedding field configuration, fetch index defaults
+    /// from the embeddings service and inject a single EmbeddingFieldConfig entry that uses
+    /// those defaults (fields + weights) targeting the standard `embedding` field.
+    pub async fn inject_embedding_defaults_if_absent(&self, data_source: &mut DataSource) -> Result<()> {
+        if data_source.mapping.embedding_fields.is_empty() {
+            let app_id = data_source.app_id.clone();
+            match self.embeddings_client.get_index_config(&app_id).await {
+                Ok((fields_with_weights, _dim)) => {
+                    if !fields_with_weights.is_empty() {
+                        let fields: Vec<String> = fields_with_weights.iter().map(|(f, _)| f.clone()).collect();
+                        let weights: std::collections::HashMap<String, f32> = fields_with_weights.into_iter().collect();
+                        let cfg = EmbeddingFieldConfig {
+                            fields,
+                            weights: Some(weights),
+                            target_field: "embedding".to_string(),
+                        };
+                        data_source.mapping.embedding_fields.push(cfg);
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(app_id = %app_id, error = %e, "Failed to get index defaults; proceeding without embedding defaults");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Initialize or get the image processor (lazy initialization)
+    async fn get_image_processor(&self) -> Result<()> {
+        // First check under lock if initialization is needed
+        let needs_init = {
+            let guard = self.image_processor.lock().expect("Image processor mutex poisoned");
+            guard.is_none()
+        };
+        if needs_init {
+            // Initialize outside the lock to avoid holding a non-Send guard across await
+            match ImageProcessor::new(self.cfg.clone()).await {
+                Ok(processor) => {
+                    let mut guard = self.image_processor.lock().expect("Image processor mutex poisoned");
+                    // Only set if still none to avoid race
+                    if guard.is_none() {
+                        *guard = Some(processor);
+                        tracing::info!("Image processor initialized successfully");
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "Failed to initialize image processor; image processing will be disabled");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Process document images if image processing is enabled
+    pub async fn process_document_images(&self, document: &serde_json::Value, data_source: &DataSource) -> Result<serde_json::Value> {
+        // Check if image processing is enabled
+        if !data_source.config.image_preprocessing.unwrap_or(false) 
+            && !data_source.config.image_refitting.unwrap_or(false) {
+            return Ok(document.clone());
+        }
+
+        // Ensure image processor is initialized
+        self.get_image_processor().await?;
+
+        // Take the processor out to avoid holding the guard across await
+        let mut maybe_processor = {
+            let mut guard = self.image_processor.lock().expect("Image processor mutex poisoned");
+            guard.take()
+        };
+
+        let result = if let Some(proc_ref) = maybe_processor.as_mut() {
+            proc_ref.process_document_images(document, data_source).await
+        } else {
+            tracing::debug!("Image processor not available; skipping image processing");
+            Ok(document.clone())
+        };
+
+        // Put the processor back
+        {
+            let mut guard = self.image_processor.lock().expect("Image processor mutex poisoned");
+            *guard = maybe_processor;
+        }
+
+        result
     }
 
     pub async fn execute_sync(&self, data_source_id: ObjectId) -> Result<SyncExecution> {
@@ -362,38 +457,68 @@ impl SyncEngine {
     ) -> Result<ProcessOutput> {
         // We'll try to use a transaction first; if not supported (e.g., standalone Mongo),
         // we fall back to non-transactional writes.
-        let mut processed_docs = Vec::new();
-        let mut validation_errors = Vec::new();
+    let mut processed_docs: Vec<ProcessedDocument> = Vec::new();
+    let mut validation_errors: Vec<ValidationError> = Vec::new();
 
-        // Determine validation strategy and required fields
-        use crate::models::ValidationStrategy;
-        let strategy = data_source
-            .config
-            .validation_strategy
-            .clone()
-            .unwrap_or(ValidationStrategy::SkipInvalid);
-        // Default required fields: price and either categories or category_path
-        let mut default_required: std::collections::HashSet<String> = ["price".to_string()].into_iter().collect();
-        // We'll handle categories/category_path as a special OR rule later
-        let extra_required = data_source
-            .config
-            .required_fields
-            .clone()
-            .unwrap_or_default();
-        for f in extra_required { default_required.insert(f); }
+        // Concurrent per-record processing configured via embedding_parallelism
 
-        for (index, raw_record) in raw_data.iter().enumerate() {
+        // Process records concurrently with bounded parallelism through mapping -> images -> validation -> embedding
+        let embed_parallelism = data_source.config.embedding_parallelism.unwrap_or(4).max(1);
+        let mut processed_docs_local: Vec<ProcessedDocument> = Vec::new();
+        let mut validation_errors_local: Vec<ValidationError> = Vec::new();
+
+        use futures::stream::{self, StreamExt};
+        let results = stream::iter(raw_data.into_iter().enumerate().map(|(index, raw_record)| {
+            let data_source_cloned = data_source.clone();
+            let engine = self.clone();
+            async move {
+                engine.process_single_record(raw_record, index, data_source_cloned, snapshot_id).await
+            }
+        }))
+        .buffer_unordered(embed_parallelism)
+        .collect::<Vec<_>>()
+        .await;
+
+        for item in results {
+            match item {
+                Ok(RecordProcessResult::Ok(doc)) => processed_docs_local.push(doc),
+                Ok(RecordProcessResult::ValidationError(err)) => validation_errors_local.push(err),
+                Err(e) => {
+                    // Treat as transformation failure associated with a synthetic id
+                    validation_errors_local.push(ValidationError{ record_id: "<unknown>".into(), field: None, error_type: ValidationErrorType::TransformationFailed, message: e.to_string() });
+                }
+            }
+        }
+
+    // Replace previous per-record loop outputs
+    processed_docs = processed_docs_local;
+    validation_errors = validation_errors_local;
+        // Legacy mapping loop removed; now handled via process_single_record
+        /* for (index, raw_record) in raw_data.iter().enumerate() {
             let source_id = self.extract_source_id(raw_record, index);
-            
             // Apply field mapping
             match self.field_mapper.map_fields(raw_record, &data_source.mapping) {
                 Ok(mapped_doc) => {
-                    // Product-level validation: ensure required fields exist and are non-empty
+                    // STEP 1: Process images if enabled (before validation and embeddings)
+                    let processed_doc = match self.process_document_images(&mapped_doc, data_source).await {
+                        Ok(doc) => doc,
+                        Err(e) => {
+                            tracing::warn!(
+                                error = %e,
+                                record_id = %source_id,
+                                "Image processing failed, continuing with original document"
+                            );
+                            // Continue with original document if image processing fails
+                            mapped_doc
+                        }
+                    };
+
+                    // STEP 2: Product-level validation (now using processed document with images)
                     let mut missing: Vec<String> = Vec::new();
                     let mut has_categories = false;
                     let mut has_category_path = false;
                     let mut has_category_alias = false;
-                    if let Some(obj) = mapped_doc.as_object() {
+                    if let Some(obj) = processed_doc.as_object() {
                         for f in &default_required {
                             if !obj.contains_key(f) || self.field_mapper.is_empty_value(&obj[f]) {
                                 missing.push(f.clone());
@@ -403,7 +528,7 @@ impl SyncEngine {
                         if let Some(v) = obj.get("category_path") { if !self.field_mapper.is_empty_value(v) { has_category_path = true; } }
                         if let Some(v) = obj.get("category") { if !self.field_mapper.is_empty_value(v) { has_category_alias = true; } }
                     } else {
-                        // mapped_doc isn't an object, treat as invalid
+                        // processed_doc isn't an object, treat as invalid
                         missing.push("<document>".to_string());
                     }
                     // Enforce OR rule: require at least one of categories, category_path, or category(alias)
@@ -430,8 +555,9 @@ impl SyncEngine {
                             }
                         }
                     }
-                    // Generate embedding if needed
-                    let mut final_doc = self.generate_embedding_if_needed(&mapped_doc, data_source).await?;
+
+                    // STEP 3: Generate embedding if needed (can now use processed images for multimodal embeddings)
+                    let mut final_doc = self.generate_embedding_if_needed(&processed_doc, data_source).await?;
                     // Ensure document has an 'id': prefer mapped value, else use source_id (UUID)
                     let doc_id = final_doc
                         .get("id")
@@ -491,7 +617,7 @@ impl SyncEngine {
                     }
                 }
             }
-        }
+        } */
 
     // Store processed documents
     tracing::info!(processed_count = processed_docs.len(), validation_errors = validation_errors.len(), "Storing processed documents to MongoDB");
@@ -536,7 +662,7 @@ impl SyncEngine {
             }
         }
         
-        if !validation_errors.is_empty() {
+    if !validation_errors.is_empty() {
             // Build a compact breakdown by error type and sample messages
             let mut by_type: HashMap<&'static str, usize> = HashMap::new();
             let mut message_counts: HashMap<String, usize> = HashMap::new();
@@ -572,6 +698,99 @@ impl SyncEngine {
         }
 
         Ok(ProcessOutput { processed_docs, validation_errors })
+    }
+
+    async fn process_single_record(&self, raw_record: serde_json::Value, index: usize, data_source: DataSource, snapshot_id: ObjectId) -> Result<RecordProcessResult> {
+        let source_id = self.extract_source_id(&raw_record, index);
+    use crate::models::ValidationStrategy;
+        let strategy = data_source.config.validation_strategy.clone().unwrap_or(ValidationStrategy::SkipInvalid);
+
+        // Map
+        let mapped_doc = match self.field_mapper.map_fields(&raw_record, &data_source.mapping) {
+            Ok(m) => m,
+            Err(e) => {
+                let (etype, msg) = match e {
+                    IngestionError::Validation(m) => (ValidationErrorType::MissingRequiredField, m),
+                    _ => (ValidationErrorType::TransformationFailed, e.to_string()),
+                };
+                let verr = ValidationError { record_id: source_id, field: None, error_type: etype, message: msg };
+                return Ok(RecordProcessResult::ValidationError(verr));
+            }
+        };
+
+        // Images
+    let processed_doc = match self.process_document_images(&mapped_doc, &data_source).await {
+            Ok(doc) => doc,
+            Err(e) => {
+                tracing::warn!(error = %e, record_id = %source_id, "Image processing failed, continuing with original document");
+                mapped_doc
+            }
+        };
+
+        // Validate
+        let mut missing: Vec<String> = Vec::new();
+        let mut has_categories = false;
+        let mut has_category_path = false;
+        let mut has_category_alias = false;
+        if let Some(obj) = processed_doc.as_object() {
+            // Default required fields (same as original loop)
+            let mut default_required: std::collections::HashSet<String> = ["price".to_string()].into_iter().collect();
+            let extra_required = data_source.config.required_fields.clone().unwrap_or_default();
+            for f in extra_required { default_required.insert(f); }
+            for f in &default_required {
+                if !obj.contains_key(f) || self.field_mapper.is_empty_value(&obj[f]) {
+                    missing.push(f.clone());
+                }
+            }
+            if let Some(v) = obj.get("categories") { if !self.field_mapper.is_empty_value(v) { has_categories = true; } }
+            if let Some(v) = obj.get("category_path") { if !self.field_mapper.is_empty_value(v) { has_category_path = true; } }
+            if let Some(v) = obj.get("category") { if !self.field_mapper.is_empty_value(v) { has_category_alias = true; } }
+        } else {
+            missing.push("<document>".to_string());
+        }
+        if !has_categories && !has_category_path && !has_category_alias {
+            missing.push("categories|category_path|category".to_string());
+        }
+        if !missing.is_empty() {
+            let msg = format!("Missing required fields: {}", missing.join(", "));
+            let verr = ValidationError { record_id: source_id.clone(), field: None, error_type: ValidationErrorType::MissingRequiredField, message: msg };
+            if let ValidationStrategy::FailSync = strategy {
+                // Continue collecting but mark as error
+            }
+            return Ok(RecordProcessResult::ValidationError(verr));
+        }
+
+        // Embedding
+    let mut final_doc = self.generate_embedding_if_needed(&processed_doc, &data_source).await?;
+        // Ensure id present
+        let doc_id = final_doc
+            .get("id").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(|s| s.to_string())
+            .unwrap_or_else(|| source_id.clone());
+        if final_doc.get("id").is_none() {
+            if let Some(obj) = final_doc.as_object_mut() { obj.insert("id".to_string(), serde_json::Value::String(doc_id.clone())); }
+        }
+
+        // Autocomplete
+        let autocomplete_terms = {
+            let app_id = data_source.app_id.clone();
+            let paths = match self.embeddings_client.get_autocomplete_paths(&app_id).await {
+                Ok(p) if !p.is_empty() => p,
+                _ => data_source.mapping.autocomplete_fields.clone(),
+            };
+            self.extract_autocomplete_terms_with_paths(&final_doc, &paths)
+        };
+
+        // Build ProcessedDocument
+        let mut processed_doc = ProcessedDocument::new(snapshot_id, doc_id, final_doc);
+        if let Some(arr) = processed_doc.document.get("embedding").and_then(|v| v.as_array()) {
+            let mut vec: Vec<f32> = Vec::with_capacity(arr.len());
+            for v in arr { if let Some(f) = v.as_f64() { vec.push(f as f32); } else if let Some(i) = v.as_i64() { vec.push(i as f32); } else if let Some(u) = v.as_u64() { vec.push(u as f32); } }
+            if !vec.is_empty() { processed_doc.embedding = Some(vec); }
+        }
+        processed_doc.autocomplete_terms = autocomplete_terms;
+        processed_doc.embedding_generated = processed_doc.document.get("embedding").is_some();
+
+        Ok(RecordProcessResult::Ok(processed_doc))
     }
 
     /// Stage 2: Commit to external search services
@@ -1139,6 +1358,7 @@ impl Clone for SyncEngine {
             redis_client: self.redis_client.clone(),
             storage: self.storage.clone(),
             field_mapper: FieldMapper::new(),
+            image_processor: self.image_processor.clone(),
             cfg: self.cfg.clone(),
             active_syncs: self.active_syncs.clone(),
             index_config_cache: self.index_config_cache.clone(),

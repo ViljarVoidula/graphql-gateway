@@ -342,3 +342,42 @@ RUST_LOG=debug cargo run
 ```
 
 This enables detailed logging for troubleshooting sync operations, field mappings, and service communications.
+
+## S3/MinIO configuration and tenant paths
+
+To mirror an existing app config like:
+
+{
+"s3": {
+"region": "eu-central-1",
+"bucket": "forgemaster",
+"accessKeyId": "username",
+"secretAccessKey": "password",
+"endpoint": "http://localhost:9000",
+"accessPoint": "http://10.220.24.44:9001/api/v1/buckets/forgemaster/objects/download?preview=true&prefix="
+}
+}
+
+set these environment variables for the ingestion service (you can choose a different bucket than the other app):
+
+- `AWS_REGION=eu-central-1`
+- `DEFAULT_IMAGE_BUCKET=<your-ingestion-bucket>`
+- `AWS_ACCESS_KEY_ID=username`
+- `AWS_SECRET_ACCESS_KEY=password`
+- `AWS_S3_ENDPOINT=http://localhost:9000` (for MinIO or S3-compatible)
+- `AWS_S3_PUBLIC_BASE_URL=http://10.220.24.44:9001/api/v1/buckets/<your-ingestion-bucket>/objects/download?preview=true&prefix=`
+
+Notes:
+
+- We support `AWS_S3_ACCESS_POINT` or `AWS_ACCESS_POINT` as aliases for the public base URL.
+- Public URLs are formed by appending the object key to the public base URL; if it ends with `=` or contains `?`, no extra slash is inserted.
+
+Tenant-scoped paths: uploaded keys are organized as `processed-images/<app_id>/<tenant_id?>/<hash>.<ext>`. You can override the prefix per data source via `config.image_s3_config.prefix` and bucket via `config.image_s3_config.bucket`.
+
+Defaults (when env vars are not set):
+
+- `AWS_REGION=eu-central-1`
+- `DEFAULT_IMAGE_BUCKET=forgemaster`
+- `AWS_ACCESS_KEY_ID=username`
+- `AWS_SECRET_ACCESS_KEY=password`
+- `AWS_S3_ENDPOINT=http://localhost:9000`

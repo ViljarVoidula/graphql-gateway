@@ -2,8 +2,10 @@ import {
   Alert,
   Box,
   Button,
+  Card,
   Code,
   Divider,
+  Grid,
   Group,
   LoadingOverlay,
   Modal,
@@ -14,11 +16,12 @@ import {
   Text,
   TextInput,
   Textarea,
+  ThemeIcon,
   Title
 } from '@mantine/core';
 import { showNotification } from '@mantine/notifications';
 import { useCreate } from '@refinedev/core';
-import { IconAlertCircle, IconArrowLeft, IconCheck, IconKey } from '@tabler/icons-react';
+import { IconAlertCircle, IconArrowLeft, IconCheck, IconKey, IconPlus, IconServer } from '@tabler/icons-react';
 import React from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
@@ -104,116 +107,171 @@ export const ServiceCreate: React.FC = () => {
 
   return (
     <>
-      <Stack spacing="lg">
-        <Group>
-          <Button variant="subtle" leftIcon={<IconArrowLeft size={16} />} onClick={() => navigate('/services')}>
-            Back to Services
-          </Button>
-          <Title order={2}>Create New Service</Title>
-        </Group>
+      <Box p="xl" style={{ backgroundColor: '#fafafa', minHeight: '100vh' }}>
+        <Stack spacing="xl">
+          <Paper p="xl" radius="lg" withBorder style={{ backgroundColor: 'white' }}>
+            <Group spacing="md">
+              <Button variant="subtle" leftIcon={<IconArrowLeft size={16} />} onClick={() => navigate('/services')}>
+                Back
+              </Button>
+              <ThemeIcon size="xl" radius="md" variant="light" color="green">
+                <IconPlus size={24} />
+              </ThemeIcon>
+              <div>
+                <Title order={1} weight={600}>
+                  Create New Service
+                </Title>
+                <Text color="dimmed" size="sm">
+                  Register a new GraphQL service with the gateway
+                </Text>
+              </div>
+            </Group>
+          </Paper>
 
-        <Paper withBorder p="xl" style={{ position: 'relative' }}>
-          <LoadingOverlay visible={isLoading} />
+          <Card shadow="xs" p="xl" radius="lg" withBorder style={{ backgroundColor: 'white', position: 'relative' }}>
+            <LoadingOverlay visible={isLoading} />
 
-          <form onSubmit={handleSubmit(onSubmit)}>
-            <Stack spacing="md">
-              <TextInput
-                label="Service Name"
-                placeholder="e.g., user-service"
-                required
-                error={errors.name?.message}
-                {...register('name', { required: 'Service name is required' })}
-              />
+            <form onSubmit={handleSubmit(onSubmit)}>
+              <Stack spacing="xl">
+                <div>
+                  <Title order={3} weight={600} mb="lg">
+                    Basic Information
+                  </Title>
+                  <Grid gutter="lg">
+                    <Grid.Col span={6}>
+                      <TextInput
+                        label="Service Name"
+                        placeholder="e.g., user-service"
+                        required
+                        error={errors.name?.message}
+                        {...register('name', { required: 'Service name is required' })}
+                        styles={{ label: { fontWeight: 500, fontSize: '14px' } }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={6}>
+                      <TextInput
+                        label="Version"
+                        placeholder="e.g., v1.0.0"
+                        error={errors.version?.message}
+                        {...register('version')}
+                        styles={{ label: { fontWeight: 500, fontSize: '14px' } }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={12}>
+                      <TextInput
+                        label="GraphQL Endpoint URL"
+                        placeholder="https://api.example.com/graphql"
+                        required
+                        error={errors.url?.message}
+                        {...register('url', {
+                          required: 'Service URL is required',
+                          pattern: {
+                            value: /^https?:\/\/.+/,
+                            message: 'Must be a valid HTTP/HTTPS URL'
+                          }
+                        })}
+                        styles={{ label: { fontWeight: 500, fontSize: '14px' } }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={12}>
+                      <Textarea
+                        label="Description"
+                        placeholder="Optional description of what this service provides"
+                        error={errors.description?.message}
+                        {...register('description')}
+                        minRows={3}
+                        styles={{ label: { fontWeight: 500, fontSize: '14px' } }}
+                      />
+                    </Grid.Col>
+                  </Grid>
+                </div>
 
-              <TextInput
-                label="Service URL"
-                placeholder="https://api.example.com/graphql"
-                required
-                error={errors.url?.message}
-                {...register('url', {
-                  required: 'Service URL is required',
-                  pattern: {
-                    value: /^https?:\/\/[^\s]+$/,
-                    message: 'Please enter a valid URL'
-                  }
-                })}
-              />
+                <Divider />
 
-              <Textarea label="Description" placeholder="Brief description of the service" {...register('description')} />
+                <div>
+                  <Title order={3} weight={600} mb="lg">
+                    Configuration
+                  </Title>
+                  <Grid gutter="lg">
+                    <Grid.Col span={6}>
+                      <NumberInput
+                        label="Timeout (ms)"
+                        placeholder="5000"
+                        min={100}
+                        max={30000}
+                        error={errors.timeout?.message}
+                        {...register('timeout', {
+                          required: 'Timeout is required',
+                          min: { value: 100, message: 'Minimum timeout is 100ms' },
+                          max: { value: 30000, message: 'Maximum timeout is 30000ms' }
+                        })}
+                        styles={{ label: { fontWeight: 500, fontSize: '14px' } }}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={6}>
+                      <Stack spacing="md" mt="xs">
+                        <Switch
+                          label="Externally Accessible"
+                          description="Allow external applications to access this service"
+                          {...register('externally_accessible')}
+                          checked={watchedValues.externally_accessible}
+                        />
+                      </Stack>
+                    </Grid.Col>
+                  </Grid>
+                </div>
 
-              <TextInput label="Version" placeholder="e.g., v1.0.0" {...register('version')} />
+                <Divider />
 
-              <Divider my="md" />
+                <div>
+                  <Title order={3} weight={600} mb="lg">
+                    Security & Features
+                  </Title>
+                  <Grid gutter="lg">
+                    <Grid.Col span={6}>
+                      <Stack spacing="md">
+                        <Switch
+                          label="Enable HMAC Authentication"
+                          description="Secure service communication with HMAC signatures"
+                          {...register('enableHMAC')}
+                          checked={watchedValues.enableHMAC}
+                        />
+                        <Switch
+                          label="Enable Request Batching"
+                          description="Allow multiple operations in a single request"
+                          {...register('enableBatching')}
+                          checked={watchedValues.enableBatching}
+                        />
+                      </Stack>
+                    </Grid.Col>
+                    <Grid.Col span={6}>
+                      <Stack spacing="md">
+                        <Switch
+                          label="Use MessagePack"
+                          description="Enable binary serialization for better performance"
+                          {...register('useMsgPack')}
+                          checked={watchedValues.useMsgPack}
+                        />
+                      </Stack>
+                    </Grid.Col>
+                  </Grid>
+                </div>
 
-              <Title order={4}>Configuration</Title>
+                <Divider />
 
-              <Switch
-                label="Enable HMAC Authentication"
-                description="Generate and use HMAC keys for secure communication"
-                checked={watchedValues.enableHMAC}
-                {...register('enableHMAC')}
-              />
-
-              <NumberInput
-                label="Timeout (ms)"
-                description="Request timeout in milliseconds"
-                min={1000}
-                max={30000}
-                step={1000}
-                value={watchedValues.timeout}
-                onChange={(value) => {
-                  // Handle NumberInput change manually
-                }}
-                error={errors.timeout?.message}
-              />
-              <input
-                type="hidden"
-                {...register('timeout', {
-                  required: 'Timeout is required',
-                  min: { value: 1000, message: 'Timeout must be at least 1000ms' },
-                  max: { value: 30000, message: 'Timeout must be at most 30000ms' }
-                })}
-              />
-
-              <Switch
-                label="Enable Batching"
-                description="Allow batching of multiple requests"
-                checked={watchedValues.enableBatching}
-                {...register('enableBatching')}
-              />
-
-              <Switch
-                label="Enable MessagePack"
-                description="Allow Gateway to negotiate MessagePack responses (adds x-msgpack-enabled:1 when client requests)"
-                checked={watchedValues.useMsgPack}
-                {...register('useMsgPack')}
-              />
-
-              <Switch
-                label="Externally Accessible"
-                description="Allow this service to be discoverable and whitelisted by applications"
-                checked={watchedValues.externally_accessible}
-                {...register('externally_accessible')}
-              />
-
-              {error && (
-                <Alert icon={<IconAlertCircle size={16} />} color="red">
-                  {error.message}
-                </Alert>
-              )}
-
-              <Group position="right" mt="md">
-                <Button variant="light" onClick={() => navigate('/services')}>
-                  Cancel
-                </Button>
-                <Button type="submit" loading={isLoading}>
-                  Create Service
-                </Button>
-              </Group>
-            </Stack>
-          </form>
-        </Paper>
-      </Stack>
+                <Group position="right">
+                  <Button variant="light" onClick={() => navigate('/services')}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" size="md" leftIcon={<IconServer size={16} />} loading={isLoading}>
+                    Create Service
+                  </Button>
+                </Group>
+              </Stack>
+            </form>
+          </Card>
+        </Stack>
+      </Box>
 
       <Modal
         opened={showKeyModal}

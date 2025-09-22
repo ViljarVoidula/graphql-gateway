@@ -145,6 +145,12 @@ pub enum IngestionError {
     
     #[error("Configuration error: {0}")]
     Configuration(String),
+    
+    #[error("Image processing error: {0}")]
+    ImageProcessing(String),
+    
+    #[error("S3 storage error: {0}")]
+    S3Storage(String),
 }
 
 pub type Result<T> = std::result::Result<T, IngestionError>;

@@ -2,7 +2,10 @@ import {
   ActionIcon,
   Alert,
   Badge,
+  Box,
   Button,
+  Card,
+  Center,
   Group,
   LoadingOverlay,
   Modal,
@@ -12,12 +15,22 @@ import {
   Table,
   Text,
   TextInput,
+  ThemeIcon,
   Title,
   Tooltip
 } from '@mantine/core';
 import { showNotification } from '@mantine/notifications';
 import { useDelete, useList } from '@refinedev/core';
-import { IconAlertCircle, IconEdit, IconEye, IconPlus, IconRefresh, IconSearch, IconTrash } from '@tabler/icons-react';
+import {
+  IconAlertCircle,
+  IconEdit,
+  IconEye,
+  IconPlus,
+  IconRefresh,
+  IconSearch,
+  IconServer,
+  IconTrash
+} from '@tabler/icons-react';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -83,154 +96,207 @@ export const ServiceList: React.FC = () => {
 
   return (
     <>
-      <Stack spacing="lg">
-        <Group position="apart">
-          <Title order={2}>Services</Title>
-          <Button leftIcon={<IconPlus size={16} />} onClick={() => navigate('/services/create')}>
-            Register Service
-          </Button>
-        </Group>
+      <Box p="xl" style={{ backgroundColor: '#fafafa', minHeight: '100vh' }}>
+        <Stack spacing="xl">
+          <Paper p="xl" radius="lg" withBorder style={{ backgroundColor: 'white' }}>
+            <Group position="apart" align="center">
+              <Group spacing="md">
+                <ThemeIcon size="xl" radius="md" variant="light" color="green">
+                  <IconServer size={24} />
+                </ThemeIcon>
+                <div>
+                  <Title order={1} weight={600}>
+                    Services
+                  </Title>
+                  <Text color="dimmed" size="sm">
+                    Manage your registered GraphQL services
+                  </Text>
+                </div>
+              </Group>
+              <Button size="md" leftIcon={<IconPlus size={16} />} onClick={() => navigate('/services/create')}>
+                Register Service
+              </Button>
+            </Group>
+          </Paper>
 
-        {isError && (
-          <Alert icon={<IconAlertCircle size={16} />} color="red">
-            {error?.message || 'Failed to load services'}
-          </Alert>
-        )}
+          {isError && (
+            <Alert icon={<IconAlertCircle size={16} />} color="red">
+              {error?.message || 'Failed to load services'}
+            </Alert>
+          )}
 
-        <Group position="apart">
-          <TextInput
-            placeholder="Search services by name..."
-            icon={<IconSearch size={16} />}
-            value={searchValue}
-            onChange={(event) => setSearchValue(event.target.value)}
-            style={{ minWidth: 300 }}
-          />
-          <Group>
-            <Select
-              data={[
-                { value: 'all', label: 'All' },
-                { value: 'active', label: 'Active' },
-                { value: 'inactive', label: 'Inactive' },
-                { value: 'maintenance', label: 'Maintenance' }
-              ]}
-              value={statusFilter}
-              onChange={(v: string | null) => setStatusFilter((v as any) ?? 'all')}
-              label="Status"
-              placeholder="All"
-              clearable={false}
-              style={{ width: 180 }}
-            />
-            <Button variant="light" leftIcon={<IconRefresh size={16} />} onClick={() => refetch()}>
-              Refresh
-            </Button>
-          </Group>
-        </Group>
+          <Card shadow="xs" p="xl" radius="lg" withBorder style={{ backgroundColor: 'white' }}>
+            <Group position="apart">
+              <TextInput
+                placeholder="Search services by name..."
+                icon={<IconSearch size={16} />}
+                value={searchValue}
+                onChange={(event) => setSearchValue(event.target.value)}
+                style={{ minWidth: 300 }}
+                size="md"
+              />
+              <Group spacing="lg">
+                <Select
+                  data={[
+                    { value: 'all', label: 'All Statuses' },
+                    { value: 'active', label: 'Active' },
+                    { value: 'inactive', label: 'Inactive' },
+                    { value: 'maintenance', label: 'Maintenance' }
+                  ]}
+                  value={statusFilter}
+                  onChange={(v: string | null) => setStatusFilter((v as any) ?? 'all')}
+                  label="Filter by Status"
+                  clearable={false}
+                  style={{ minWidth: 180 }}
+                  size="md"
+                />
+                <Button variant="light" size="md" leftIcon={<IconRefresh size={16} />} onClick={() => refetch()}>
+                  Refresh
+                </Button>
+              </Group>
+            </Group>
+          </Card>
 
-        <Paper withBorder>
-          <LoadingOverlay visible={isLoading} />
-          <Table striped highlightOnHover>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>URL</th>
-                <th>Status</th>
-                <th>HMAC</th>
-                <th>MsgPack</th>
-                <th>Created</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredServices.length === 0 ? (
+          <Card shadow="xs" radius="lg" withBorder style={{ backgroundColor: 'white' }}>
+            <LoadingOverlay visible={isLoading} />
+            <Table highlightOnHover verticalSpacing="md" style={{ backgroundColor: 'white' }}>
+              <thead>
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>
-                    <Text color="dimmed">{isLoading ? 'Loading...' : 'No services found'}</Text>
-                  </td>
+                  <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Service</th>
+                  <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>URL</th>
+                  <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Status</th>
+                  <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Security</th>
+                  <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Features</th>
+                  <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Created</th>
+                  <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Actions</th>
                 </tr>
-              ) : (
-                filteredServices.map((service: any) => (
-                  <tr key={service.id}>
-                    <td>
-                      <div>
-                        <Text size="sm" weight={500}>
-                          {service.name}
-                        </Text>
-                        {service.description && (
-                          <Text size="xs" color="dimmed">
-                            {service.description}
-                          </Text>
-                        )}
-                      </div>
-                    </td>
-                    <td>
-                      <Text size="sm" color="blue" style={{ fontFamily: 'monospace' }}>
-                        {service.url}
-                      </Text>
-                    </td>
-                    <td>
-                      <Badge color={getStatusColor(service.status)} variant="light" size="sm">
-                        {service.status || 'Unknown'}
-                      </Badge>
-                    </td>
-                    <td>
-                      <Badge color={service.enableHMAC ? 'green' : 'red'} variant="light" size="sm">
-                        {service.enableHMAC ? 'Enabled' : 'Disabled'}
-                      </Badge>
-                    </td>
-                    <td>
-                      <Badge color={service.useMsgPack ? 'green' : 'gray'} variant="light" size="sm">
-                        {service.useMsgPack ? 'On' : 'Off'}
-                      </Badge>
-                    </td>
-                    <td>
-                      <Text size="sm" color="dimmed">
-                        {service.createdAt ? new Date(service.createdAt).toLocaleDateString() : 'N/A'}
-                      </Text>
-                    </td>
-                    <td>
-                      <Group spacing="xs">
-                        <Tooltip label="View Details">
-                          <ActionIcon
-                            color="blue"
-                            variant="light"
-                            size="sm"
-                            onClick={() => navigate(`/services/${service.id}`)}
-                          >
-                            <IconEye size={14} />
-                          </ActionIcon>
-                        </Tooltip>
-                        <Tooltip label="Edit Service">
-                          <ActionIcon
-                            color="orange"
-                            variant="light"
-                            size="sm"
-                            onClick={() => navigate(`/services/${service.id}/edit`)}
-                          >
-                            <IconEdit size={14} />
-                          </ActionIcon>
-                        </Tooltip>
-                        <Tooltip label="Delete Service">
-                          <ActionIcon color="red" variant="light" size="sm" onClick={() => handleDeleteService(service)}>
-                            <IconTrash size={14} />
-                          </ActionIcon>
-                        </Tooltip>
-                      </Group>
+              </thead>
+              <tbody>
+                {filteredServices.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '3rem' }}>
+                      <Center>
+                        <Stack align="center" spacing="md">
+                          <IconServer size={48} color="#ced4da" />
+                          <div>
+                            <Text size="lg" weight={500} color="dimmed">
+                              {isLoading ? 'Loading services...' : 'No services found'}
+                            </Text>
+                            {!isLoading && searchValue && (
+                              <Text size="sm" color="dimmed" mt="xs">
+                                Try adjusting your search or filters
+                              </Text>
+                            )}
+                          </div>
+                        </Stack>
+                      </Center>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </Table>
-        </Paper>
+                ) : (
+                  filteredServices.map((service: any) => (
+                    <tr key={service.id}>
+                      <td>
+                        <div>
+                          <Group spacing="sm">
+                            <ThemeIcon size="sm" radius="md" variant="light" color="green">
+                              <IconServer size={16} />
+                            </ThemeIcon>
+                            <div>
+                              <Text size="sm" weight={500}>
+                                {service.name}
+                              </Text>
+                              {service.description && (
+                                <Text size="xs" color="dimmed" lineClamp={1}>
+                                  {service.description}
+                                </Text>
+                              )}
+                            </div>
+                          </Group>
+                        </div>
+                      </td>
+                      <td>
+                        <Text size="sm" color="blue" style={{ fontFamily: 'monospace' }} lineClamp={1}>
+                          {service.url}
+                        </Text>
+                      </td>
+                      <td>
+                        <Badge color={getStatusColor(service.status)} variant="filled" size="sm">
+                          {service.status || 'Unknown'}
+                        </Badge>
+                      </td>
+                      <td>
+                        <Group spacing="xs">
+                          <Badge color={service.enableHMAC ? 'green' : 'gray'} variant="light" size="xs">
+                            HMAC
+                          </Badge>
+                        </Group>
+                      </td>
+                      <td>
+                        <Group spacing="xs">
+                          {service.useMsgPack && (
+                            <Badge color="blue" variant="light" size="xs">
+                              MsgPack
+                            </Badge>
+                          )}
+                          {service.enableBatching && (
+                            <Badge color="violet" variant="light" size="xs">
+                              Batching
+                            </Badge>
+                          )}
+                        </Group>
+                      </td>
+                      <td>
+                        <Text size="sm" color="dimmed">
+                          {service.createdAt ? new Date(service.createdAt).toLocaleDateString() : 'N/A'}
+                        </Text>
+                      </td>
+                      <td>
+                        <Group spacing="sm">
+                          <Tooltip label="View Details">
+                            <ActionIcon
+                              color="blue"
+                              variant="light"
+                              size="md"
+                              onClick={() => navigate(`/services/${service.id}`)}
+                            >
+                              <IconEye size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                          <Tooltip label="Edit Service">
+                            <ActionIcon
+                              color="orange"
+                              variant="light"
+                              size="md"
+                              onClick={() => navigate(`/services/${service.id}/edit`)}
+                            >
+                              <IconEdit size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                          <Tooltip label="Delete Service">
+                            <ActionIcon color="red" variant="light" size="md" onClick={() => handleDeleteService(service)}>
+                              <IconTrash size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                        </Group>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </Table>
+          </Card>
 
-        {services.length > 0 && (
-          <Group position="center">
-            <Text size="sm" color="dimmed">
-              Showing {filteredServices.length} of {services.length} services
-            </Text>
-          </Group>
-        )}
-      </Stack>
+          {services.length > 0 && (
+            <Paper p="md" radius="md" style={{ backgroundColor: 'white' }}>
+              <Group position="center">
+                <Text size="sm" color="dimmed">
+                  Showing {filteredServices.length} of {services.length} services
+                </Text>
+              </Group>
+            </Paper>
+          )}
+        </Stack>
+      </Box>
 
       {/* Delete Confirmation Modal */}
       <Modal opened={!!serviceToDelete} onClose={() => setServiceToDelete(null)} title="Delete Service" size="md">

@@ -5,6 +5,7 @@ pub mod mapping;
 pub mod storage;
 pub mod sync;
 pub mod config;
+pub mod processing;
 
 // Convenient re-exports for tests and external callers
 pub use handlers::*;
@@ -14,3 +15,4 @@ pub use mapping::*;
 pub use storage::*;
 pub use sync::*;
 pub use config::*;
+pub use processing::*;

@@ -1,0 +1,35 @@
+# Global ignores
+**/target/
+**/node_modules/
+**/.git/
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.DS_Store
+**/*.ipynb_checkpoints
+**/.idea/
+**/.vscode/
+**/.cargo/registry/
+**/.cargo/git/
+**/dist/
+**/build/
+**/coverage/
+**/.nx/
+.env
+.env.*
+!.env.example
+
+# Large data/binaries
+**/*.bin
+**/*.pth
+**/*.pt
+**/*.onnx
+**/*.tar
+**/*.tar.gz
+**/*.zip
+**/*.whl
+
+# Docker artifacts
+**/docker-cache/

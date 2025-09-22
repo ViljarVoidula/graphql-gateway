@@ -97,6 +97,11 @@ class ServiceHealthMonitor {
       records: all
     };
   }
+
+  // Test helper: reset all state
+  reset() {
+    this.records.clear();
+  }
 }
 
 export const healthMonitor = new ServiceHealthMonitor();

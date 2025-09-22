@@ -99,38 +99,37 @@ impl EmbeddingsServiceClient {
         fields: &[String],
         weights: Option<&HashMap<String, f32>>,
     ) -> Result<Option<Vec<f64>>> {
-        // Extract and combine text from specified fields
-        let mut texts = Vec::new();
-        let mut field_weights = Vec::new();
+        // Split inputs into texts and images with weights
+        let mut weighted_texts_json: Vec<Value> = Vec::new();
+        let mut weighted_images_json: Vec<Value> = Vec::new();
+
+        let looks_like_image = |s: &str| {
+            let ls = s.to_lowercase();
+            if ls.starts_with("data:image/") { return true; }
+            if !(ls.starts_with("http://") || ls.starts_with("https://")) { return false; }
+            // simple suffix check
+            ls.ends_with(".jpg") || ls.ends_with(".jpeg") || ls.ends_with(".png") || ls.ends_with(".webp") || ls.ends_with(".gif") || ls.contains("image/")
+        };
 
         for field_name in fields {
             if let Some(value) = document.get(field_name) {
-                if let Some(text) = value.as_str() {
-                    if !text.trim().is_empty() {
-                        texts.push(text);
-                        let weight = weights
-                            .and_then(|w| w.get(field_name))
-                            .copied()
-                            .unwrap_or(1.0);
-                        field_weights.push(weight);
+                if let Some(s) = value.as_str() {
+                    let w = weights.and_then(|m| m.get(field_name)).copied().unwrap_or(1.0);
+                    if s.trim().is_empty() { continue; }
+                    if looks_like_image(s) {
+                        weighted_images_json.push(serde_json::json!({ "imageUrl": s, "weight": w }));
+                    } else {
+                        weighted_texts_json.push(serde_json::json!({ "text": s, "weight": w }));
                     }
                 }
             }
         }
 
-        if texts.is_empty() {
+        if weighted_texts_json.is_empty() && weighted_images_json.is_empty() {
             return Ok(None);
         }
 
-        // Build weighted texts for embedding generation
-        let weighted_texts: Vec<Value> = texts.iter()
-            .zip(field_weights.iter())
-            .map(|(text, weight)| serde_json::json!({
-                "text": text,
-                "weight": weight
-            }))
-            .collect();
-
+        // GraphQL mutation: both modalities supported
         let mutation = r#"
             mutation BuildQueryEmbedding($input: QueryEmbeddingInput!) {
                 buildQueryEmbedding(input: $input) {
@@ -140,17 +139,20 @@ impl EmbeddingsServiceClient {
             }
         "#;
 
-        let variables = serde_json::json!({
-            "input": {
-                "weightedTexts": weighted_texts,
-                "strategy": "WEIGHTED_SUM",
-                "normalize": true
-            }
-        });
+        // Build input object, omitting empty arrays to keep backward compatibility
+        let mut input_obj = serde_json::Map::new();
+        input_obj.insert("strategy".to_string(), Value::from("WEIGHTED_SUM"));
+        input_obj.insert("normalize".to_string(), Value::from(true));
+        if !weighted_texts_json.is_empty() {
+            input_obj.insert("weightedTexts".to_string(), Value::Array(weighted_texts_json));
+        }
+        if !weighted_images_json.is_empty() {
+            input_obj.insert("weightedImages".to_string(), Value::Array(weighted_images_json));
+        }
 
         let body = serde_json::json!({
             "query": mutation,
-            "variables": variables
+            "variables": { "input": Value::Object(input_obj) }
         });
 
         let response = self.client

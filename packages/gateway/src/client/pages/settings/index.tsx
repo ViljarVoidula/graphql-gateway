@@ -49,6 +49,11 @@ export const SessionSettings: React.FC = () => {
   const [aiKeySet, setAiKeySet] = useState<boolean>(false);
   const [genBusy, setGenBusy] = useState<boolean>(false);
   const [genMsg, setGenMsg] = useState<string | null>(null);
+  // Enforce downstream auth
+  const [enforceDownstream, setEnforceDownstream] = useState<boolean | null>(null);
+  const [enforceDownstreamInitial, setEnforceDownstreamInitial] = useState<boolean | null>(null);
+  const [enforceSaving, setEnforceSaving] = useState<boolean>(false);
+  const [enforceError, setEnforceError] = useState<string | null>(null);
 
   useEffect(() => {
     // Load current settings
@@ -67,7 +72,7 @@ export const SessionSettings: React.FC = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            query: `query Settings { settings { auditLogRetentionDays publicDocumentationMode } }`
+            query: `query Settings { settings { auditLogRetentionDays publicDocumentationMode enforceDownstreamAuth } }`
           })
         });
         const data = await res.json();
@@ -77,6 +82,10 @@ export const SessionSettings: React.FC = () => {
           if (data.data.settings.publicDocumentationMode) {
             setDocsMode(data.data.settings.publicDocumentationMode as 'DISABLED' | 'PREVIEW' | 'ENABLED');
             setDocsModeInitial(data.data.settings.publicDocumentationMode as 'DISABLED' | 'PREVIEW' | 'ENABLED');
+          }
+          if (typeof data.data.settings.enforceDownstreamAuth === 'boolean') {
+            setEnforceDownstream(data.data.settings.enforceDownstreamAuth);
+            setEnforceDownstreamInitial(data.data.settings.enforceDownstreamAuth);
           }
         }
       } catch (e: any) {
@@ -324,6 +333,87 @@ export const SessionSettings: React.FC = () => {
                   LLM-powered enrichment.
                 </Text>
               </Alert>
+            </>
+          )}
+        </Stack>
+      </Card>
+
+      <Card shadow="sm" p="lg" radius="md" withBorder>
+        <Stack spacing="md">
+          <Group spacing="sm">
+            <IconShield size={20} />
+            <Text weight={500} size="md">
+              Enforce Downstream Service Authentication
+            </Text>
+          </Group>
+          {auditLoading ? (
+            <Group>
+              <Loader size="sm" /> <Text size="sm">Loading setting...</Text>
+            </Group>
+          ) : enforceError ? (
+            <Alert color="red" title="Failed to load" icon={<IconInfoCircle size={16} />}>
+              {enforceError}
+            </Alert>
+          ) : (
+            <>
+              <Group position="apart">
+                <div>
+                  <Text weight={500} size="sm">
+                    Require authentication for downstream service calls
+                  </Text>
+                  <Text size="xs" color="dimmed">
+                    When enabled, all gateway requests to downstream services require either an Application API key or a user
+                    session/token.
+                  </Text>
+                </div>
+                <Switch
+                  checked={!!enforceDownstream}
+                  onChange={(e) => setEnforceDownstream(e.currentTarget.checked)}
+                  onLabel="ON"
+                  offLabel="OFF"
+                />
+              </Group>
+              <Group spacing="sm">
+                <Button
+                  size="xs"
+                  loading={enforceSaving}
+                  disabled={enforceSaving || enforceDownstream === null || enforceDownstream === enforceDownstreamInitial}
+                  onClick={async () => {
+                    if (enforceDownstream === null) return;
+                    setEnforceSaving(true);
+                    setEnforceError(null);
+                    try {
+                      const res = await authenticatedFetch('/graphql', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          query: `mutation Set($enabled:Boolean!){ setEnforceDownstreamAuth(enabled:$enabled) }`,
+                          variables: { enabled: enforceDownstream }
+                        })
+                      });
+                      const json = await res.json();
+                      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to save');
+                      setEnforceDownstreamInitial(enforceDownstream);
+                    } catch (e: any) {
+                      setEnforceError(e?.message || 'Failed to save');
+                    } finally {
+                      setEnforceSaving(false);
+                    }
+                  }}
+                >
+                  Save
+                </Button>
+                {enforceDownstreamInitial !== null && enforceDownstream !== enforceDownstreamInitial && (
+                  <Button
+                    variant="subtle"
+                    size="xs"
+                    disabled={enforceSaving}
+                    onClick={() => setEnforceDownstream(enforceDownstreamInitial!)}
+                  >
+                    Reset
+                  </Button>
+                )}
+              </Group>
             </>
           )}
         </Stack>

@@ -1,10 +1,12 @@
 import { buildHTTPExecutor } from '@graphql-tools/executor-http';
+import { GraphQLError } from 'graphql';
 import { Container } from 'typedi';
 import { dataSource } from '../db/datasource';
 import { Service } from '../entities/service.entity';
 import { HMACUtils } from '../security/hmac';
 import { keyManager } from '../security/keyManager';
 import { AuditLogService } from '../services/audit/audit-log.service';
+import { ConfigurationService } from '../services/config/configuration.service';
 import { ApplicationUsageService } from '../services/usage/application-usage.service';
 import { log } from './logger';
 import { withRemoteCallMetrics } from './telemetry/metrics';
@@ -91,6 +93,11 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
         headers['traceparent'] = contextHeaders.traceparent;
       }
 
+      // Propagate API key header to downstream if present (some downstream services may authorize at their edge)
+      if (contextHeaders['x-api-key']) {
+        headers['x-api-key'] = contextHeaders['x-api-key'];
+      }
+
       // Propagate MessagePack preference if enabled for this service and present on incoming request
       if (useMsgPack) {
         // Always request msgpack from downstream if the service is configured for it
@@ -143,6 +150,29 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
         ...requestOptions,
         headers
       };
+
+      // Enforce downstream authentication if configured: must have either user session or application (api-key)
+      try {
+        const config = Container.get(ConfigurationService);
+        const enforce = await config.isDownstreamAuthEnforced();
+        if (enforce) {
+          // Only enforce for actual incoming requests (skip internal stitching/introspection calls where no req is present)
+          const hasRequestContext = !!(context as any)?.req;
+          const hasUser = !!(context as any)?.user?.id;
+          const hasApp = !!(context as any)?.application?.id;
+          if (hasRequestContext && !hasUser && !hasApp) {
+            throw new GraphQLError(
+              'Authentication required: downstream service requests require user session or application API key',
+              {
+                extensions: { code: 'UNAUTHENTICATED' }
+              }
+            );
+          }
+        }
+      } catch (e) {
+        // If configuration service unavailable, default to not enforcing to avoid breaking startup
+        if (e instanceof GraphQLError) throw e;
+      }
 
       // Debug logging
       log.debug(`Making request to ${url}`, {

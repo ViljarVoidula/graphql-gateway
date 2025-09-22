@@ -14,7 +14,10 @@ import {
   Table,
   Text,
   Title,
-  Tooltip
+  Tooltip,
+  ThemeIcon,
+  Box,
+  Paper
 } from '@mantine/core';
 import { useList } from '@refinedev/core';
 import {
@@ -24,7 +27,11 @@ import {
   IconKey,
   IconSettings,
   IconTrendingUp,
-  IconUsers
+  IconUsers,
+  IconServer,
+  IconShield,
+  IconChartLine,
+  IconEye
 } from '@tabler/icons-react';
 import gql from 'graphql-tag';
 import React, { useEffect, useState } from 'react';
@@ -48,19 +55,33 @@ const StatsCard: React.FC<{
   value: number;
   icon: React.ReactNode;
   color: string;
-}> = ({ title, value, icon, color }) => (
-  <Card shadow="sm" p="lg" radius="md" withBorder>
-    <Group position="apart">
-      <div>
-        <Text size="sm" color="dimmed" weight={500}>
-          {title}
-        </Text>
-        <Text size="xl" weight={700}>
-          {value}
-        </Text>
-      </div>
-      <div style={{ color }}>{icon}</div>
+  subtitle?: string;
+  trend?: string;
+}> = ({ title, value, icon, color, subtitle, trend }) => (
+  <Card shadow="xs" p="xl" radius="lg" withBorder style={{ height: '100%' }}>
+    <Group position="apart" align="flex-start" mb="md">
+      <ThemeIcon size="xl" radius="md" variant="light" color={color}>
+        {icon}
+      </ThemeIcon>
+      {trend && (
+        <Badge size="sm" color="green" variant="light">
+          {trend}
+        </Badge>
+      )}
     </Group>
+    <Stack spacing="xs">
+      <Text size="sm" color="dimmed" weight={500} transform="uppercase" style={{ letterSpacing: '0.5px' }}>
+        {title}
+      </Text>
+      <Text size="2xl" weight={700} color="dark">
+        {value.toLocaleString()}
+      </Text>
+      {subtitle && (
+        <Text size="xs" color="dimmed">
+          {subtitle}
+        </Text>
+      )}
+    </Stack>
   </Card>
 );
 
@@ -136,13 +157,19 @@ export const Dashboard: React.FC = () => {
   const [serviceHealth, setServiceHealth] = useState<ServiceHealth[]>([]);
   const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
   const [loadingExtras, setLoadingExtras] = useState(false);
+  // Usage widgets state
+  const [daily, setDaily] = useState<Array<{ date: string; requestCount: number }>>([]);
+  const [topKeys, setTopKeys] = useState<Array<{ apiKeyId: string; requestCount: number }>>([]);
+  const [totals, setTotals] = useState<{ totalRequests: number; totalErrors: number; totalRateLimited: number } | null>(
+    null
+  );
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       setLoadingExtras(true);
       try {
-        const query = `query DashboardExtras {\n  auditLogSummary { totalLast24h bySeverity { severity count } topActions { action count } lastEventAt }\n  serviceHealth { id name status breakingChanges24h errorRate24h requestCount24h lastSchemaChangeAt }\n  usageSummary { generatedAt topServices { serviceId serviceName requestCount24h errorRate24h } topApplications { applicationId applicationName requestCount24h apiKeyCount } }\n}`;
+        const query = `query DashboardExtras {\n  auditLogSummary { totalLast24h bySeverity { severity count } topActions { action count } lastEventAt }\n  serviceHealth { id name status breakingChanges24h errorRate24h requestCount24h lastSchemaChangeAt }\n  usageSummary { generatedAt topServices { serviceId serviceName requestCount24h errorRate24h } topApplications { applicationId applicationName requestCount24h apiKeyCount } }\n  usageTotals(days: 7) { totalRequests totalErrors totalRateLimited }\n  usageDailyRequests(days: 14) { date requestCount }\n  usageTopApiKeys(days: 7, limit: 5) { apiKeyId requestCount }\n}`;
         const resp = await authenticatedFetch('/graphql', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -155,6 +182,9 @@ export const Dashboard: React.FC = () => {
           setAuditSummary(json.data.auditLogSummary);
           setServiceHealth(json.data.serviceHealth || []);
           setUsageSummary(json.data.usageSummary || null);
+          setTotals(json.data.usageTotals || null);
+          setDaily(json.data.usageDailyRequests || []);
+          setTopKeys(json.data.usageTopApiKeys || []);
         }
       } catch (e) {
         // eslint-disable-next-line no-console
@@ -215,275 +245,385 @@ export const Dashboard: React.FC = () => {
   const servicesWithBreaking = serviceHealth.filter((s) => s.breakingChanges24h > 0);
 
   return (
-    <Stack spacing="lg">
-      <Group position="apart" align="center">
-        <Title order={1}>Gateway Dashboard</Title>
-      </Group>
+    <Box p="xl" style={{ backgroundColor: '#fafafa', minHeight: '100vh' }}>
+      <Stack spacing="xl">
+        <Group position="apart" align="center">
+          <Title order={1} weight={600}>
+            Gateway Dashboard
+          </Title>
+          <Badge size="lg" color="blue" variant="light">
+            Live
+          </Badge>
+        </Group>
 
-      <SimpleGrid
-        cols={5}
-        spacing="lg"
-        breakpoints={[
-          { maxWidth: 'lg', cols: 3 },
-          { maxWidth: 'sm', cols: 2 }
-        ]}
-      >
-        <StatsCard title="Total Users" value={users.length} icon={<IconUsers size={32} />} color="#228be6" />
-        <StatsCard title="Total Services" value={services.length} icon={<IconSettings size={32} />} color="#40c057" />
-        <StatsCard title="Active Sessions" value={activeSessions} icon={<IconKey size={32} />} color="#fab005" />
-        <Card shadow="sm" p="lg" radius="md" withBorder>
-          <Group position="apart" align="flex-start">
-            <div>
-              <Text size="sm" color="dimmed" weight={500}>
+        {/* Main Stats Grid */}
+        <SimpleGrid
+          cols={4}
+          spacing="xl"
+          breakpoints={[
+            { maxWidth: 'lg', cols: 2 },
+            { maxWidth: 'sm', cols: 1 }
+          ]}
+        >
+          <StatsCard 
+            title="Total Users" 
+            value={users.length} 
+            icon={<IconUsers size={24} />} 
+            color="blue"
+            subtitle={`${users.filter((u: any) => u.isEmailVerified).length} verified`}
+          />
+          <StatsCard 
+            title="Services" 
+            value={services.length} 
+            icon={<IconServer size={24} />} 
+            color="green"
+            subtitle={`${servicesStatus.active} active`}
+          />
+          <StatsCard 
+            title="Active Sessions" 
+            value={activeSessions} 
+            icon={<IconActivity size={24} />} 
+            color="orange"
+            subtitle="Currently online"
+          />
+          <Card shadow="xs" p="xl" radius="lg" withBorder>
+            <Group position="apart" align="flex-start" mb="md">
+              <ThemeIcon size="xl" radius="md" variant="light" color={healthScore > 80 ? 'green' : healthScore > 60 ? 'yellow' : 'red'}>
+                <IconShield size={24} />
+              </ThemeIcon>
+              <RingProgress
+                size={60}
+                thickness={6}
+                roundCaps
+                sections={[
+                  {
+                    value: healthScore,
+                    color: healthScore > 80 ? 'green' : healthScore > 60 ? 'yellow' : 'red'
+                  }
+                ]}
+                label={
+                  <Text size="xs" weight={700} align="center">
+                    {healthScore}%
+                  </Text>
+                }
+              />
+            </Group>
+            <Stack spacing="xs">
+              <Text size="sm" color="dimmed" weight={500} transform="uppercase" style={{ letterSpacing: '0.5px' }}>
                 Health Score
               </Text>
-              <Group spacing={4} mt={4}>
-                <RingProgress
-                  size={70}
-                  thickness={8}
-                  roundCaps
-                  sections={[
-                    {
-                      value: healthScore,
-                      color: healthScore > 80 ? 'green' : healthScore > 60 ? 'yellow' : 'red'
-                    }
-                  ]}
-                  label={
-                    <Text size="xs" weight={700}>
-                      {healthScore}%
-                    </Text>
-                  }
-                />
-                <Stack spacing={2} ml="sm">
-                  {/* Active services raw count (before penalty adjustments in health score) */}
-                  <Text size="xs" color="dimmed">
-                    Active svc: {servicesStatus.active}/{services.length}
-                  </Text>
-                  <Text size="xs" color="dimmed">
-                    Avg err: {(avgErrorRate * 100).toFixed(1)}%
-                  </Text>
-                  <Text size="xs" color="dimmed">
-                    Breaking 24h: {totalBreaking}
-                  </Text>
-                </Stack>
-              </Group>
-            </div>
-            <IconActivity size={28} color={healthScore > 80 ? '#40c057' : healthScore > 60 ? '#fab005' : '#fa5252'} />
-          </Group>
-        </Card>
-        <Card shadow="sm" p="lg" radius="md" withBorder>
-          <Group position="apart">
-            <div>
-              <Text size="sm" color="dimmed" weight={500}>
-                Audit Events 24h
+              <Text size="lg" weight={600}>
+                System Health
               </Text>
-              <Text size="xl" weight={700}>
-                {auditSummary?.totalLast24h ?? '-'}
+              <Text size="xs" color="dimmed">
+                {servicesStatus.active}/{services.length} services active
               </Text>
-            </div>
-            <IconHeartbeat size={32} color="#15aabf" />
-          </Group>
-        </Card>
-      </SimpleGrid>
-
-      <Grid gutter="lg">
-        <Grid.Col span={6}>
-          <Card shadow="sm" p="lg" radius="md" withBorder>
-            <Stack spacing="md">
-              <Title order={3}>Services Status</Title>
-              <Group position="apart">
-                <Text size="sm">Active</Text>
-                <Badge color="green">{servicesStatus.active}</Badge>
-              </Group>
-              <Group position="apart">
-                <Text size="sm">Inactive</Text>
-                <Badge color="red">{servicesStatus.inactive}</Badge>
-              </Group>
-              <Group position="apart">
-                <Text size="sm">Maintenance</Text>
-                <Badge color="yellow">{servicesStatus.maintenance}</Badge>
-              </Group>
-              <div>
-                <Text size="sm" color="dimmed" mb="xs">
-                  Overall Health
-                </Text>
-                <Progress
-                  value={healthScore}
-                  color={healthScore > 80 ? 'green' : healthScore > 60 ? 'yellow' : 'red'}
-                  size="lg"
-                  radius="xl"
-                />
-                <Text size="xs" color="dimmed" mt="xs">
-                  {healthScore}% services active
-                </Text>
-              </div>
-              {(offlineServices.length > 0 || servicesWithBreaking.length > 0) && (
-                <Alert color="red" icon={<IconAlertTriangle size={16} />} variant="light" mt="sm">
-                  {offlineServices.length > 0 && (
-                    <Text size="xs">{offlineServices.length} service(s) offline / not active</Text>
-                  )}
-                  {servicesWithBreaking.length > 0 && (
-                    <Text size="xs" mt={4}>
-                      {servicesWithBreaking.length} service(s) have breaking changes in last 24h
-                    </Text>
-                  )}
-                </Alert>
-              )}
             </Stack>
           </Card>
-        </Grid.Col>
-        <Grid.Col span={6}>
-          <Card shadow="sm" p="lg" radius="md" withBorder>
-            <Stack spacing="md">
-              <Title order={3}>Recent Activity</Title>
-              <Text size="sm" color="dimmed">
-                {users.length} users registered
-              </Text>
-              <Text size="sm" color="dimmed">
-                {services.length} services configured
-              </Text>
-              <Text size="sm" color="dimmed">
-                {activeSessions} active sessions
-              </Text>
-              {healthScore < 100 && (
-                <Alert color="orange" variant="light">
-                  Some services are not active. Check service status.
-                </Alert>
-              )}
-              {auditSummary && (
-                <Stack spacing={4} mt="sm">
-                  <Text size="xs" weight={500}>
-                    Audit Severity (24h)
-                  </Text>
-                  <Group spacing={4}>
-                    {auditSummary.bySeverity.map((s) => (
-                      <Badge
-                        key={s.severity}
-                        size="xs"
-                        color={
-                          s.severity === 'critical'
-                            ? 'red'
-                            : s.severity === 'high'
-                              ? 'orange'
-                              : s.severity === 'medium'
-                                ? 'yellow'
-                                : 'gray'
-                        }
-                      >
-                        {s.severity}:{s.count}
-                      </Badge>
-                    ))}
-                  </Group>
-                  <Text size="xs" mt={4} weight={500}>
-                    Top Actions
-                  </Text>
-                  <Group spacing={4}>
-                    {auditSummary.topActions.map((a) => (
-                      <Badge key={a.action} size="xs" variant="outline">
-                        {a.action}:{a.count}
-                      </Badge>
-                    ))}
-                  </Group>
-                </Stack>
-              )}
-            </Stack>
-          </Card>
-        </Grid.Col>
-      </Grid>
+        </SimpleGrid>
 
-      <Grid gutter="lg" mt="md">
-        <Grid.Col span={6}>
-          <Card withBorder shadow="sm" p="lg" radius="md">
-            <Group position="apart" mb="sm">
-              <Group spacing="xs">
-                <IconTrendingUp size={18} />
-                <Title order={4}>Top Services (24h)</Title>
+        {/* Usage Analytics */}
+        <Grid gutter="xl">
+          <Grid.Col span={8}>
+            <Card shadow="xs" p="xl" radius="lg" withBorder style={{ height: '300px' }}>
+              <Group position="apart" align="center" mb="xl">
+                <Group spacing="sm">
+                  <ThemeIcon size="md" radius="md" variant="light" color="blue">
+                    <IconChartLine size={18} />
+                  </ThemeIcon>
+                  <div>
+                    <Text weight={600} size="lg">
+                      API Requests
+                    </Text>
+                    <Text size="sm" color="dimmed">
+                      Last 14 days
+                    </Text>
+                  </div>
+                </Group>
+                {totals && (
+                  <Group spacing="lg">
+                    <div style={{ textAlign: 'center' }}>
+                      <Text size="xs" color="dimmed" transform="uppercase">Total</Text>
+                      <Text weight={600}>{totals.totalRequests.toLocaleString()}</Text>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <Text size="xs" color="dimmed" transform="uppercase">Errors</Text>
+                      <Text weight={600} color="red">{totals.totalErrors.toLocaleString()}</Text>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <Text size="xs" color="dimmed" transform="uppercase">Rate Limited</Text>
+                      <Text weight={600} color="orange">{totals.totalRateLimited.toLocaleString()}</Text>
+                    </div>
+                  </Group>
+                )}
               </Group>
-              {loadingExtras && <Loader size="sm" />}
-            </Group>
-            <ScrollArea h={200} offsetScrollbars>
-              <Table verticalSpacing="xs" fontSize="xs">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Requests</th>
-                    <th>Error %</th>
-                    <th>Breaking</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(usageSummary?.topServices || []).map((s) => {
-                    const sh = serviceHealth.find((h) => h.id === s.serviceId);
-                    return (
-                      <tr key={s.serviceId}>
-                        <td>
-                          <Tooltip label={`Service ID: ${s.serviceId}`} withinPortal>
-                            <Text size="xs" weight={500}>
-                              {s.serviceName}
+              <Box style={{ height: '180px', display: 'flex', alignItems: 'flex-end' }}>
+                {daily.length ? (
+                  <svg
+                    width="100%"
+                    height="100%"
+                    viewBox={`0 0 ${Math.max(1, daily.length - 1) * 30} 160`}
+                    preserveAspectRatio="none"
+                    style={{ overflow: 'visible' }}
+                  >
+                    {(() => {
+                      const max = Math.max(1, ...daily.map((d) => d.requestCount));
+                      const points = daily.map((d, i) => {
+                        const x = i * 30;
+                        const y = 160 - Math.round((d.requestCount / max) * 140);
+                        return `${x},${y}`;
+                      });
+                      return (
+                        <>
+                          <defs>
+                            <linearGradient id="gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                              <stop offset="0%" style={{ stopColor: '#339af0', stopOpacity: 0.8 }} />
+                              <stop offset="100%" style={{ stopColor: '#339af0', stopOpacity: 0.1 }} />
+                            </linearGradient>
+                          </defs>
+                          <polyline 
+                            fill="url(#gradient)" 
+                            stroke="#339af0" 
+                            strokeWidth="3" 
+                            points={`0,160 ${points.join(' ')} ${(daily.length - 1) * 30},160`}
+                          />
+                          <polyline 
+                            fill="none" 
+                            stroke="#1c7ed6" 
+                            strokeWidth="3" 
+                            strokeLinecap="round"
+                            points={points.join(' ')} 
+                          />
+                        </>
+                      );
+                    })()}
+                  </svg>
+                ) : (
+                  <Center style={{ width: '100%', height: '100%' }}>
+                    <Stack align="center" spacing="xs">
+                      <IconEye size={32} color="#ced4da" />
+                      <Text size="sm" color="dimmed">
+                        No usage data available
+                      </Text>
+                    </Stack>
+                  </Center>
+                )}
+              </Box>
+            </Card>
+          </Grid.Col>
+          <Grid.Col span={4}>
+            <Card shadow="xs" p="xl" radius="lg" withBorder style={{ height: '300px' }}>
+              <Group position="apart" align="center" mb="xl">
+                <Group spacing="sm">
+                  <ThemeIcon size="md" radius="md" variant="light" color="violet">
+                    <IconKey size={18} />
+                  </ThemeIcon>
+                  <div>
+                    <Text weight={600} size="lg">
+                      Top API Keys
+                    </Text>
+                    <Text size="sm" color="dimmed">
+                      Last 7 days
+                    </Text>
+                  </div>
+                </Group>
+              </Group>
+              <ScrollArea style={{ height: '180px' }}>
+                <Stack spacing="md">
+                  {topKeys.length ? (
+                    topKeys.map((k, index) => (
+                      <Paper key={k.apiKeyId} p="md" radius="md" withBorder>
+                        <Group position="apart" align="center">
+                          <Group spacing="sm">
+                            <Badge size="sm" color="violet" variant="light">
+                              #{index + 1}
+                            </Badge>
+                            <Tooltip label={k.apiKeyId} withinPortal>
+                              <Text size="sm" weight={500} style={{ fontFamily: 'monospace' }}>
+                                {k.apiKeyId.slice(0, 8)}...
+                              </Text>
+                            </Tooltip>
+                          </Group>
+                          <Stack spacing={0} align="flex-end">
+                            <Text size="sm" weight={600}>
+                              {k.requestCount.toLocaleString()}
                             </Text>
-                          </Tooltip>
-                        </td>
-                        <td>{s.requestCount24h}</td>
-                        <td>{(s.errorRate24h * 100).toFixed(1)}%</td>
-                        <td>{sh?.breakingChanges24h || 0}</td>
-                        <td>
-                          <Badge
-                            size="xs"
-                            color={sh?.status === 'active' ? 'green' : sh?.status === 'maintenance' ? 'yellow' : 'red'}
-                          >
-                            {sh?.status || 'unknown'}
-                          </Badge>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </Table>
-            </ScrollArea>
-          </Card>
-        </Grid.Col>
-        <Grid.Col span={6}>
-          <Card withBorder shadow="sm" p="lg" radius="md">
-            <Group position="apart" mb="sm">
-              <Group spacing="xs">
-                <IconTrendingUp size={18} />
-                <Title order={4}>Top Applications / API Keys (24h)</Title>
-              </Group>
-              {loadingExtras && <Loader size="sm" />}
-            </Group>
-            <ScrollArea h={200} offsetScrollbars>
-              <Table verticalSpacing="xs" fontSize="xs">
-                <thead>
-                  <tr>
-                    <th>Application</th>
-                    <th>Requests</th>
-                    <th>API Keys</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(usageSummary?.topApplications || []).map((a) => (
-                    <tr key={a.applicationId}>
-                      <td>
-                        <Tooltip label={`App ID: ${a.applicationId}`} withinPortal>
-                          <Text size="xs" weight={500}>
-                            {a.applicationName}
-                          </Text>
-                        </Tooltip>
-                      </td>
-                      <td>{a.requestCount24h}</td>
-                      <td>{a.apiKeyCount}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-            </ScrollArea>
-          </Card>
-        </Grid.Col>
-      </Grid>
+                            <Text size="xs" color="dimmed">
+                              requests
+                            </Text>
+                          </Stack>
+                        </Group>
+                      </Paper>
+                    ))
+                  ) : (
+                    <Center style={{ height: '100%' }}>
+                      <Stack align="center" spacing="xs">
+                        <IconKey size={32} color="#ced4da" />
+                        <Text size="sm" color="dimmed">
+                          No API key data
+                        </Text>
+                      </Stack>
+                    </Center>
+                  )}
+                </Stack>
+              </ScrollArea>
+            </Card>
+          </Grid.Col>
+        </Grid>
 
-      <TokenRefreshNotification />
-      <AutoRefreshWelcome />
-    </Stack>
+        {/* Service Health & Activity */}
+        <Grid gutter="xl">
+          <Grid.Col span={8}>
+            <Card shadow="xs" p="xl" radius="lg" withBorder>
+              <Group position="apart" align="center" mb="xl">
+                <Group spacing="sm">
+                  <ThemeIcon size="md" radius="md" variant="light" color="green">
+                    <IconTrendingUp size={18} />
+                  </ThemeIcon>
+                  <div>
+                    <Text weight={600} size="lg">
+                      Top Services
+                    </Text>
+                    <Text size="sm" color="dimmed">
+                      Last 24 hours
+                    </Text>
+                  </div>
+                </Group>
+                {loadingExtras && <Loader size="sm" />}
+              </Group>
+              <ScrollArea style={{ height: '200px' }}>
+                <Table verticalSpacing="md" fontSize="sm" highlightOnHover>
+                  <thead>
+                    <tr>
+                      <th>Service</th>
+                      <th style={{ textAlign: 'right' }}>Requests</th>
+                      <th style={{ textAlign: 'right' }}>Error Rate</th>
+                      <th style={{ textAlign: 'center' }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(usageSummary?.topServices || []).map((s) => {
+                      const sh = serviceHealth.find((h) => h.id === s.serviceId);
+                      return (
+                        <tr key={s.serviceId}>
+                          <td>
+                            <Text weight={500}>{s.serviceName}</Text>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <Text weight={600}>{s.requestCount24h.toLocaleString()}</Text>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <Badge 
+                              size="sm" 
+                              color={s.errorRate24h < 0.01 ? 'green' : s.errorRate24h < 0.05 ? 'yellow' : 'red'}
+                              variant="light"
+                            >
+                              {(s.errorRate24h * 100).toFixed(1)}%
+                            </Badge>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <Badge
+                              size="sm"
+                              color={sh?.status === 'active' ? 'green' : sh?.status === 'maintenance' ? 'yellow' : 'red'}
+                              variant="filled"
+                            >
+                              {sh?.status || 'unknown'}
+                            </Badge>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </Table>
+                {(!usageSummary?.topServices || usageSummary.topServices.length === 0) && (
+                  <Center style={{ height: '100px' }}>
+                    <Text size="sm" color="dimmed">No service data available</Text>
+                  </Center>
+                )}
+              </ScrollArea>
+            </Card>
+          </Grid.Col>
+          <Grid.Col span={4}>
+            <Stack spacing="lg">
+              <Card shadow="xs" p="xl" radius="lg" withBorder>
+                <Group position="apart" align="center" mb="md">
+                  <Group spacing="sm">
+                    <ThemeIcon size="md" radius="md" variant="light" color="blue">
+                      <IconHeartbeat size={18} />
+                    </ThemeIcon>
+                    <div>
+                      <Text weight={600}>System Status</Text>
+                    </div>
+                  </Group>
+                </Group>
+                <Stack spacing="lg">
+                  <Group position="apart">
+                    <Text size="sm">Active Services</Text>
+                    <Badge color="green" size="lg">{servicesStatus.active}</Badge>
+                  </Group>
+                  <Group position="apart">
+                    <Text size="sm">Inactive Services</Text>
+                    <Badge color="red" size="lg">{servicesStatus.inactive}</Badge>
+                  </Group>
+                  <Group position="apart">
+                    <Text size="sm">Maintenance</Text>
+                    <Badge color="yellow" size="lg">{servicesStatus.maintenance}</Badge>
+                  </Group>
+                  <Progress
+                    value={healthScore}
+                    color={healthScore > 80 ? 'green' : healthScore > 60 ? 'yellow' : 'red'}
+                    size="lg"
+                    radius="xl"
+                    label={`${healthScore}%`}
+                  />
+                </Stack>
+              </Card>
+              <Card shadow="xs" p="xl" radius="lg" withBorder>
+                <Group position="apart" align="center" mb="md">
+                  <Group spacing="sm">
+                    <ThemeIcon size="md" radius="md" variant="light" color="cyan">
+                      <IconActivity size={18} />
+                    </ThemeIcon>
+                    <div>
+                      <Text weight={600}>Audit Events</Text>
+                      <Text size="xs" color="dimmed">Last 24 hours</Text>
+                    </div>
+                  </Group>
+                </Group>
+                <Stack spacing="sm">
+                  <Text size="2xl" weight={700}>
+                    {auditSummary?.totalLast24h ?? '-'}
+                  </Text>
+                  {auditSummary && auditSummary.bySeverity.length > 0 && (
+                    <Group spacing="xs">
+                      {auditSummary.bySeverity.map((s) => (
+                        <Badge
+                          key={s.severity}
+                          size="xs"
+                          color={
+                            s.severity === 'critical'
+                              ? 'red'
+                              : s.severity === 'high'
+                                ? 'orange'
+                                : s.severity === 'medium'
+                                  ? 'yellow'
+                                  : 'gray'
+                          }
+                        >
+                          {s.severity}: {s.count}
+                        </Badge>
+                      ))}
+                    </Group>
+                  )}
+                </Stack>
+              </Card>
+            </Stack>
+          </Grid.Col>
+        </Grid>
+
+        <TokenRefreshNotification />
+        <AutoRefreshWelcome />
+      </Stack>
+    </Box>
   );
 };

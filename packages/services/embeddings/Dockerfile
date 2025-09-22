@@ -6,12 +6,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY pyproject.toml README.md .env.example ./
+# Copy source before editable install so setuptools can find packages under src/
+COPY src ./src
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -e .
-
-COPY src ./src
 # Optionally copy a production .env at build time:
 # COPY .env ./.env
 
-EXPOSE 9000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9000"]
+# Default to 9002 to match docker-compose, but allow override via PORT env
+EXPOSE 9002
+CMD ["/bin/sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-9002}"]
