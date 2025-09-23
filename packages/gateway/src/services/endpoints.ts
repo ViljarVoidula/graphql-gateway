@@ -15,6 +15,7 @@ import { ApiKey } from '../entities/api-key.entity';
 import { ApplicationUsage } from '../entities/application-usage.entity';
 import { Application } from '../entities/application.entity';
 import { AuditLog } from '../entities/audit-log.entity';
+import { RequestLatency } from '../entities/request-latency.entity';
 import { SchemaChange } from '../entities/schema-change.entity';
 import { ServiceKey } from '../entities/service-key.entity';
 import { Service } from '../entities/service.entity';
@@ -38,6 +39,8 @@ import { AIResolver } from './ai/ai.resolver';
 import { AssetResolver } from './assets/asset.resolver';
 import { ChatResolver } from './chat/chat.resolver';
 import { DocsAuthoringResolver } from './docs/docs.resolver';
+import { LatencyHealthResolver } from './latency/latency-health.resolver';
+import { RequestLatencyResolver } from './latency/request-latency.resolver';
 import { DocsSearchResolver } from './search/search.resolver';
 import { ThemeResolver } from './theme/theme.resolver';
 
@@ -64,6 +67,7 @@ export function makeEndpointsSchema(loader: SchemaLoader): GraphQLSchema {
   Container.set('SchemaChangeRepository', dataSource.getRepository(SchemaChange));
   Container.set('ApplicationUsageRepository', dataSource.getRepository(ApplicationUsage));
   Container.set('ApiKeyUsageRepository', dataSource.getRepository(ApiKeyUsage));
+  Container.set('RequestLatencyRepository', dataSource.getRepository(RequestLatency));
 
   const { resolvers: coreResolvers, typeDefs: coreTypefs } = buildTypeDefsAndResolversSync({
     resolvers: [
@@ -84,10 +88,12 @@ export function makeEndpointsSchema(loader: SchemaLoader): GraphQLSchema {
       DocsSearchResolver,
       AIResolver,
       ChatResolver,
-      AssetResolver
+      AssetResolver,
+      LatencyHealthResolver,
+      RequestLatencyResolver
     ],
     container: Container,
-    orphanedTypes: [Application, ApiKey, Session, AuditLog, ApplicationUsage, ApiKeyUsage]
+    orphanedTypes: [Application, ApiKey, Session, AuditLog, ApplicationUsage, ApiKeyUsage, RequestLatency]
   });
 
   let schema = authZDirectiveTransformer(

@@ -80,6 +80,7 @@ export class ConfigurationService {
   private readonly PUBLIC_DOCS_BRANDING_KEY = 'public.documentation.branding'; // json: { brandName, heroTitle, heroSubtitle }
   private readonly GRAPHQL_VOYAGER_ENABLED_KEY = 'graphql.voyager.enabled';
   private readonly GRAPHQL_PLAYGROUND_ENABLED_KEY = 'graphql.playground.enabled';
+  private readonly LATENCY_TRACKING_ENABLED_KEY = 'latency.tracking.enabled';
 
   /**
    * Returns audit log retention in days. Falls back to env or default if not yet configured.
@@ -274,6 +275,30 @@ export class ConfigurationService {
   async setGraphQLPlaygroundEnabled(enabled: boolean): Promise<boolean> {
     await this.upsert(this.GRAPHQL_PLAYGROUND_ENABLED_KEY, enabled);
     gatewayInternalLog.info('Updated GraphQL Playground enabled setting', {
+      operation: 'configurationUpdate',
+      metadata: { enabled }
+    });
+    return enabled;
+  }
+
+  /**
+   * Returns whether latency tracking is enabled.
+   * Defaults to true for backward compatibility.
+   */
+  async isLatencyTrackingEnabled(): Promise<boolean> {
+    const value = await this.load(this.LATENCY_TRACKING_ENABLED_KEY);
+    if (typeof value === 'boolean') return value;
+    // Check env variable as fallback
+    const envVal = process.env.LATENCY_TRACKING_ENABLED;
+    if (envVal !== undefined) {
+      return envVal !== 'false' && envVal !== '0';
+    }
+    return true; // Default to enabled for backward compatibility
+  }
+
+  async setLatencyTrackingEnabled(enabled: boolean): Promise<boolean> {
+    await this.upsert(this.LATENCY_TRACKING_ENABLED_KEY, enabled);
+    gatewayInternalLog.info('Updated latency tracking enabled setting', {
       operation: 'configurationUpdate',
       metadata: { enabled }
     });

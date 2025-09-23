@@ -64,6 +64,11 @@ export const SessionSettings: React.FC = () => {
   const [graphqlPlaygroundInitial, setGraphqlPlaygroundInitial] = useState<boolean | null>(null);
   const [playgroundSaving, setPlaygroundSaving] = useState<boolean>(false);
   const [playgroundError, setPlaygroundError] = useState<string | null>(null);
+  // Latency Tracking
+  const [latencyTrackingEnabled, setLatencyTrackingEnabled] = useState<boolean | null>(null);
+  const [latencyTrackingInitial, setLatencyTrackingInitial] = useState<boolean | null>(null);
+  const [latencySaving, setLatencySaving] = useState<boolean>(false);
+  const [latencyError, setLatencyError] = useState<string | null>(null);
 
   useEffect(() => {
     // Load current settings
@@ -82,7 +87,7 @@ export const SessionSettings: React.FC = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            query: `query Settings { settings { auditLogRetentionDays publicDocumentationMode enforceDownstreamAuth graphqlVoyagerEnabled graphqlPlaygroundEnabled } }`
+            query: `query Settings { settings { auditLogRetentionDays publicDocumentationMode enforceDownstreamAuth graphqlVoyagerEnabled graphqlPlaygroundEnabled latencyTrackingEnabled } }`
           })
         });
         const data = await res.json();
@@ -104,6 +109,10 @@ export const SessionSettings: React.FC = () => {
           if (typeof data.data.settings.graphqlPlaygroundEnabled === 'boolean') {
             setGraphqlPlaygroundEnabled(data.data.settings.graphqlPlaygroundEnabled);
             setGraphqlPlaygroundInitial(data.data.settings.graphqlPlaygroundEnabled);
+          }
+          if (typeof data.data.settings.latencyTrackingEnabled === 'boolean') {
+            setLatencyTrackingEnabled(data.data.settings.latencyTrackingEnabled);
+            setLatencyTrackingInitial(data.data.settings.latencyTrackingEnabled);
           }
         }
       } catch (e: any) {
@@ -603,6 +612,96 @@ export const SessionSettings: React.FC = () => {
                 <Text size="xs">
                   GraphQL Playground provides an interactive query interface for testing GraphQL operations. Access it at{' '}
                   <code>/playground</code> when enabled.
+                </Text>
+              </Alert>
+            </>
+          )}
+        </Stack>
+      </Card>
+
+      <Card shadow="sm" p="lg" radius="md" withBorder>
+        <Stack spacing="md">
+          <Group spacing="sm">
+            <IconClock size={20} />
+            <Text weight={500} size="md">
+              Request Latency Tracking
+            </Text>
+          </Group>
+          {latencyTrackingEnabled === null ? (
+            <Group>
+              <Loader size="sm" /> <Text size="sm">Loading setting...</Text>
+            </Group>
+          ) : latencyError ? (
+            <Alert color="red" title="Failed to load" icon={<IconInfoCircle size={16} />}>
+              {latencyError}
+            </Alert>
+          ) : (
+            <>
+              <Group position="apart">
+                <div>
+                  <Text weight={500} size="sm">
+                    Enable Request Latency Tracking
+                  </Text>
+                  <Text size="xs" color="dimmed">
+                    When enabled, collects performance metrics for all GraphQL operations. This data is used for monitoring,
+                    analytics, and performance optimization.
+                  </Text>
+                </div>
+                <Switch
+                  checked={!!latencyTrackingEnabled}
+                  onChange={(e) => setLatencyTrackingEnabled(e.currentTarget.checked)}
+                  onLabel="ON"
+                  offLabel="OFF"
+                />
+              </Group>
+              <Group spacing="sm">
+                <Button
+                  size="xs"
+                  loading={latencySaving}
+                  disabled={
+                    latencySaving || latencyTrackingEnabled === null || latencyTrackingEnabled === latencyTrackingInitial
+                  }
+                  onClick={async () => {
+                    if (latencyTrackingEnabled === null) return;
+                    setLatencySaving(true);
+                    setLatencyError(null);
+                    try {
+                      const res = await authenticatedFetch('/graphql', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          query: `mutation Set($enabled:Boolean!){ setLatencyTrackingEnabled(enabled:$enabled) }`,
+                          variables: { enabled: latencyTrackingEnabled }
+                        })
+                      });
+                      const json = await res.json();
+                      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to save');
+                      setLatencyTrackingInitial(latencyTrackingEnabled);
+                    } catch (e: any) {
+                      setLatencyError(e?.message || 'Failed to save');
+                    } finally {
+                      setLatencySaving(false);
+                    }
+                  }}
+                >
+                  Save
+                </Button>
+                {latencyTrackingInitial !== null && latencyTrackingEnabled !== latencyTrackingInitial && (
+                  <Button
+                    variant="subtle"
+                    size="xs"
+                    disabled={latencySaving}
+                    onClick={() => setLatencyTrackingEnabled(latencyTrackingInitial!)}
+                  >
+                    Reset
+                  </Button>
+                )}
+              </Group>
+              <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+                <Text size="xs">
+                  Latency tracking collects response times, error rates, and operation metrics. Data retention follows the same
+                  schedule as audit logs ({auditRetention || 90} days). Disabling this will stop new data collection but
+                  preserve existing data.
                 </Text>
               </Alert>
             </>

@@ -12,6 +12,7 @@ import { DocCategory } from '../entities/docs/category.entity';
 import { DocDocument } from '../entities/docs/document.entity';
 import { DocEmbeddingChunk } from '../entities/docs/embedding-chunk.entity';
 import { DocRevision } from '../entities/docs/revision.entity';
+import { RequestLatency } from '../entities/request-latency.entity';
 import { SchemaChange } from '../entities/schema-change.entity';
 import { ServiceKey } from '../entities/service-key.entity';
 import { Service } from '../entities/service.entity';
@@ -23,7 +24,7 @@ import { User } from '../services/users/user.entity';
 export const dataSource = new TypeORM.DataSource({
   type: 'postgres',
   url: process.env.DATABASE_URL || 'postgres://postgres:password@localhost:5432/gateway',
-  synchronize: process.env.NODE_ENV === 'test' || process.env.NODE_ENV !== 'production',
+  synchronize: false, // Use migrations instead of synchronization
   dropSchema: false, // Let test-utils handle schema management
   cache: process.env.NODE_ENV !== 'test', // Disable caching in tests for speed
   logging: process.env.NODE_ENV === 'test' ? false : process.env.NODE_ENV === 'development' ? 'all' : ['error'],
@@ -46,7 +47,8 @@ export const dataSource = new TypeORM.DataSource({
     DocEmbeddingChunk,
     ChatThread,
     ChatMessage,
-    Asset
+    Asset,
+    RequestLatency
   ],
   migrations: ['src/migrations/*.ts'],
   migrationsRun: process.env.NODE_ENV === 'production', // Auto-run migrations in production

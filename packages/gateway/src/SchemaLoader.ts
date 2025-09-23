@@ -111,7 +111,19 @@ export class SchemaLoader {
               result = maybeResult as ExecutionResult<IntrospectionQuery>;
             }
             const data = result.data;
+            log.debug(`Introspection result for ${url}:`, {
+              hasData: !!data,
+              hasSchema: !!(data && data.__schema),
+              resultKeys: data ? Object.keys(data) : [],
+              errorCount: result.errors ? result.errors.length : 0,
+              errors: result.errors
+            });
             if (!data || !data.__schema) {
+              log.error(`Invalid SDL response details for ${url}:`, {
+                data,
+                errors: result.errors,
+                result: result
+              });
               throw new Error(`Invalid SDL response from ${url}`);
             }
 

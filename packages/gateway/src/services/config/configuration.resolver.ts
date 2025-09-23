@@ -22,6 +22,9 @@ class Settings {
 
   @Field()
   graphqlPlaygroundEnabled!: boolean;
+
+  @Field()
+  latencyTrackingEnabled!: boolean;
 }
 
 export enum PublicDocumentationMode {
@@ -56,7 +59,8 @@ export class ConfigurationResolver {
       publicDocumentationMode: (await this.config.getPublicDocumentationMode()) as PublicDocumentationMode,
       enforceDownstreamAuth: await this.config.isDownstreamAuthEnforced(),
       graphqlVoyagerEnabled: await this.config.isGraphQLVoyagerEnabled(),
-      graphqlPlaygroundEnabled: await this.config.isGraphQLPlaygroundEnabled()
+      graphqlPlaygroundEnabled: await this.config.isGraphQLPlaygroundEnabled(),
+      latencyTrackingEnabled: await this.config.isLatencyTrackingEnabled()
     };
   }
 
@@ -99,6 +103,12 @@ export class ConfigurationResolver {
   @Directive('@authz(rules: ["isAdmin"])')
   async setGraphQLPlaygroundEnabled(@Arg('enabled') enabled: boolean): Promise<boolean> {
     return this.config.setGraphQLPlaygroundEnabled(enabled);
+  }
+
+  @Mutation(() => Boolean)
+  @Directive('@authz(rules: ["isAdmin"])')
+  async setLatencyTrackingEnabled(@Arg('enabled') enabled: boolean): Promise<boolean> {
+    return this.config.setLatencyTrackingEnabled(enabled);
   }
 
   @Query(() => DocsBranding)

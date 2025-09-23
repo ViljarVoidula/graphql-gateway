@@ -15,11 +15,17 @@ import { Container } from 'typedi';
 import { initializeRedis } from './auth/session.config';
 import { useSession } from './auth/session.plugin';
 import { dataSource } from './db/datasource';
+import { ApiKeyUsage } from './entities/api-key-usage.entity';
+import { ApplicationUsage } from './entities/application-usage.entity';
 import { Application } from './entities/application.entity';
+import { AuditLog } from './entities/audit-log.entity';
+import { RequestLatency } from './entities/request-latency.entity';
+import { SchemaChange } from './entities/schema-change.entity';
 import { ServiceKey } from './entities/service-key.entity';
 import { Service } from './entities/service.entity';
 import { Session } from './entities/session.entity';
 import { Setting, coerceSettingValue } from './entities/setting.entity';
+import { createLatencyTrackingPlugin } from './middleware/latency-tracking-optimized.plugin';
 import { createRateLimitPlugin } from './middleware/rate-limit.middleware';
 import { createUsageTrackingPlugin } from './middleware/usage-tracking.plugin';
 import { SchemaLoader } from './SchemaLoader';
@@ -36,6 +42,8 @@ import { AuditLogService } from './services/audit/audit-log.service';
 import './services/chat/chat.resolver';
 import { ConfigurationService } from './services/config/configuration.service';
 import './services/docs/docs.resolver';
+import './services/latency/latency-health.resolver';
+import './services/latency/request-latency.resolver';
 import './services/search/search.resolver';
 import { ServiceCacheManager, ServiceRegistryService } from './services/service-registry/service-registry.service';
 import { SessionService } from './services/sessions/session.service';
@@ -297,7 +305,15 @@ const yoga = createYoga({
     // Rate limit (must come before session if it doesn't need session info; here we rely only on API key auth data)
     createRateLimitPlugin(),
     useSession(),
-    createUsageTrackingPlugin()
+    createUsageTrackingPlugin(),
+    createLatencyTrackingPlugin({
+      enabled: process.env.LATENCY_TRACKING_ENABLED !== 'false',
+      useBatching: process.env.LATENCY_TRACKING_USE_BATCHING !== 'false',
+      useIntelligentSampling: process.env.LATENCY_TRACKING_USE_INTELLIGENT_SAMPLING !== 'false',
+      fallbackSampleRate: parseFloat(process.env.LATENCY_TRACKING_FALLBACK_SAMPLE_RATE || '0.01'),
+      enableTelemetry: process.env.LATENCY_TRACKING_ENABLE_TELEMETRY !== 'false',
+      maxLatencyMs: parseInt(process.env.LATENCY_TRACKING_MAX_MS || '300000')
+    })
   ],
   graphiql: {
     title: 'GraphQL Gateway with Session Security'
@@ -843,6 +859,11 @@ export async function startServer() {
   Container.set('ApplicationRepository', dataSource.getRepository(Application));
   Container.set('ServiceRepository', dataSource.getRepository(Service));
   Container.set('ServiceKeyRepository', dataSource.getRepository(ServiceKey));
+  Container.set('AuditLogRepository', dataSource.getRepository(AuditLog));
+  Container.set('SchemaChangeRepository', dataSource.getRepository(SchemaChange));
+  Container.set('ApplicationUsageRepository', dataSource.getRepository(ApplicationUsage));
+  Container.set('ApiKeyUsageRepository', dataSource.getRepository(ApiKeyUsage));
+  Container.set('RequestLatencyRepository', dataSource.getRepository(RequestLatency));
 
   Container.set('SessionService', Container.get(SessionService));
   Container.set('ServiceRegistryService', Container.get(ServiceRegistryService));

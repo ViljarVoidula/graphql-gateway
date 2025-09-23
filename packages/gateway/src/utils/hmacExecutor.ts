@@ -7,6 +7,7 @@ import { HMACUtils } from '../security/hmac';
 import { keyManager } from '../security/keyManager';
 import { AuditLogService } from '../services/audit/audit-log.service';
 import { ConfigurationService } from '../services/config/configuration.service';
+import { RequestLatencyService } from '../services/latency/request-latency.service';
 import { ApplicationUsageService } from '../services/usage/application-usage.service';
 import { log } from './logger';
 import { withRemoteCallMetrics } from './telemetry/metrics';
@@ -205,8 +206,10 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
                 }
               })();
               const contextApp = (context as any)?.application; // Provided by auth layer for api-key
+              const contextUser = (context as any)?.user; // User context if available
               const usageService = Container.has(ApplicationUsageService) ? Container.get(ApplicationUsageService) : null;
               const audit = Container.has(AuditLogService) ? Container.get(AuditLogService) : null;
+              const latencyService = Container.has(RequestLatencyService) ? Container.get(RequestLatencyService) : null;
 
               // Look up service ID by URL for usage tracking
               let serviceId: string | undefined;
@@ -221,6 +224,23 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
               try {
                 const res = await fetch(url, updatedOptions);
                 const latencyMs = Date.now() - start;
+
+                // Track downstream service latency if we have the required context
+                if (latencyService && serviceId && contextApp) {
+                  await latencyService.recordDownstreamLatency({
+                    serviceId,
+                    applicationId: contextApp.id,
+                    userId: contextUser?.id,
+                    serviceUrl: String(url),
+                    latencyMs,
+                    success: res.ok,
+                    statusCode: res.status,
+                    httpMethod: String((updatedOptions as any).method || 'POST'),
+                    correlationId: headers['x-correlation-id'] || headers['x-request-id']
+                    // TODO: Add request/response size tracking if needed
+                  });
+                }
+
                 if (contextApp && usageService && serviceId) {
                   await usageService.increment(contextApp.id, serviceId, { error: !res.ok });
                 }
@@ -284,6 +304,23 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
               } catch (error: any) {
                 const latencyMs = Date.now() - start;
                 log.error(`Fetch error for ${url}:`, error);
+
+                // Track failed downstream service latency
+                if (latencyService && serviceId && contextApp) {
+                  await latencyService.recordDownstreamLatency({
+                    serviceId,
+                    applicationId: contextApp.id,
+                    userId: contextUser?.id,
+                    serviceUrl: String(url),
+                    latencyMs,
+                    success: false,
+                    httpMethod: String((updatedOptions as any).method || 'POST'),
+                    errorClass: error?.name,
+                    errorMessage: error?.message?.slice(0, 300),
+                    correlationId: headers['x-correlation-id'] || headers['x-request-id']
+                  });
+                }
+
                 if (contextApp && usageService && serviceId) {
                   await usageService.increment(contextApp.id, serviceId, { error: true });
                 }
