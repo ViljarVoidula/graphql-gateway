@@ -21,81 +21,27 @@ import {
 import { useList } from '@refinedev/core';
 import {
   IconActivity,
-  IconAlertTriangle,
-  IconBolt,
   IconChartLine,
   IconClock,
   IconEye,
   IconKey,
-  IconServer2,
   IconSettings,
   IconTrendingUp,
   IconUsers
 } from '@tabler/icons-react';
 import gql from 'graphql-tag';
 import React, { useEffect, useState } from 'react';
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  Tooltip as RechartsTooltip,
-  ResponsiveContainer,
-  XAxis,
-  YAxis
-} from 'recharts';
+import { Area, AreaChart, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, XAxis, YAxis } from 'recharts';
 import { AutoRefreshWelcome } from '../components/AutoRefreshWelcome';
 import { TokenRefreshNotification } from '../components/TokenRefreshNotification';
+import {
+  ApplicationPerformanceChart,
+  LatencyMetricsCards,
+  LatencyTrendsChart,
+  SlowestServicesCard,
+  StatsCard
+} from '../components/dashboard';
 import { authenticatedFetch } from '../utils/auth';
-
-interface DashboardStats {
-  totalUsers: number;
-  totalServices: number;
-  activeSessions: number;
-  servicesStatus: {
-    active: number;
-    inactive: number;
-    maintenance: number;
-  };
-}
-
-const StatsCard: React.FC<{
-  title: string;
-  value: number;
-  icon: React.ReactNode;
-  color: string;
-  subtitle?: string;
-  trend?: string;
-}> = ({ title, value, icon, color, subtitle, trend }) => (
-  <Card shadow="xs" p="xl" radius="lg" withBorder style={{ height: '100%' }}>
-    <Group position="apart" align="flex-start" mb="md">
-      <ThemeIcon size="xl" radius="md" variant="light" color={color}>
-        {icon}
-      </ThemeIcon>
-      {trend && (
-        <Badge size="sm" color="green" variant="light">
-          {trend}
-        </Badge>
-      )}
-    </Group>
-    <Stack spacing="xs">
-      <Text size="sm" color="dimmed" weight={500} transform="uppercase" style={{ letterSpacing: '0.5px' }}>
-        {title}
-      </Text>
-      <Text size="xl" weight={700} color="dark">
-        {value.toLocaleString()}
-      </Text>
-      {subtitle && (
-        <Text size="xs" color="dimmed">
-          {subtitle}
-        </Text>
-      )}
-    </Stack>
-  </Card>
-);
 
 interface AuditLogSummary {
   totalLast24h: number;
@@ -855,311 +801,55 @@ export const Dashboard: React.FC = () => {
             </Group>
 
             {/* Latency Overview Cards */}
-            <SimpleGrid
-              cols={5}
-              spacing="md"
-              breakpoints={[
-                { maxWidth: 'lg', cols: 3 },
-                { maxWidth: 'sm', cols: 2 }
-              ]}
-            >
-              <Card shadow="xs" p="lg" radius="lg" withBorder style={{ height: '100%' }}>
-                <Group position="apart" align="flex-start" mb="md">
-                  <ThemeIcon size="lg" radius="md" variant="light" color="blue">
-                    <IconClock size={18} />
-                  </ThemeIcon>
-                </Group>
-                <Stack spacing="xs">
-                  <Text size="sm" color="dimmed" weight={500} transform="uppercase" style={{ letterSpacing: '0.5px' }}>
-                    Avg Latency
-                  </Text>
-                  <Text size="xl" weight={700} color="dark">
-                    {latencyMetrics?.averageLatency ? `${latencyMetrics.averageLatency.toFixed(1)}ms` : '-'}
-                  </Text>
-                  <Text size="xs" color="dimmed">
-                    Mean response time
-                  </Text>
-                </Stack>
-              </Card>
-              <Card shadow="xs" p="lg" radius="lg" withBorder style={{ height: '100%' }}>
-                <Group position="apart" align="flex-start" mb="md">
-                  <ThemeIcon size="lg" radius="md" variant="light" color="orange">
-                    <IconBolt size={18} />
-                  </ThemeIcon>
-                </Group>
-                <Stack spacing="xs">
-                  <Text size="sm" color="dimmed" weight={500} transform="uppercase" style={{ letterSpacing: '0.5px' }}>
-                    P95 Latency
-                  </Text>
-                  <Text size="xl" weight={700} color="dark">
-                    {latencyMetrics?.p95Latency ? `${latencyMetrics.p95Latency.toFixed(1)}ms` : '-'}
-                  </Text>
-                  <Text size="xs" color="dimmed">
-                    95th percentile
-                  </Text>
-                </Stack>
-              </Card>
-              <Card shadow="xs" p="lg" radius="lg" withBorder style={{ height: '100%' }}>
-                <Group position="apart" align="flex-start" mb="md">
-                  <ThemeIcon size="lg" radius="md" variant="light" color="red">
-                    <IconBolt size={18} />
-                  </ThemeIcon>
-                </Group>
-                <Stack spacing="xs">
-                  <Text size="sm" color="dimmed" weight={500} transform="uppercase" style={{ letterSpacing: '0.5px' }}>
-                    P99 Latency
-                  </Text>
-                  <Text size="xl" weight={700} color="dark">
-                    {latencyMetrics?.p99Latency ? `${latencyMetrics.p99Latency.toFixed(1)}ms` : '-'}
-                  </Text>
-                  <Text size="xs" color="dimmed">
-                    99th percentile
-                  </Text>
-                </Stack>
-              </Card>
-              <Card shadow="xs" p="lg" radius="lg" withBorder style={{ height: '100%' }}>
-                <Group position="apart" align="flex-start" mb="md">
-                  <ThemeIcon size="lg" radius="md" variant="light" color="grape">
-                    <IconAlertTriangle size={18} />
-                  </ThemeIcon>
-                </Group>
-                <Stack spacing="xs">
-                  <Text size="sm" color="dimmed" weight={500} transform="uppercase" style={{ letterSpacing: '0.5px' }}>
-                    Max Latency
-                  </Text>
-                  <Text size="xl" weight={700} color="dark">
-                    {latencyMetrics?.maxLatency ? `${latencyMetrics.maxLatency.toFixed(1)}ms` : '-'}
-                  </Text>
-                  <Text size="xs" color="dimmed">
-                    Slowest request
-                  </Text>
-                </Stack>
-              </Card>
-              <StatsCard
-                title="Total Requests"
-                value={latencyMetrics?.totalRequests || 0}
-                icon={<IconActivity size={20} />}
-                color="green"
-                subtitle="Request count"
-              />
-            </SimpleGrid>
+            <LatencyMetricsCards metrics={latencyMetrics} loading={loadingExtras} />
 
             {/* Latency Charts Grid */}
             <Grid>
               <Grid.Col span={8}>
-                <Card shadow="xs" p="xl" radius="lg" withBorder style={{ height: '400px' }}>
-                  <Group position="apart" align="center" mb="xl">
-                    <Group spacing="sm">
-                      <ThemeIcon size="md" radius="md" variant="light" color="blue">
-                        <IconChartLine size={18} />
-                      </ThemeIcon>
-                      <div>
-                        <Text weight={600} size="lg">
-                          Latency Trends
-                        </Text>
-                        <Text size="sm" color="dimmed">
-                          Response time over time
-                        </Text>
-                      </div>
-                    </Group>
-                  </Group>
-                  <Box style={{ height: '300px', width: '100%' }}>
-                    {latencyTrends.length > 0 ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart
-                          data={latencyTrends.map((trend) => ({
-                            ...trend,
-                            time:
-                              latencyTimeRange === '1h'
-                                ? `${trend.hour}:00`
-                                : latencyTimeRange === '24h'
-                                  ? `${trend.hour}:00`
-                                  : trend.date
-                          }))}
-                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e9ecef" />
-                          <XAxis dataKey="time" tick={{ fontSize: 12, fill: '#6c757d' }} axisLine={false} tickLine={false} />
-                          <YAxis
-                            tick={{ fontSize: 12, fill: '#6c757d' }}
-                            axisLine={false}
-                            tickLine={false}
-                            tickFormatter={(value) => `${value}ms`}
-                          />
-                          <RechartsTooltip
-                            contentStyle={{
-                              backgroundColor: 'white',
-                              border: '1px solid #e9ecef',
-                              borderRadius: '8px',
-                              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                            }}
-                            formatter={(value: number, name: string) => [
-                              `${value.toFixed(1)}ms`,
-                              name === 'averageLatency' ? 'Average' : 'P95'
-                            ]}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="averageLatency"
-                            stroke="#1c7ed6"
-                            strokeWidth={2}
-                            dot={false}
-                            name="averageLatency"
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="p95Latency"
-                            stroke="#fd7e14"
-                            strokeWidth={2}
-                            dot={false}
-                            name="p95Latency"
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <Center style={{ width: '100%', height: '100%' }}>
-                        <Stack align="center" spacing="xs">
-                          <IconClock size={32} color="#ced4da" />
-                          <Text size="sm" color="dimmed">
-                            No latency data available
-                          </Text>
-                        </Stack>
-                      </Center>
-                    )}
-                  </Box>
-                </Card>
+                <LatencyTrendsChart
+                  data={latencyTrends.map((trend) => ({
+                    date:
+                      latencyTimeRange === '1h'
+                        ? `${trend.hour}:00`
+                        : latencyTimeRange === '24h'
+                          ? `${trend.hour}:00`
+                          : trend.date,
+                    averageLatency: trend.averageLatency,
+                    p95Latency: trend.p95Latency,
+                    requestCount: trend.totalRequests
+                  }))}
+                  loading={loadingExtras}
+                  title="Latency Trends Over Time"
+                />
               </Grid.Col>
               <Grid.Col span={4}>
-                <Card shadow="xs" p="xl" radius="lg" withBorder style={{ height: '400px' }}>
-                  <Group position="apart" align="center" mb="xl">
-                    <Group spacing="sm">
-                      <ThemeIcon size="md" radius="md" variant="light" color="red">
-                        <IconServer2 size={18} />
-                      </ThemeIcon>
-                      <div>
-                        <Text weight={600} size="lg">
-                          Slowest Services
-                        </Text>
-                        <Text size="sm" color="dimmed">
-                          By P95 latency
-                        </Text>
-                      </div>
-                    </Group>
-                  </Group>
-                  <ScrollArea style={{ height: '280px' }}>
-                    <Stack spacing="md">
-                      {serviceLatencyStats.length > 0 ? (
-                        serviceLatencyStats.map((service, index) => (
-                          <Paper key={service.serviceId} p="md" radius="md" withBorder>
-                            <Group position="apart" align="center">
-                              <div style={{ flex: 1 }}>
-                                <Text weight={500} size="sm" truncate>
-                                  {service.serviceName}
-                                </Text>
-                                <Text size="xs" color="dimmed">
-                                  {service.totalRequests.toLocaleString()} requests
-                                </Text>
-                              </div>
-                              <div style={{ textAlign: 'right' }}>
-                                <Badge
-                                  size="lg"
-                                  color={service.p95Latency < 100 ? 'green' : service.p95Latency < 500 ? 'yellow' : 'red'}
-                                  variant="light"
-                                >
-                                  {service.p95Latency.toFixed(0)}ms
-                                </Badge>
-                                <Text size="xs" color="dimmed" mt={2}>
-                                  avg: {service.averageLatency.toFixed(0)}ms
-                                </Text>
-                              </div>
-                            </Group>
-                            {service.errorRate > 0 && (
-                              <Badge size="xs" color="red" variant="light" mt="xs" style={{ fontSize: '10px' }}>
-                                {(service.errorRate * 100).toFixed(1)}% errors
-                              </Badge>
-                            )}
-                          </Paper>
-                        ))
-                      ) : (
-                        <Center style={{ height: '200px' }}>
-                          <Stack align="center" spacing="xs">
-                            <IconServer2 size={32} color="#ced4da" />
-                            <Text size="sm" color="dimmed">
-                              No service data available
-                            </Text>
-                          </Stack>
-                        </Center>
-                      )}
-                    </Stack>
-                  </ScrollArea>
-                </Card>
+                <SlowestServicesCard
+                  services={serviceLatencyStats.map((service) => ({
+                    serviceName: service.serviceName,
+                    averageLatency: service.averageLatency,
+                    requestCount: service.totalRequests,
+                    errorRate: service.errorRate,
+                    p95Latency: service.p95Latency
+                  }))}
+                  loading={loadingExtras}
+                  title="Slowest Services"
+                  maxItems={5}
+                />
               </Grid.Col>
               <Grid.Col span={12}>
-                <Card shadow="xs" p="xl" radius="lg" withBorder style={{ height: '350px' }}>
-                  <Group position="apart" align="center" mb="xl">
-                    <Group spacing="sm">
-                      <ThemeIcon size="md" radius="md" variant="light" color="violet">
-                        <IconUsers size={18} />
-                      </ThemeIcon>
-                      <div>
-                        <Text weight={600} size="lg">
-                          Application Performance
-                        </Text>
-                        <Text size="sm" color="dimmed">
-                          Request latency by application
-                        </Text>
-                      </div>
-                    </Group>
-                  </Group>
-                  <Box style={{ height: '250px', width: '100%' }}>
-                    {applicationLatencyStats.length > 0 ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={applicationLatencyStats} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e9ecef" />
-                          <XAxis
-                            dataKey="applicationName"
-                            tick={{ fontSize: 12, fill: '#6c757d' }}
-                            axisLine={false}
-                            tickLine={false}
-                            angle={-45}
-                            textAnchor="end"
-                            height={80}
-                          />
-                          <YAxis
-                            tick={{ fontSize: 12, fill: '#6c757d' }}
-                            axisLine={false}
-                            tickLine={false}
-                            tickFormatter={(value) => `${value}ms`}
-                          />
-                          <RechartsTooltip
-                            contentStyle={{
-                              backgroundColor: 'white',
-                              border: '1px solid #e9ecef',
-                              borderRadius: '8px',
-                              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                            }}
-                            formatter={(value: number, name: string) => [
-                              `${value.toFixed(1)}ms`,
-                              name === 'averageLatency' ? 'Average Latency' : 'P95 Latency'
-                            ]}
-                            labelFormatter={(label) => `Application: ${label}`}
-                          />
-                          <Bar dataKey="averageLatency" fill="#1c7ed6" name="averageLatency" />
-                          <Bar dataKey="p95Latency" fill="#fd7e14" name="p95Latency" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <Center style={{ width: '100%', height: '100%' }}>
-                        <Stack align="center" spacing="xs">
-                          <IconUsers size={32} color="#ced4da" />
-                          <Text size="sm" color="dimmed">
-                            No application data available
-                          </Text>
-                        </Stack>
-                      </Center>
-                    )}
-                  </Box>
-                </Card>
+                <ApplicationPerformanceChart
+                  data={applicationLatencyStats.map((app) => ({
+                    applicationName: app.applicationName,
+                    averageLatency: app.averageLatency,
+                    p50Latency: app.averageLatency, // Using average as approximation for p50
+                    p95Latency: app.p95Latency,
+                    p99Latency: app.p95Latency * 1.2, // Estimate p99 as slightly higher than p95
+                    requestCount: app.totalRequests,
+                    errorRate: app.errorRate
+                  }))}
+                  loading={loadingExtras}
+                  title="Application Performance Comparison"
+                />
               </Grid.Col>
             </Grid>
           </>
