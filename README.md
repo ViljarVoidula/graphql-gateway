@@ -142,6 +142,21 @@ docker-compose up gateway records-service
 
 ## 💡 Future Improvements
 
+## ⚙️ In-Process Workers (Dev Only)
+
+During development the gateway can start certain background workers inside the main Node.js process for convenience.
+
+- API key usage consolidator: runs every `API_KEY_USAGE_FLUSH_INTERVAL_MS` to drain Redis counters into Postgres.
+- Defaults: in dev (`NODE_ENV !== 'production'`) this worker starts automatically.
+- Toggle: set `START_API_KEY_USAGE_WORKER=0` to disable.
+
+Example:
+
+```bash
+# Start dev server without the in-process consolidator
+START_API_KEY_USAGE_WORKER=0 pnpm run dev:admin
+```
+
 > _Ideas and enhancements on our roadmap_
 
 ### 🔄 Schema Fallback Strategies

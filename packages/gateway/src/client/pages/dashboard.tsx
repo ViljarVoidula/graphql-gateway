@@ -1,40 +1,27 @@
 import {
-  Alert,
   Badge,
+  Box,
   Card,
   Center,
   Grid,
   Group,
   Loader,
-  Progress,
+  Paper,
   RingProgress,
   ScrollArea,
   SimpleGrid,
   Stack,
   Table,
   Text,
-  Title,
-  Tooltip,
   ThemeIcon,
-  Box,
-  Paper
+  Title,
+  Tooltip
 } from '@mantine/core';
 import { useList } from '@refinedev/core';
-import {
-  IconActivity,
-  IconAlertTriangle,
-  IconHeartbeat,
-  IconKey,
-  IconSettings,
-  IconTrendingUp,
-  IconUsers,
-  IconServer,
-  IconShield,
-  IconChartLine,
-  IconEye
-} from '@tabler/icons-react';
+import { IconActivity, IconChartLine, IconEye, IconKey, IconSettings, IconTrendingUp, IconUsers } from '@tabler/icons-react';
 import gql from 'graphql-tag';
 import React, { useEffect, useState } from 'react';
+import { Area, AreaChart, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, XAxis, YAxis } from 'recharts';
 import { AutoRefreshWelcome } from '../components/AutoRefreshWelcome';
 import { TokenRefreshNotification } from '../components/TokenRefreshNotification';
 import { authenticatedFetch } from '../utils/auth';
@@ -73,7 +60,7 @@ const StatsCard: React.FC<{
       <Text size="sm" color="dimmed" weight={500} transform="uppercase" style={{ letterSpacing: '0.5px' }}>
         {title}
       </Text>
-      <Text size="2xl" weight={700} color="dark">
+      <Text size="xl" weight={700} color="dark">
         {value.toLocaleString()}
       </Text>
       {subtitle && (
@@ -160,9 +147,7 @@ export const Dashboard: React.FC = () => {
   // Usage widgets state
   const [daily, setDaily] = useState<Array<{ date: string; requestCount: number }>>([]);
   const [topKeys, setTopKeys] = useState<Array<{ apiKeyId: string; requestCount: number }>>([]);
-  const [totals, setTotals] = useState<{ totalRequests: number; totalErrors: number; totalRateLimited: number } | null>(
-    null
-  );
+  const [totals, setTotals] = useState<{ totalRequests: number; totalErrors: number; totalRateLimited: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -265,58 +250,82 @@ export const Dashboard: React.FC = () => {
             { maxWidth: 'sm', cols: 1 }
           ]}
         >
-          <StatsCard 
-            title="Total Users" 
-            value={users.length} 
-            icon={<IconUsers size={24} />} 
+          <StatsCard
+            title="Total Users"
+            value={users.length}
+            icon={<IconUsers size={24} />}
             color="blue"
             subtitle={`${users.filter((u: any) => u.isEmailVerified).length} verified`}
           />
-          <StatsCard 
-            title="Services" 
-            value={services.length} 
-            icon={<IconServer size={24} />} 
-            color="green"
-            subtitle={`${servicesStatus.active} active`}
-          />
-          <StatsCard 
-            title="Active Sessions" 
-            value={activeSessions} 
-            icon={<IconActivity size={24} />} 
+          <Card shadow="xs" p="xl" radius="lg" withBorder>
+            <Group position="apart" align="flex-start" mb="md">
+              <ThemeIcon size="xl" radius="md" variant="light" color="cyan">
+                <IconActivity size={24} />
+              </ThemeIcon>
+              {auditSummary && auditSummary.bySeverity.length > 0 && (
+                <RingProgress
+                  size={60}
+                  thickness={6}
+                  roundCaps
+                  sections={auditSummary.bySeverity.slice(0, 3).map((s) => ({
+                    value: (s.count / auditSummary.totalLast24h) * 100,
+                    color:
+                      s.severity === 'critical'
+                        ? 'red'
+                        : s.severity === 'high'
+                          ? 'orange'
+                          : s.severity === 'medium'
+                            ? 'yellow'
+                            : 'gray'
+                  }))}
+                  label={
+                    <Text size="xs" weight={700} align="center">
+                      {auditSummary.totalLast24h}
+                    </Text>
+                  }
+                />
+              )}
+            </Group>
+            <Stack spacing="xs">
+              <Text size="sm" color="dimmed" weight={500} transform="uppercase" style={{ letterSpacing: '0.5px' }}>
+                Recent Activity
+              </Text>
+              <Text size="xl" weight={700} color="dark">
+                {auditSummary?.totalLast24h ?? 0} Events
+              </Text>
+              <Text size="xs" color="dimmed">
+                {auditSummary && auditSummary.bySeverity.length > 0
+                  ? `${auditSummary.bySeverity.find((s) => s.severity === 'critical')?.count || 0} critical alerts`
+                  : 'No recent activity'}
+              </Text>
+            </Stack>
+          </Card>
+          <StatsCard
+            title="Active Sessions"
+            value={activeSessions}
+            icon={<IconActivity size={24} />}
             color="orange"
             subtitle="Currently online"
           />
           <Card shadow="xs" p="xl" radius="lg" withBorder>
             <Group position="apart" align="flex-start" mb="md">
-              <ThemeIcon size="xl" radius="md" variant="light" color={healthScore > 80 ? 'green' : healthScore > 60 ? 'yellow' : 'red'}>
-                <IconShield size={24} />
+              <ThemeIcon size="xl" radius="md" variant="light" color="teal">
+                <IconSettings size={24} />
               </ThemeIcon>
-              <RingProgress
-                size={60}
-                thickness={6}
-                roundCaps
-                sections={[
-                  {
-                    value: healthScore,
-                    color: healthScore > 80 ? 'green' : healthScore > 60 ? 'yellow' : 'red'
-                  }
-                ]}
-                label={
-                  <Text size="xs" weight={700} align="center">
-                    {healthScore}%
-                  </Text>
-                }
-              />
+              <Badge size="sm" color={totalBreaking > 0 ? 'red' : 'green'} variant="light">
+                {totalBreaking > 0 ? `${totalBreaking} issues` : 'All good'}
+              </Badge>
             </Group>
             <Stack spacing="xs">
               <Text size="sm" color="dimmed" weight={500} transform="uppercase" style={{ letterSpacing: '0.5px' }}>
-                Health Score
+                System Overview
               </Text>
-              <Text size="lg" weight={600}>
-                System Health
+              <Text size="xl" weight={700} color="dark">
+                {services.length} Services
               </Text>
               <Text size="xs" color="dimmed">
-                {servicesStatus.active}/{services.length} services active
+                {servicesStatus.active} active •{' '}
+                {avgErrorRate > 0 ? `${(avgErrorRate * 100).toFixed(1)}% avg error rate` : 'No errors'}
               </Text>
             </Stack>
           </Card>
@@ -343,61 +352,82 @@ export const Dashboard: React.FC = () => {
                 {totals && (
                   <Group spacing="lg">
                     <div style={{ textAlign: 'center' }}>
-                      <Text size="xs" color="dimmed" transform="uppercase">Total</Text>
+                      <Text size="xs" color="dimmed" transform="uppercase">
+                        Total
+                      </Text>
                       <Text weight={600}>{totals.totalRequests.toLocaleString()}</Text>
                     </div>
                     <div style={{ textAlign: 'center' }}>
-                      <Text size="xs" color="dimmed" transform="uppercase">Errors</Text>
-                      <Text weight={600} color="red">{totals.totalErrors.toLocaleString()}</Text>
+                      <Text size="xs" color="dimmed" transform="uppercase">
+                        Errors
+                      </Text>
+                      <Text weight={600} color="red">
+                        {totals.totalErrors.toLocaleString()}
+                      </Text>
                     </div>
                     <div style={{ textAlign: 'center' }}>
-                      <Text size="xs" color="dimmed" transform="uppercase">Rate Limited</Text>
-                      <Text weight={600} color="orange">{totals.totalRateLimited.toLocaleString()}</Text>
+                      <Text size="xs" color="dimmed" transform="uppercase">
+                        Rate Limited
+                      </Text>
+                      <Text weight={600} color="orange">
+                        {totals.totalRateLimited.toLocaleString()}
+                      </Text>
                     </div>
                   </Group>
                 )}
               </Group>
-              <Box style={{ height: '180px', display: 'flex', alignItems: 'flex-end' }}>
+              <Box style={{ height: '180px' }}>
                 {daily.length ? (
-                  <svg
-                    width="100%"
-                    height="100%"
-                    viewBox={`0 0 ${Math.max(1, daily.length - 1) * 30} 160`}
-                    preserveAspectRatio="none"
-                    style={{ overflow: 'visible' }}
-                  >
-                    {(() => {
-                      const max = Math.max(1, ...daily.map((d) => d.requestCount));
-                      const points = daily.map((d, i) => {
-                        const x = i * 30;
-                        const y = 160 - Math.round((d.requestCount / max) * 140);
-                        return `${x},${y}`;
-                      });
-                      return (
-                        <>
-                          <defs>
-                            <linearGradient id="gradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                              <stop offset="0%" style={{ stopColor: '#339af0', stopOpacity: 0.8 }} />
-                              <stop offset="100%" style={{ stopColor: '#339af0', stopOpacity: 0.1 }} />
-                            </linearGradient>
-                          </defs>
-                          <polyline 
-                            fill="url(#gradient)" 
-                            stroke="#339af0" 
-                            strokeWidth="3" 
-                            points={`0,160 ${points.join(' ')} ${(daily.length - 1) * 30},160`}
-                          />
-                          <polyline 
-                            fill="none" 
-                            stroke="#1c7ed6" 
-                            strokeWidth="3" 
-                            strokeLinecap="round"
-                            points={points.join(' ')} 
-                          />
-                        </>
-                      );
-                    })()}
-                  </svg>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart
+                      data={daily.map((d) => ({
+                        ...d,
+                        formattedDate: new Date(d.date).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric'
+                        })
+                      }))}
+                      margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
+                    >
+                      <defs>
+                        <linearGradient id="colorRequests" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#339af0" stopOpacity={0.8} />
+                          <stop offset="95%" stopColor="#339af0" stopOpacity={0.1} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e9ecef" />
+                      <XAxis
+                        dataKey="formattedDate"
+                        tick={{ fontSize: 12, fill: '#6c757d' }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 12, fill: '#6c757d' }}
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={(value) => value.toLocaleString()}
+                      />
+                      <RechartsTooltip
+                        contentStyle={{
+                          backgroundColor: 'white',
+                          border: '1px solid #e9ecef',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                        }}
+                        formatter={(value: number) => [value.toLocaleString(), 'Requests']}
+                        labelFormatter={(label) => `Date: ${label}`}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="requestCount"
+                        stroke="#1c7ed6"
+                        strokeWidth={3}
+                        fill="url(#colorRequests)"
+                        strokeLinecap="round"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
                 ) : (
                   <Center style={{ width: '100%', height: '100%' }}>
                     <Stack align="center" spacing="xs">
@@ -513,8 +543,8 @@ export const Dashboard: React.FC = () => {
                             <Text weight={600}>{s.requestCount24h.toLocaleString()}</Text>
                           </td>
                           <td style={{ textAlign: 'right' }}>
-                            <Badge 
-                              size="sm" 
+                            <Badge
+                              size="sm"
                               color={s.errorRate24h < 0.01 ? 'green' : s.errorRate24h < 0.05 ? 'yellow' : 'red'}
                               variant="light"
                             >
@@ -537,88 +567,15 @@ export const Dashboard: React.FC = () => {
                 </Table>
                 {(!usageSummary?.topServices || usageSummary.topServices.length === 0) && (
                   <Center style={{ height: '100px' }}>
-                    <Text size="sm" color="dimmed">No service data available</Text>
+                    <Text size="sm" color="dimmed">
+                      No service data available
+                    </Text>
                   </Center>
                 )}
               </ScrollArea>
             </Card>
           </Grid.Col>
-          <Grid.Col span={4}>
-            <Stack spacing="lg">
-              <Card shadow="xs" p="xl" radius="lg" withBorder>
-                <Group position="apart" align="center" mb="md">
-                  <Group spacing="sm">
-                    <ThemeIcon size="md" radius="md" variant="light" color="blue">
-                      <IconHeartbeat size={18} />
-                    </ThemeIcon>
-                    <div>
-                      <Text weight={600}>System Status</Text>
-                    </div>
-                  </Group>
-                </Group>
-                <Stack spacing="lg">
-                  <Group position="apart">
-                    <Text size="sm">Active Services</Text>
-                    <Badge color="green" size="lg">{servicesStatus.active}</Badge>
-                  </Group>
-                  <Group position="apart">
-                    <Text size="sm">Inactive Services</Text>
-                    <Badge color="red" size="lg">{servicesStatus.inactive}</Badge>
-                  </Group>
-                  <Group position="apart">
-                    <Text size="sm">Maintenance</Text>
-                    <Badge color="yellow" size="lg">{servicesStatus.maintenance}</Badge>
-                  </Group>
-                  <Progress
-                    value={healthScore}
-                    color={healthScore > 80 ? 'green' : healthScore > 60 ? 'yellow' : 'red'}
-                    size="lg"
-                    radius="xl"
-                    label={`${healthScore}%`}
-                  />
-                </Stack>
-              </Card>
-              <Card shadow="xs" p="xl" radius="lg" withBorder>
-                <Group position="apart" align="center" mb="md">
-                  <Group spacing="sm">
-                    <ThemeIcon size="md" radius="md" variant="light" color="cyan">
-                      <IconActivity size={18} />
-                    </ThemeIcon>
-                    <div>
-                      <Text weight={600}>Audit Events</Text>
-                      <Text size="xs" color="dimmed">Last 24 hours</Text>
-                    </div>
-                  </Group>
-                </Group>
-                <Stack spacing="sm">
-                  <Text size="2xl" weight={700}>
-                    {auditSummary?.totalLast24h ?? '-'}
-                  </Text>
-                  {auditSummary && auditSummary.bySeverity.length > 0 && (
-                    <Group spacing="xs">
-                      {auditSummary.bySeverity.map((s) => (
-                        <Badge
-                          key={s.severity}
-                          size="xs"
-                          color={
-                            s.severity === 'critical'
-                              ? 'red'
-                              : s.severity === 'high'
-                                ? 'orange'
-                                : s.severity === 'medium'
-                                  ? 'yellow'
-                                  : 'gray'
-                          }
-                        >
-                          {s.severity}: {s.count}
-                        </Badge>
-                      ))}
-                    </Group>
-                  )}
-                </Stack>
-              </Card>
-            </Stack>
-          </Grid.Col>
+          <Grid.Col span={4}>{/* This space could be used for future widgets or left empty for cleaner layout */}</Grid.Col>
         </Grid>
 
         <TokenRefreshNotification />

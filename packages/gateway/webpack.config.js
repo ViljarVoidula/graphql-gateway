@@ -112,7 +112,7 @@ module.exports = {
     },
     proxy: [
       {
-        context: ['/graphql', '/health', '/docs-theme.css'],
+        context: ['/graphql', '/health', '/docs-theme.css', '/docs-assets', '/voyager', '/playground'],
         target: 'http://localhost:4000',
         changeOrigin: true
       }

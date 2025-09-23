@@ -10,10 +10,10 @@ import { Container } from 'typedi';
 import { SchemaLoader } from '../SchemaLoader';
 import { authZRules } from '../auth/authz-rules';
 import { dataSource } from '../db/datasource';
+import { ApiKeyUsage } from '../entities/api-key-usage.entity';
 import { ApiKey } from '../entities/api-key.entity';
 import { ApplicationUsage } from '../entities/application-usage.entity';
 import { Application } from '../entities/application.entity';
-import { ApiKeyUsage } from '../entities/api-key-usage.entity';
 import { AuditLog } from '../entities/audit-log.entity';
 import { SchemaChange } from '../entities/schema-change.entity';
 import { ServiceKey } from '../entities/service-key.entity';
@@ -28,13 +28,14 @@ import { ConfigurationResolver } from './config/configuration.resolver';
 import { HealthResolver } from './health/health.resolver';
 import { SchemaChangeResolver } from './schema-changes/schema-change.resolver';
 import { ServiceRegistryResolver } from './service-registry/service-registry.resolver';
-import { ApplicationUsageResolver } from './usage/application-usage.resolver';
 import { ApiKeyUsageResolver } from './usage/api-key-usage.resolver';
+import { ApplicationUsageResolver } from './usage/application-usage.resolver';
 import { UsageDashboardResolver } from './usage/usage-dashboard.resolver';
 import { User } from './users/user.entity';
 import { UserResolver } from './users/user.resolver';
 // Additional resolvers (docs, theme, search, chat) to expose new admin features in primary schema
 import { AIResolver } from './ai/ai.resolver';
+import { AssetResolver } from './assets/asset.resolver';
 import { ChatResolver } from './chat/chat.resolver';
 import { DocsAuthoringResolver } from './docs/docs.resolver';
 import { DocsSearchResolver } from './search/search.resolver';
@@ -82,7 +83,8 @@ export function makeEndpointsSchema(loader: SchemaLoader): GraphQLSchema {
       ThemeResolver,
       DocsSearchResolver,
       AIResolver,
-      ChatResolver
+      ChatResolver,
+      AssetResolver
     ],
     container: Container,
     orphanedTypes: [Application, ApiKey, Session, AuditLog, ApplicationUsage, ApiKeyUsage]

@@ -19,6 +19,7 @@ import {
   Title,
   Tooltip
 } from '@mantine/core';
+import { showNotification } from '@mantine/notifications';
 import {
   IconBorderRadius,
   IconCheck,
@@ -32,7 +33,9 @@ import {
   IconRuler,
   IconShadow,
   IconTypography,
-  IconWand
+  IconUpload,
+  IconWand,
+  IconX
 } from '@tabler/icons-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../../utils/auth';
@@ -68,6 +71,20 @@ export const DocsThemeEditor: React.FC = () => {
   const [tokens, setTokens] = useState<TokenRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const MAX_ASSET_BYTES = Math.floor(4.8 * 1024 * 1024); // 4.8 MB limit
+  // Branding (whitelabel) state
+  const [brandName, setBrandName] = useState<string>('Gateway Docs');
+  const [heroTitle, setHeroTitle] = useState<string>('Welcome to the Documentation Portal');
+  const [heroSubtitle, setHeroSubtitle] = useState<string>(
+    'Explore our comprehensive guides and API documentation. Stay updated with the latest!'
+  );
+  const [brandingInitial, setBrandingInitial] = useState<{
+    brandName: string;
+    heroTitle: string;
+    heroSubtitle: string;
+  } | null>(null);
+  const [brandingSaving, setBrandingSaving] = useState(false);
+  const [brandingError, setBrandingError] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [newValue, setNewValue] = useState('');
   const [activeTab, setActiveTab] = useState<string>('colors');
@@ -89,6 +106,17 @@ export const DocsThemeEditor: React.FC = () => {
   const [importUsedLLM, setImportUsedLLM] = useState<boolean>(false);
   const [importPalette, setImportPalette] = useState<string[] | null>(null);
   const observerRef = useRef<MutationObserver | null>(null);
+  const previewTimeoutRef = useRef<number | null>(null);
+  // Branding assets
+  const [heroUploading, setHeroUploading] = useState(false);
+  const [faviconUploading, setFaviconUploading] = useState(false);
+  const [brandIconUploading, setBrandIconUploading] = useState(false);
+  const [heroPreview, setHeroPreview] = useState<string | null>(null);
+  const [faviconPreview, setFaviconPreview] = useState<string | null>(null);
+  const [brandIconPreview, setBrandIconPreview] = useState<string | null>(null);
+  const [heroDragOver, setHeroDragOver] = useState(false);
+  const [faviconDragOver, setFaviconDragOver] = useState(false);
+  const [brandIconDragOver, setBrandIconDragOver] = useState(false);
 
   // Helper function to merge defaults with loaded tokens
   const mergeWithDefaults = (loadedTokens: { name: string; value: string }[]): TokenRow[] => {
@@ -345,6 +373,60 @@ export const DocsThemeEditor: React.FC = () => {
     load();
   }, []);
 
+  // Load current docs branding (admin route)
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await authenticatedFetch('/graphql', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: `query { docsBranding { brandName heroTitle heroSubtitle } }` })
+        });
+        const json = await res.json();
+        const b = json?.data?.docsBranding;
+        if (b) {
+          setBrandName(b.brandName || brandName);
+          setHeroTitle(b.heroTitle || heroTitle);
+          setHeroSubtitle(b.heroSubtitle || heroSubtitle);
+          setBrandingInitial({ brandName: b.brandName, heroTitle: b.heroTitle, heroSubtitle: b.heroSubtitle });
+        }
+      } catch (e) {
+        // ignore in this view if fails; user might not have rights
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load existing branding assets for preview
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await authenticatedFetch('/graphql', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: `query { docsBrandingAssets { heroImageUrl faviconUrl brandIconUrl } }`
+          })
+        });
+        const json = await res.json();
+        const assets = json?.data?.docsBrandingAssets;
+        if (assets) {
+          if (assets.heroImageUrl) {
+            setHeroPreview(assets.heroImageUrl);
+          }
+          if (assets.faviconUrl) {
+            setFaviconPreview(assets.faviconUrl);
+          }
+          if (assets.brandIconUrl) {
+            setBrandIconPreview(assets.brandIconUrl);
+          }
+        }
+      } catch (e) {
+        // ignore if fails; user might not have rights or no assets exist
+      }
+    })();
+  }, []);
+
   // No separate dropdown; navigate inside the iframe using docs app sidebar/links
 
   async function saveToken(idx: number) {
@@ -582,6 +664,138 @@ export const DocsThemeEditor: React.FC = () => {
     setImportUsedLLM(false);
   }
 
+  // Force reload the iframe with cache-busting and preserve current in-iframe hash when possible
+  const reloadPreview = () => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    setPreviewLoading(true);
+    // Clear any previous timeout
+    if (previewTimeoutRef.current) {
+      window.clearTimeout(previewTimeoutRef.current);
+      previewTimeoutRef.current = null;
+    }
+    let hash = '#/home';
+    try {
+      const w = iframe.contentWindow;
+      if (w && w.location && typeof w.location.hash === 'string' && w.location.hash) {
+        hash = w.location.hash;
+      }
+    } catch {}
+    const ts = Date.now();
+    iframe.src = `/docs?t=${ts}${hash}`;
+    // Fallback: if load event doesn't fire due to SPA nuances, hide spinner after 6s
+    previewTimeoutRef.current = window.setTimeout(() => {
+      setPreviewLoading(false);
+      previewTimeoutRef.current = null;
+    }, 6000);
+  };
+
+  // Helper to handle file uploads for hero, favicon, and brand icon
+  const handleFileUpload = async (file: File, type: 'hero' | 'favicon' | 'brandIcon') => {
+    if (file.size > MAX_ASSET_BYTES) {
+      setBrandingError(
+        `${type === 'hero' ? 'Hero image' : type === 'favicon' ? 'Favicon' : 'Brand icon'} is too large (${(
+          file.size /
+          1024 /
+          1024
+        ).toFixed(2)} MB). Max allowed is 4.8 MB.`
+      );
+      return;
+    }
+
+    // Validate file type
+    const heroTypes = ['image/png', 'image/jpeg', 'image/webp'];
+    const faviconTypes = ['image/x-icon', 'image/vnd.microsoft.icon', 'image/png', 'image/svg+xml'];
+    const brandIconTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
+    const allowedTypes = type === 'hero' ? heroTypes : type === 'favicon' ? faviconTypes : brandIconTypes;
+
+    if (!allowedTypes.includes(file.type)) {
+      setBrandingError(
+        `Invalid file type for ${type === 'hero' ? 'hero image' : type === 'favicon' ? 'favicon' : 'brand icon'}. ${
+          type === 'hero'
+            ? 'Accepted: PNG, JPEG, WEBP'
+            : type === 'favicon'
+              ? 'Accepted: ICO, PNG, SVG'
+              : 'Accepted: PNG, JPEG, WEBP, SVG'
+        }`
+      );
+      return;
+    }
+
+    // Show local thumbnail preview
+    try {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (type === 'hero') {
+          setHeroPreview(reader.result as string);
+        } else if (type === 'favicon') {
+          setFaviconPreview(reader.result as string);
+        } else {
+          setBrandIconPreview(reader.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch {}
+
+    // Upload file
+    const arrayBuffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    const base64 = btoa(binary);
+
+    if (type === 'hero') {
+      setHeroUploading(true);
+    } else if (type === 'favicon') {
+      setFaviconUploading(true);
+    } else {
+      setBrandIconUploading(true);
+    }
+
+    try {
+      const mutation = type === 'hero' ? 'setDocsHeroImage' : type === 'favicon' ? 'setDocsFavicon' : 'setBrandIcon';
+      const res = await authenticatedFetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation($b:String!,$ct:String!){ ${mutation}(base64:$b,contentType:$ct) }`,
+          variables: {
+            b: base64,
+            ct: file.type || (type === 'hero' ? 'image/png' : type === 'favicon' ? 'image/x-icon' : 'image/png')
+          }
+        })
+      });
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0]?.message || 'Upload failed');
+
+      // Show success notification
+      showNotification({
+        title: 'Upload successful',
+        message: `${type === 'hero' ? 'Hero image' : type === 'favicon' ? 'Favicon' : 'Brand icon'} uploaded successfully`,
+        color: 'green'
+      });
+
+      // Trigger brand icon refresh if it's a brand icon upload
+      if (type === 'brandIcon') {
+        window.dispatchEvent(new CustomEvent('brandIconUpdated'));
+      }
+
+      reloadPreview();
+    } catch (err: any) {
+      setBrandingError(
+        err?.message || `Failed to upload ${type === 'hero' ? 'hero image' : type === 'favicon' ? 'favicon' : 'brand icon'}`
+      );
+    } finally {
+      if (type === 'hero') {
+        setHeroUploading(false);
+      } else if (type === 'favicon') {
+        setFaviconUploading(false);
+      } else {
+        setBrandIconUploading(false);
+      }
+    }
+  };
+
   return (
     <Stack>
       <Group>
@@ -598,6 +812,341 @@ export const DocsThemeEditor: React.FC = () => {
 
       <Group align="flex-start" spacing="lg" grow noWrap>
         <Stack style={{ flex: 1, minWidth: 400 }} spacing="md">
+          {/* Docs Branding Section */}
+          <Card withBorder shadow="sm" p="md">
+            <Group position="apart" mb="sm">
+              <Group spacing="xs">
+                <IconPalette size={20} />
+                <Text weight={600}>Docs Branding</Text>
+                <Badge color="gray" variant="light" radius="sm">
+                  Whitelabel
+                </Badge>
+              </Group>
+            </Group>
+            {brandingError && (
+              <Alert color="red" title="Failed to save" mb="sm">
+                {brandingError}
+              </Alert>
+            )}
+            <Stack spacing="xs">
+              <TextInput label="Brand Name" value={brandName} onChange={(e) => setBrandName(e.target.value)} />
+              <TextInput label="Hero Title" value={heroTitle} onChange={(e) => setHeroTitle(e.target.value)} />
+              <TextInput label="Hero Subtitle" value={heroSubtitle} onChange={(e) => setHeroSubtitle(e.target.value)} />
+              <Divider my="xs" label="Brand Images" labelPosition="center" />
+              <Stack spacing={6}>
+                <Text size="sm" weight={500}>
+                  Hero Image
+                </Text>
+                <Paper
+                  withBorder
+                  p="md"
+                  style={{
+                    borderStyle: 'dashed',
+                    borderWidth: 2,
+                    borderColor: heroDragOver ? '#339af0' : heroPreview ? '#51cf66' : '#ced4da',
+                    backgroundColor: heroDragOver ? '#e7f5ff' : heroPreview ? '#f3f9f3' : '#f8f9fa',
+                    cursor: heroUploading ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s ease',
+                    position: 'relative'
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (!heroUploading) setHeroDragOver(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    setHeroDragOver(false);
+                  }}
+                  onDrop={async (e) => {
+                    e.preventDefault();
+                    setHeroDragOver(false);
+                    if (heroUploading) return;
+                    const file = e.dataTransfer.files[0];
+                    if (file) await handleFileUpload(file, 'hero');
+                  }}
+                  onClick={() => {
+                    if (heroUploading) return;
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/png,image/jpeg,image/webp';
+                    input.onchange = async (e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0];
+                      if (file) await handleFileUpload(file, 'hero');
+                    };
+                    input.click();
+                  }}
+                >
+                  {heroUploading ? (
+                    <Group position="center" spacing="xs">
+                      <IconUpload size={24} color="#868e96" />
+                      <Text color="dimmed" align="center">
+                        Uploading hero image...
+                      </Text>
+                    </Group>
+                  ) : heroPreview ? (
+                    <Stack spacing="xs" align="center">
+                      <img src={heroPreview} alt="Hero preview" style={{ maxWidth: '100%', maxHeight: 100, borderRadius: 4 }} />
+                      <Group spacing="xs">
+                        <Text size="xs" color="green" weight={500}>
+                          Hero image ready
+                        </Text>
+                        <ActionIcon
+                          size="xs"
+                          color="red"
+                          variant="light"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setHeroPreview(null);
+                          }}
+                        >
+                          <IconX size={12} />
+                        </ActionIcon>
+                      </Group>
+                    </Stack>
+                  ) : (
+                    <Stack align="center" spacing="xs">
+                      <IconUpload size={32} color={heroDragOver ? '#339af0' : '#868e96'} />
+                      <Text color="dimmed" align="center" size="sm">
+                        {heroDragOver ? 'Drop hero image here' : 'Drag & drop or click to upload'}
+                      </Text>
+                    </Stack>
+                  )}
+                </Paper>
+                <Text size="xs" color="dimmed">
+                  Max 4.8 MB. Accepted: PNG, JPEG, WEBP. Recommended ~1600×400 for a wide banner.
+                </Text>
+              </Stack>
+              <Stack spacing={6}>
+                <Text size="sm" weight={500}>
+                  Brand Icon
+                </Text>
+                <Paper
+                  withBorder
+                  p="md"
+                  style={{
+                    borderStyle: 'dashed',
+                    borderWidth: 2,
+                    borderColor: brandIconDragOver ? '#339af0' : brandIconPreview ? '#51cf66' : '#ced4da',
+                    backgroundColor: brandIconDragOver ? '#e7f5ff' : brandIconPreview ? '#f3f9f3' : '#f8f9fa',
+                    cursor: brandIconUploading ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s ease',
+                    position: 'relative'
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (!brandIconUploading) setBrandIconDragOver(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    setBrandIconDragOver(false);
+                  }}
+                  onDrop={async (e) => {
+                    e.preventDefault();
+                    setBrandIconDragOver(false);
+                    if (brandIconUploading) return;
+                    const file = e.dataTransfer.files[0];
+                    if (file) await handleFileUpload(file, 'brandIcon');
+                  }}
+                  onClick={() => {
+                    if (brandIconUploading) return;
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/png,image/jpeg,image/webp,image/svg+xml';
+                    input.onchange = async (e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0];
+                      if (file) await handleFileUpload(file, 'brandIcon');
+                    };
+                    input.click();
+                  }}
+                >
+                  {brandIconUploading ? (
+                    <Group position="center" spacing="xs">
+                      <IconUpload size={24} color="#868e96" />
+                      <Text color="dimmed" align="center">
+                        Uploading brand icon...
+                      </Text>
+                    </Group>
+                  ) : brandIconPreview ? (
+                    <Stack spacing="xs" align="center">
+                      <img src={brandIconPreview} alt="Brand icon preview" style={{ width: 48, height: 48, borderRadius: 4 }} />
+                      <Group spacing="xs">
+                        <Text size="xs" color="green" weight={500}>
+                          Brand icon ready
+                        </Text>
+                        <ActionIcon
+                          size="xs"
+                          color="red"
+                          variant="light"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBrandIconPreview(null);
+                          }}
+                        >
+                          <IconX size={12} />
+                        </ActionIcon>
+                      </Group>
+                    </Stack>
+                  ) : (
+                    <Stack align="center" spacing="xs">
+                      <IconUpload size={32} color={brandIconDragOver ? '#339af0' : '#868e96'} />
+                      <Text color="dimmed" align="center" size="sm">
+                        {brandIconDragOver ? 'Drop brand icon here' : 'Drag & drop or click to upload'}
+                      </Text>
+                    </Stack>
+                  )}
+                </Paper>
+                <Text size="xs" color="dimmed">
+                  Max 4.8 MB. Accepted: PNG, JPEG, WEBP, SVG. Recommended square (e.g., 64×64 or 128×128). Displays in admin UI.
+                </Text>
+              </Stack>
+              <Stack spacing={6}>
+                <Text size="sm" weight={500}>
+                  Favicon
+                </Text>
+                <Paper
+                  withBorder
+                  p="md"
+                  style={{
+                    borderStyle: 'dashed',
+                    borderWidth: 2,
+                    borderColor: faviconDragOver ? '#339af0' : faviconPreview ? '#51cf66' : '#ced4da',
+                    backgroundColor: faviconDragOver ? '#e7f5ff' : faviconPreview ? '#f3f9f3' : '#f8f9fa',
+                    cursor: faviconUploading ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s ease',
+                    position: 'relative'
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (!faviconUploading) setFaviconDragOver(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    setFaviconDragOver(false);
+                  }}
+                  onDrop={async (e) => {
+                    e.preventDefault();
+                    setFaviconDragOver(false);
+                    if (faviconUploading) return;
+                    const file = e.dataTransfer.files[0];
+                    if (file) await handleFileUpload(file, 'favicon');
+                  }}
+                  onClick={() => {
+                    if (faviconUploading) return;
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/x-icon,image/png,image/svg+xml';
+                    input.onchange = async (e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0];
+                      if (file) await handleFileUpload(file, 'favicon');
+                    };
+                    input.click();
+                  }}
+                >
+                  {faviconUploading ? (
+                    <Group position="center" spacing="xs">
+                      <IconUpload size={24} color="#868e96" />
+                      <Text color="dimmed" align="center">
+                        Uploading favicon...
+                      </Text>
+                    </Group>
+                  ) : faviconPreview ? (
+                    <Stack spacing="xs" align="center">
+                      <img src={faviconPreview} alt="Favicon preview" style={{ width: 48, height: 48, borderRadius: 4 }} />
+                      <Group spacing="xs">
+                        <Text size="xs" color="green" weight={500}>
+                          Favicon ready
+                        </Text>
+                        <ActionIcon
+                          size="xs"
+                          color="red"
+                          variant="light"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFaviconPreview(null);
+                          }}
+                        >
+                          <IconX size={12} />
+                        </ActionIcon>
+                      </Group>
+                    </Stack>
+                  ) : (
+                    <Stack align="center" spacing="xs">
+                      <IconUpload size={32} color={faviconDragOver ? '#339af0' : '#868e96'} />
+                      <Text color="dimmed" align="center" size="sm">
+                        {faviconDragOver ? 'Drop favicon here' : 'Drag & drop or click to upload'}
+                      </Text>
+                    </Stack>
+                  )}
+                </Paper>
+                <Text size="xs" color="dimmed">
+                  Max 4.8 MB. Accepted: ICO, PNG, SVG. Recommended square (e.g., 32×32 or 64×64). Browser tab icon.
+                </Text>
+              </Stack>
+              <Group spacing="xs">
+                <Button
+                  size="xs"
+                  loading={brandingSaving}
+                  disabled={
+                    brandingSaving ||
+                    (brandingInitial !== null &&
+                      brandingInitial.brandName === brandName &&
+                      brandingInitial.heroTitle === heroTitle &&
+                      brandingInitial.heroSubtitle === heroSubtitle)
+                  }
+                  onClick={async () => {
+                    setBrandingSaving(true);
+                    setBrandingError(null);
+                    try {
+                      const res = await authenticatedFetch('/graphql', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          query: `mutation Set($brandName:String,$heroTitle:String,$heroSubtitle:String){ setDocsBranding(brandName:$brandName,heroTitle:$heroTitle,heroSubtitle:$heroSubtitle){ brandName heroTitle heroSubtitle } }`,
+                          variables: { brandName, heroTitle, heroSubtitle }
+                        })
+                      });
+                      const json = await res.json();
+                      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to save');
+                      const b = json.data.setDocsBranding;
+                      setBrandingInitial(b);
+                      // Reload preview to reflect new branding
+                      reloadPreview();
+                    } catch (e: any) {
+                      setBrandingError(e?.message || 'Failed to save');
+                    } finally {
+                      setBrandingSaving(false);
+                    }
+                  }}
+                >
+                  Save
+                </Button>
+                {brandingInitial &&
+                  (brandingInitial.brandName !== brandName ||
+                    brandingInitial.heroTitle !== heroTitle ||
+                    brandingInitial.heroSubtitle !== heroSubtitle) && (
+                    <Button
+                      variant="subtle"
+                      size="xs"
+                      disabled={brandingSaving}
+                      onClick={() => {
+                        setBrandName(brandingInitial.brandName);
+                        setHeroTitle(brandingInitial.heroTitle);
+                        setHeroSubtitle(brandingInitial.heroSubtitle);
+                      }}
+                    >
+                      Reset
+                    </Button>
+                  )}
+              </Group>
+              <Alert color="blue" variant="light">
+                <Text size="xs">
+                  Brand name updates the sidebar heading in the public docs. Hero text controls the large heading and subtitle
+                  on the docs homepage.
+                </Text>
+              </Alert>
+            </Stack>
+          </Card>
+
           {/* Import Theme Section */}
           <Card withBorder shadow="sm" p="md">
             <Group position="apart" mb="sm">
@@ -982,20 +1531,7 @@ export const DocsThemeEditor: React.FC = () => {
                   </Tooltip>
                 )}
               </CopyButton>
-              <Button
-                size="xs"
-                variant="outline"
-                onClick={() => {
-                  if (iframeRef.current) {
-                    setPreviewLoading(true);
-                    // Force reload iframe
-                    iframeRef.current.src = iframeRef.current.src;
-                  } else {
-                    load();
-                  }
-                }}
-                leftIcon={<IconRefresh size={14} />}
-              >
+              <Button size="xs" variant="outline" onClick={reloadPreview} leftIcon={<IconRefresh size={14} />}>
                 Reload
               </Button>
             </Group>
@@ -1007,13 +1543,17 @@ export const DocsThemeEditor: React.FC = () => {
               title="Docs Theme Preview"
               style={{ display: 'block', width: '100%', height: '100%', border: '0' }}
               sandbox="allow-scripts allow-same-origin"
-              src={'/docs#/home'}
+              src={`/docs?t=init#/${'home'}`}
               onLoad={() => {
                 // Apply overrides after docs app loads
                 try {
                   applyOverrides();
                 } finally {
                   setPreviewLoading(false);
+                  if (previewTimeoutRef.current) {
+                    window.clearTimeout(previewTimeoutRef.current);
+                    previewTimeoutRef.current = null;
+                  }
                 }
               }}
             />

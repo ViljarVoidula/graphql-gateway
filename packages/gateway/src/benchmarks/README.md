@@ -17,25 +17,25 @@ This directory contains load / stress / soak test scripts for the GraphQL Gatewa
 
 ## Environment Variables
 
-| Variable      | Default                         | Description                                        |
-| ------------- | ------------------------------- | -------------------------------------------------- |
-| `GATEWAY_URL` | `http://localhost:4000/graphql` | GraphQL endpoint under test                        |
-| `API_KEY`     | (none)                          | API key header value if required for auth          |
-| `DURATION`    | test-specific                   | Override with e.g. `30s` or `10m` for some scripts |
-| `VU`          | test-specific                   | Override default VUs for a script                  |
-| `RAMP_MAX_VU` | 500                             | Max VUs for ramp script                            |
+| Variable      | Default                                                                | Description                                           |
+| ------------- | ---------------------------------------------------------------------- | ----------------------------------------------------- |
+| `GATEWAY_URL` | `http://localhost:4000/graphql`                                        | GraphQL endpoint under test                           |
+| `API_KEY`     | `app_d77aa741018569d1e3bd61f61b388dab21ab4973f534770d932631e150fa5ea0` | API key header value for authentication (`X-API-Key`) |
+| `DURATION`    | test-specific                                                          | Override with e.g. `30s` or `10m` for some scripts    |
+| `VU`          | test-specific                                                          | Override default VUs for a script                     |
+| `RAMP_MAX_VU` | 500                                                                    | Max VUs for ramp script                               |
 
 ## Running Examples
 
 ```bash
-# Smoke baseline
+# Smoke baseline (authentication included automatically)
 k6 run src/benchmarks/query-smoke.js
 
 # Ramp test to 1k VUs
 RAMP_MAX_VU=1000 k6 run src/benchmarks/query-ramp.js
 
-# Mixed workload with API key
-API_KEY=abc123 k6 run src/benchmarks/mutation-mix.js
+# Mixed workload with custom API key
+API_KEY=your_custom_api_key k6 run src/benchmarks/mutation-mix.js
 
 # Spike test
 k6 run src/benchmarks/stress-spike.js

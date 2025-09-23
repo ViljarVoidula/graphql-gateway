@@ -27,8 +27,10 @@ import { keyManager } from './security/keyManager';
 import { makeEndpointsSchema } from './services/endpoints';
 // Ensure side-effect import of new resolvers so type-graphql can pick them up if schema build scans metadata
 import { loadSecurityConfig } from './config/security.config';
+import { Asset } from './entities/asset.entity';
 import './services/ai/ai.resolver';
 import './services/applications/application-service-rate-limit.resolver';
+import './services/assets/asset.resolver';
 import { cleanupExpiredAuditLogs } from './services/audit/audit-log.retention';
 import { AuditLogService } from './services/audit/audit-log.service';
 import './services/chat/chat.resolver';
@@ -253,10 +255,13 @@ app.use(
       directives: {
         defaultSrc: ["'self'"],
         imgSrc: ["'self'", 'data:', 'https://raw.githubusercontent.com'],
-        scriptSrc: ["'self'", "'unsafe-inline'", 'https://unpkg.com'], // Allow unpkg.com for GraphiQL
-        styleSrc: ["'self'", "'unsafe-inline'", 'https://unpkg.com'], // Allow unpkg.com for GraphiQL styles
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://unpkg.com', 'https://cdn.jsdelivr.net', 'blob:'], // Allow unpkg.com for GraphiQL, jsdelivr.net for Voyager, blob: for workers, and unsafe-eval for WebAssembly
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://unpkg.com', 'https://cdn.jsdelivr.net'], // Allow unpkg.com for GraphiQL and jsdelivr.net for Voyager
+        workerSrc: ["'self'", 'blob:'], // Allow blob workers for Voyager
         connectSrc: [
           "'self'",
+          'data:', // Allow data URLs for Voyager's graphviz worker
+          'https://cdn.jsdelivr.net', // Allow source maps and other connections to jsdelivr.net
           // Allow configured CORS origin if provided (useful for Admin UI/dev)
           ...(process.env.CORS_ORIGIN ? [process.env.CORS_ORIGIN] : [])
         ],
@@ -297,6 +302,8 @@ const yoga = createYoga({
   graphiql: {
     title: 'GraphQL Gateway with Session Security'
   },
+  // GraphQL Playground will be handled at a separate endpoint (/playground)
+  // to allow conditional access based on configuration settings
   context: async ({ request }) => {
     // Context will be extended by session plugin
     return {
@@ -324,6 +331,70 @@ app.use(async (ctx, next) => {
     ctx.type = 'application/json';
     ctx.body = await checkHealth();
     return;
+  }
+
+  // GraphQL Voyager endpoint (when enabled)
+  if (ctx.path === '/voyager') {
+    try {
+      const config = Container.get(ConfigurationService);
+      const isEnabled = await config.isGraphQLVoyagerEnabled();
+
+      if (!isEnabled) {
+        ctx.status = 404;
+        ctx.body = 'GraphQL Voyager is disabled';
+        return;
+      }
+
+      // Import voyager only when needed
+      const { default: koaMiddleware } = await import('graphql-voyager/middleware/koa');
+      const voyagerHandler = koaMiddleware({
+        endpointUrl: '/graphql',
+        displayOptions: {
+          skipRelay: false,
+          skipDeprecated: false,
+          showLeafFields: true,
+          sortByAlphabet: false,
+          hideRoot: false
+        }
+      });
+
+      await voyagerHandler(ctx, next);
+      return;
+    } catch (error) {
+      log.error('Failed to serve GraphQL Voyager', {
+        operation: 'voyagerMiddleware',
+        error: error instanceof Error ? error : new Error(String(error))
+      });
+      ctx.status = 500;
+      ctx.body = 'Failed to load GraphQL Voyager';
+      return;
+    }
+  }
+
+  // GraphQL Playground endpoint (when enabled) - redirects to GraphQL endpoint
+  if (ctx.path === '/playground') {
+    try {
+      const config = Container.get(ConfigurationService);
+      const isEnabled = await config.isGraphQLPlaygroundEnabled();
+
+      if (!isEnabled) {
+        ctx.status = 404;
+        ctx.body = 'GraphQL Playground is disabled';
+        return;
+      }
+
+      // Redirect to the GraphQL endpoint which includes GraphQL Playground when graphiql is enabled
+      ctx.redirect('/graphql');
+      return;
+    } catch (error) {
+      log.error('Failed to serve GraphQL Playground', {
+        operation: 'playgroundRedirect',
+        error: error instanceof Error ? error : new Error(String(error))
+      });
+      ctx.status = 500;
+      ctx.body = 'Failed to load GraphQL Playground';
+      return;
+    }
   }
 
   // Dynamic docs theme CSS endpoint
@@ -461,6 +532,49 @@ app.use(async (ctx, next) => {
     return;
   }
 
+  // Serve Postgres-backed docs assets
+  if (ctx.path.startsWith('/docs-assets/')) {
+    try {
+      const repo = dataSource.getRepository(Asset);
+      if (ctx.path === '/docs-assets/hero-image') {
+        const row = await repo.findOne({ where: { key: 'public.docs.heroImage' } });
+        if (!row) {
+          ctx.status = 404;
+          return;
+        }
+        ctx.type = row.contentType || 'application/octet-stream';
+        ctx.set('Cache-Control', 'no-store');
+        ctx.body = row.data;
+        return;
+      }
+      if (ctx.path === '/docs-assets/favicon') {
+        const row = await repo.findOne({ where: { key: 'public.docs.favicon' } });
+        if (!row) {
+          ctx.status = 404;
+          return;
+        }
+        ctx.type = row.contentType || 'image/x-icon';
+        ctx.set('Cache-Control', 'no-store');
+        ctx.body = row.data;
+        return;
+      }
+      if (ctx.path === '/docs-assets/brand-icon') {
+        const row = await repo.findOne({ where: { key: 'public.docs.brandIcon' } });
+        if (!row) {
+          ctx.status = 404;
+          return;
+        }
+        ctx.type = row.contentType || 'application/octet-stream';
+        ctx.set('Cache-Control', 'no-store');
+        ctx.body = row.data;
+        return;
+      }
+    } catch (e) {
+      ctx.status = 500;
+      return;
+    }
+  }
+
   // Documentation pages gating & static file serving (public). Avoid capturing admin docs management now under /admin/docs.
   if ((ctx.path === '/docs' || ctx.path.startsWith('/docs/')) && !ctx.path.startsWith('/admin/docs/')) {
     const config = Container.get(ConfigurationService);
@@ -495,6 +609,15 @@ app.use(async (ctx, next) => {
           // naive injection before closing head tag
           html = html.replace('</head>', `  <meta name="x-public-doc-mode" content="${mode}" />\n</head>`);
         }
+        // Inject favicon if present
+        try {
+          const assetRepo = dataSource.getRepository(Asset);
+          const fav = await assetRepo.findOne({ where: { key: 'public.docs.favicon' } });
+          if (fav) {
+            const linkTag = `<link rel="icon" href="/docs-assets/favicon?ts=${fav.updatedAt.getTime()}" />`;
+            html = html.replace('</head>', `  ${linkTag}\n</head>`);
+          }
+        } catch {}
         ctx.type = 'text/html';
         ctx.body = html;
         return;
@@ -503,6 +626,44 @@ app.use(async (ctx, next) => {
       ctx.type = 'text/html';
       ctx.body = `<!DOCTYPE html><html><head><title>API Docs</title></head><body><h1>API Documentation</h1><p>The documentation UI bundle has not been built yet. Run <code>npm run build:admin</code> to generate it.</p><p>Current mode: ${mode}</p></body></html>`;
       return;
+    }
+
+    // Serve docs branding assets at /docs/hero-image and /docs/favicon (in addition to /docs-assets/)
+    if (ctx.path === '/docs/hero-image') {
+      try {
+        const repo = dataSource.getRepository(Asset);
+        const row = await repo.findOne({ where: { key: 'public.docs.heroImage' } });
+        if (!row) {
+          ctx.status = 404;
+          return;
+        }
+        ctx.type = row.contentType || 'application/octet-stream';
+        ctx.set('Cache-Control', 'no-store');
+        ctx.body = row.data;
+        return;
+      } catch (err) {
+        ctx.status = 500;
+        ctx.body = 'Internal server error';
+        return;
+      }
+    }
+    if (ctx.path === '/docs/favicon') {
+      try {
+        const repo = dataSource.getRepository(Asset);
+        const row = await repo.findOne({ where: { key: 'public.docs.favicon' } });
+        if (!row) {
+          ctx.status = 404;
+          return;
+        }
+        ctx.type = row.contentType || 'image/x-icon';
+        ctx.set('Cache-Control', 'no-store');
+        ctx.body = row.data;
+        return;
+      } catch (err) {
+        ctx.status = 500;
+        ctx.body = 'Internal server error';
+        return;
+      }
     }
 
     // Potential future: static assets under /docs/assets/* served from dist/client/assets

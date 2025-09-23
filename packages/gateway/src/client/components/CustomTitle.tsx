@@ -1,9 +1,57 @@
 import { Box, Group, Image, Text } from '@mantine/core';
 import { useLink } from '@refinedev/core';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+
+interface BrandingAssets {
+  heroImageUrl?: string | null;
+  faviconUrl?: string | null;
+  brandIconUrl?: string | null;
+}
 
 export const CustomTitle: React.FC = () => {
   const Link = useLink();
+  const [brandIcon, setBrandIcon] = useState<string | null>(null);
+
+  const fetchBrandIcon = async () => {
+    try {
+      const response = await fetch('/graphql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          query: `
+            query {
+              docsBrandingAssets {
+                brandIconUrl
+              }
+            }
+          `
+        })
+      });
+      const data = await response.json();
+      if (data.data?.docsBrandingAssets?.brandIconUrl) {
+        setBrandIcon(data.data.docsBrandingAssets.brandIconUrl);
+      }
+    } catch (error) {
+      console.warn('Failed to fetch brand icon:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchBrandIcon();
+
+    // Listen for brand icon updates
+    const handleBrandIconUpdate = () => {
+      fetchBrandIcon();
+    };
+
+    window.addEventListener('brandIconUpdated', handleBrandIconUpdate);
+    return () => {
+      window.removeEventListener('brandIconUpdated', handleBrandIconUpdate);
+    };
+  }, []);
 
   return (
     <Link to="/" style={{ textDecoration: 'none' }}>
@@ -24,7 +72,7 @@ export const CustomTitle: React.FC = () => {
       >
         <Group spacing="sm" align="center" style={{ width: '100%' }}>
           <Image
-            src="/assets/logo.jpg"
+            src={brandIcon || '/assets/logo.jpg'}
             alt="Gateway Logo"
             width={28}
             height={28}

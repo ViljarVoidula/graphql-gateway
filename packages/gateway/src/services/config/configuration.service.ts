@@ -77,6 +77,9 @@ export class ConfigurationService {
   private readonly PUBLIC_DOCS_ENABLED_KEY = 'public.documentation.enabled';
   private readonly PUBLIC_DOCS_MODE_KEY = 'public.documentation.mode'; // 'disabled' | 'preview' | 'enabled'
   private readonly ENFORCE_DOWNSTREAM_AUTH_KEY = 'security.enforceDownstreamAuth';
+  private readonly PUBLIC_DOCS_BRANDING_KEY = 'public.documentation.branding'; // json: { brandName, heroTitle, heroSubtitle }
+  private readonly GRAPHQL_VOYAGER_ENABLED_KEY = 'graphql.voyager.enabled';
+  private readonly GRAPHQL_PLAYGROUND_ENABLED_KEY = 'graphql.playground.enabled';
 
   /**
    * Returns audit log retention in days. Falls back to env or default if not yet configured.
@@ -178,6 +181,99 @@ export class ConfigurationService {
   async setDownstreamAuthEnforced(enabled: boolean): Promise<boolean> {
     await this.upsert(this.ENFORCE_DOWNSTREAM_AUTH_KEY, enabled);
     gatewayInternalLog.info('Updated enforce downstream authentication', {
+      operation: 'configurationUpdate',
+      metadata: { enabled }
+    });
+    return enabled;
+  }
+
+  /** Docs branding (whitelabel) */
+  async getDocsBranding(): Promise<{ brandName: string; heroTitle: string; heroSubtitle: string }> {
+    const defaults = {
+      brandName: 'Gateway Docs',
+      heroTitle: 'Welcome to the Documentation Portal',
+      heroSubtitle: 'Explore our comprehensive guides and API documentation. Stay updated with the latest!'
+    };
+    const value = await this.load(this.PUBLIC_DOCS_BRANDING_KEY);
+    if (value && typeof value === 'object') {
+      // Merge with defaults to tolerate partials/older versions
+      const v = value as any;
+      return {
+        brandName: typeof v.brandName === 'string' && v.brandName.trim() ? v.brandName.trim() : defaults.brandName,
+        heroTitle: typeof v.heroTitle === 'string' && v.heroTitle.trim() ? v.heroTitle.trim() : defaults.heroTitle,
+        heroSubtitle:
+          typeof v.heroSubtitle === 'string' && v.heroSubtitle.trim() ? v.heroSubtitle.trim() : defaults.heroSubtitle
+      };
+    }
+    return defaults;
+  }
+
+  async setDocsBranding(input: {
+    brandName?: string | null;
+    heroTitle?: string | null;
+    heroSubtitle?: string | null;
+  }): Promise<{ brandName: string; heroTitle: string; heroSubtitle: string }> {
+    const current = await this.getDocsBranding();
+    const next = {
+      brandName: (input.brandName ?? current.brandName).trim(),
+      heroTitle: (input.heroTitle ?? current.heroTitle).trim(),
+      heroSubtitle: (input.heroSubtitle ?? current.heroSubtitle).trim()
+    };
+    // Basic length validation to avoid absurd values
+    const clamp = (s: string, max = 300) => (s.length > max ? s.slice(0, max) : s);
+    next.brandName = clamp(next.brandName, 120);
+    next.heroTitle = clamp(next.heroTitle, 200);
+    next.heroSubtitle = clamp(next.heroSubtitle, 500);
+    await this.upsert(this.PUBLIC_DOCS_BRANDING_KEY, next as any);
+    gatewayInternalLog.info('Updated public docs branding', {
+      operation: 'configurationUpdate',
+      metadata: { hasBrandName: !!next.brandName, hasHeroTitle: !!next.heroTitle, hasHeroSubtitle: !!next.heroSubtitle }
+    });
+    return next;
+  }
+
+  /**
+   * Returns whether GraphQL Voyager relationship diagram is enabled.
+   * Defaults to false for security reasons.
+   */
+  async isGraphQLVoyagerEnabled(): Promise<boolean> {
+    const value = await this.load(this.GRAPHQL_VOYAGER_ENABLED_KEY);
+    if (typeof value === 'boolean') return value;
+    // Check env variable as fallback
+    const envVal = process.env.GRAPHQL_VOYAGER_ENABLED;
+    if (envVal !== undefined) {
+      return ['true', '1', 'yes', 'on'].includes(envVal.toLowerCase());
+    }
+    return false;
+  }
+
+  async setGraphQLVoyagerEnabled(enabled: boolean): Promise<boolean> {
+    await this.upsert(this.GRAPHQL_VOYAGER_ENABLED_KEY, enabled);
+    gatewayInternalLog.info('Updated GraphQL Voyager enabled setting', {
+      operation: 'configurationUpdate',
+      metadata: { enabled }
+    });
+    return enabled;
+  }
+
+  /**
+   * Returns whether GraphQL Playground is enabled.
+   * Defaults to false for security reasons.
+   */
+  async isGraphQLPlaygroundEnabled(): Promise<boolean> {
+    const value = await this.load(this.GRAPHQL_PLAYGROUND_ENABLED_KEY);
+    if (typeof value === 'boolean') return value;
+    // Check env variable as fallback
+    const envVal = process.env.GRAPHQL_PLAYGROUND_ENABLED;
+    if (envVal !== undefined) {
+      return ['true', '1', 'yes', 'on'].includes(envVal.toLowerCase());
+    }
+    return false;
+  }
+
+  async setGraphQLPlaygroundEnabled(enabled: boolean): Promise<boolean> {
+    await this.upsert(this.GRAPHQL_PLAYGROUND_ENABLED_KEY, enabled);
+    gatewayInternalLog.info('Updated GraphQL Playground enabled setting', {
       operation: 'configurationUpdate',
       metadata: { enabled }
     });

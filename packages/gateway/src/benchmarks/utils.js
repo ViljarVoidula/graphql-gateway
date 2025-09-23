@@ -2,11 +2,11 @@ import { check, sleep } from 'k6';
 import http from 'k6/http';
 
 export const GATEWAY_URL = __ENV.GATEWAY_URL || 'http://localhost:4000/graphql';
-export const API_KEY = __ENV.API_KEY;
+export const API_KEY = __ENV.API_KEY || 'app_d77aa741018569d1e3bd61f61b388dab21ab4973f534770d932631e150fa5ea0';
 
 export function headers(extra = {}) {
   const h = { 'Content-Type': 'application/json', ...extra };
-  if (API_KEY) h['x-api-key'] = API_KEY;
+  if (API_KEY) h['X-API-Key'] = API_KEY;
   return h;
 }
 

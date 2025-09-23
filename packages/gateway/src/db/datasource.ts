@@ -1,12 +1,13 @@
 import * as TypeORM from 'typeorm';
+import { ApiKeyUsage } from '../entities/api-key-usage.entity';
 import { ApiKey } from '../entities/api-key.entity';
 import { ApplicationServiceRateLimit } from '../entities/application-service-rate-limit.entity';
 import { ApplicationUsage } from '../entities/application-usage.entity';
 import { Application } from '../entities/application.entity';
+import { Asset } from '../entities/asset.entity';
 import { AuditLog } from '../entities/audit-log.entity';
 import { ChatMessage } from '../entities/chat/message.entity';
 import { ChatThread } from '../entities/chat/thread.entity';
-import { ApiKeyUsage } from '../entities/api-key-usage.entity';
 import { DocCategory } from '../entities/docs/category.entity';
 import { DocDocument } from '../entities/docs/document.entity';
 import { DocEmbeddingChunk } from '../entities/docs/embedding-chunk.entity';
@@ -44,7 +45,8 @@ export const dataSource = new TypeORM.DataSource({
     DocCategory,
     DocEmbeddingChunk,
     ChatThread,
-    ChatMessage
+    ChatMessage,
+    Asset
   ],
   migrations: ['src/migrations/*.ts'],
   migrationsRun: process.env.NODE_ENV === 'production', // Auto-run migrations in production

@@ -54,6 +54,16 @@ export const SessionSettings: React.FC = () => {
   const [enforceDownstreamInitial, setEnforceDownstreamInitial] = useState<boolean | null>(null);
   const [enforceSaving, setEnforceSaving] = useState<boolean>(false);
   const [enforceError, setEnforceError] = useState<string | null>(null);
+  // GraphQL Voyager
+  const [graphqlVoyagerEnabled, setGraphqlVoyagerEnabled] = useState<boolean | null>(null);
+  const [graphqlVoyagerInitial, setGraphqlVoyagerInitial] = useState<boolean | null>(null);
+  const [voyagerSaving, setVoyagerSaving] = useState<boolean>(false);
+  const [voyagerError, setVoyagerError] = useState<string | null>(null);
+  // GraphQL Playground
+  const [graphqlPlaygroundEnabled, setGraphqlPlaygroundEnabled] = useState<boolean | null>(null);
+  const [graphqlPlaygroundInitial, setGraphqlPlaygroundInitial] = useState<boolean | null>(null);
+  const [playgroundSaving, setPlaygroundSaving] = useState<boolean>(false);
+  const [playgroundError, setPlaygroundError] = useState<string | null>(null);
 
   useEffect(() => {
     // Load current settings
@@ -72,7 +82,7 @@ export const SessionSettings: React.FC = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            query: `query Settings { settings { auditLogRetentionDays publicDocumentationMode enforceDownstreamAuth } }`
+            query: `query Settings { settings { auditLogRetentionDays publicDocumentationMode enforceDownstreamAuth graphqlVoyagerEnabled graphqlPlaygroundEnabled } }`
           })
         });
         const data = await res.json();
@@ -86,6 +96,14 @@ export const SessionSettings: React.FC = () => {
           if (typeof data.data.settings.enforceDownstreamAuth === 'boolean') {
             setEnforceDownstream(data.data.settings.enforceDownstreamAuth);
             setEnforceDownstreamInitial(data.data.settings.enforceDownstreamAuth);
+          }
+          if (typeof data.data.settings.graphqlVoyagerEnabled === 'boolean') {
+            setGraphqlVoyagerEnabled(data.data.settings.graphqlVoyagerEnabled);
+            setGraphqlVoyagerInitial(data.data.settings.graphqlVoyagerEnabled);
+          }
+          if (typeof data.data.settings.graphqlPlaygroundEnabled === 'boolean') {
+            setGraphqlPlaygroundEnabled(data.data.settings.graphqlPlaygroundEnabled);
+            setGraphqlPlaygroundInitial(data.data.settings.graphqlPlaygroundEnabled);
           }
         }
       } catch (e: any) {
@@ -414,6 +432,179 @@ export const SessionSettings: React.FC = () => {
                   </Button>
                 )}
               </Group>
+            </>
+          )}
+        </Stack>
+      </Card>
+
+      <Card shadow="sm" p="lg" radius="md" withBorder>
+        <Stack spacing="md">
+          <Group spacing="sm">
+            <IconInfoCircle size={20} />
+            <Text weight={500} size="md">
+              GraphQL Relationship Diagram
+            </Text>
+          </Group>
+          {auditLoading ? (
+            <Group>
+              <Loader size="sm" /> <Text size="sm">Loading setting...</Text>
+            </Group>
+          ) : voyagerError ? (
+            <Alert color="red" title="Failed to load" icon={<IconInfoCircle size={16} />}>
+              {voyagerError}
+            </Alert>
+          ) : (
+            <>
+              <Group position="apart">
+                <div>
+                  <Text weight={500} size="sm">
+                    Enable GraphQL Voyager
+                  </Text>
+                  <Text size="xs" color="dimmed">
+                    When enabled, provides an interactive GraphQL schema visualization at /voyager endpoint.
+                  </Text>
+                </div>
+                <Switch
+                  checked={!!graphqlVoyagerEnabled}
+                  onChange={(e) => setGraphqlVoyagerEnabled(e.currentTarget.checked)}
+                  onLabel="ON"
+                  offLabel="OFF"
+                />
+              </Group>
+              <Group spacing="sm">
+                <Button
+                  size="xs"
+                  loading={voyagerSaving}
+                  disabled={voyagerSaving || graphqlVoyagerEnabled === null || graphqlVoyagerEnabled === graphqlVoyagerInitial}
+                  onClick={async () => {
+                    if (graphqlVoyagerEnabled === null) return;
+                    setVoyagerSaving(true);
+                    setVoyagerError(null);
+                    try {
+                      const res = await authenticatedFetch('/graphql', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          query: `mutation Set($enabled:Boolean!){ setGraphQLVoyagerEnabled(enabled:$enabled) }`,
+                          variables: { enabled: graphqlVoyagerEnabled }
+                        })
+                      });
+                      const json = await res.json();
+                      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to save');
+                      setGraphqlVoyagerInitial(graphqlVoyagerEnabled);
+                    } catch (e: any) {
+                      setVoyagerError(e?.message || 'Failed to save');
+                    } finally {
+                      setVoyagerSaving(false);
+                    }
+                  }}
+                >
+                  Save
+                </Button>
+                {graphqlVoyagerInitial !== null && graphqlVoyagerEnabled !== graphqlVoyagerInitial && (
+                  <Button
+                    variant="subtle"
+                    size="xs"
+                    disabled={voyagerSaving}
+                    onClick={() => setGraphqlVoyagerEnabled(graphqlVoyagerInitial!)}
+                  >
+                    Reset
+                  </Button>
+                )}
+              </Group>
+              <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+                <Text size="xs">
+                  GraphQL Voyager provides an interactive visualization of your GraphQL schema, showing relationships between
+                  types. Access it at <code>/voyager</code> when enabled.
+                </Text>
+              </Alert>
+            </>
+          )}
+        </Stack>
+      </Card>
+
+      <Card shadow="sm" p="lg" radius="md" withBorder>
+        <Stack spacing="md">
+          <Text weight={500} size="md">
+            GraphQL Playground Settings
+          </Text>
+          {graphqlPlaygroundEnabled === null ? (
+            <Group>
+              <Loader size="sm" /> <Text size="sm">Loading setting...</Text>
+            </Group>
+          ) : playgroundError ? (
+            <Alert color="red" title="Failed to load" icon={<IconInfoCircle size={16} />}>
+              {playgroundError}
+            </Alert>
+          ) : (
+            <>
+              <Group position="apart">
+                <div>
+                  <Text weight={500} size="sm">
+                    Enable GraphQL Playground
+                  </Text>
+                  <Text size="xs" color="dimmed">
+                    When enabled, provides an interactive GraphQL query interface at /playground endpoint.
+                  </Text>
+                </div>
+                <Switch
+                  checked={!!graphqlPlaygroundEnabled}
+                  onChange={(e) => setGraphqlPlaygroundEnabled(e.currentTarget.checked)}
+                  onLabel="ON"
+                  offLabel="OFF"
+                />
+              </Group>
+              <Group spacing="sm">
+                <Button
+                  size="xs"
+                  loading={playgroundSaving}
+                  disabled={
+                    playgroundSaving ||
+                    graphqlPlaygroundEnabled === null ||
+                    graphqlPlaygroundEnabled === graphqlPlaygroundInitial
+                  }
+                  onClick={async () => {
+                    if (graphqlPlaygroundEnabled === null) return;
+                    setPlaygroundSaving(true);
+                    setPlaygroundError(null);
+                    try {
+                      const res = await authenticatedFetch('/graphql', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          query: `mutation Set($enabled:Boolean!){ setGraphQLPlaygroundEnabled(enabled:$enabled) }`,
+                          variables: { enabled: graphqlPlaygroundEnabled }
+                        })
+                      });
+                      const json = await res.json();
+                      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to save');
+                      setGraphqlPlaygroundInitial(graphqlPlaygroundEnabled);
+                    } catch (e: any) {
+                      setPlaygroundError(e?.message || 'Failed to save');
+                    } finally {
+                      setPlaygroundSaving(false);
+                    }
+                  }}
+                >
+                  Save
+                </Button>
+                {graphqlPlaygroundInitial !== null && graphqlPlaygroundEnabled !== graphqlPlaygroundInitial && (
+                  <Button
+                    variant="subtle"
+                    size="xs"
+                    disabled={playgroundSaving}
+                    onClick={() => setGraphqlPlaygroundEnabled(graphqlPlaygroundInitial!)}
+                  >
+                    Reset
+                  </Button>
+                )}
+              </Group>
+              <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+                <Text size="xs">
+                  GraphQL Playground provides an interactive query interface for testing GraphQL operations. Access it at{' '}
+                  <code>/playground</code> when enabled.
+                </Text>
+              </Alert>
             </>
           )}
         </Stack>

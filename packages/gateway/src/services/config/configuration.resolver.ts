@@ -16,6 +16,12 @@ class Settings {
 
   @Field()
   enforceDownstreamAuth!: boolean;
+
+  @Field()
+  graphqlVoyagerEnabled!: boolean;
+
+  @Field()
+  graphqlPlaygroundEnabled!: boolean;
 }
 
 export enum PublicDocumentationMode {
@@ -25,6 +31,16 @@ export enum PublicDocumentationMode {
 }
 
 registerEnumType(PublicDocumentationMode, { name: 'PublicDocumentationMode' });
+
+@ObjectType()
+export class DocsBranding {
+  @Field()
+  brandName!: string;
+  @Field()
+  heroTitle!: string;
+  @Field()
+  heroSubtitle!: string;
+}
 
 @Service()
 @Resolver(() => Settings)
@@ -38,7 +54,9 @@ export class ConfigurationResolver {
       auditLogRetentionDays: await this.config.getAuditLogRetentionDays(),
       publicDocumentationEnabled: await this.config.isPublicDocumentationEnabled(),
       publicDocumentationMode: (await this.config.getPublicDocumentationMode()) as PublicDocumentationMode,
-      enforceDownstreamAuth: await this.config.isDownstreamAuthEnforced()
+      enforceDownstreamAuth: await this.config.isDownstreamAuthEnforced(),
+      graphqlVoyagerEnabled: await this.config.isGraphQLVoyagerEnabled(),
+      graphqlPlaygroundEnabled: await this.config.isGraphQLPlaygroundEnabled()
     };
   }
 
@@ -69,5 +87,36 @@ export class ConfigurationResolver {
   @Directive('@authz(rules: ["isAdmin"])')
   async setEnforceDownstreamAuth(@Arg('enabled') enabled: boolean): Promise<boolean> {
     return this.config.setDownstreamAuthEnforced(enabled);
+  }
+
+  @Mutation(() => Boolean)
+  @Directive('@authz(rules: ["isAdmin"])')
+  async setGraphQLVoyagerEnabled(@Arg('enabled') enabled: boolean): Promise<boolean> {
+    return this.config.setGraphQLVoyagerEnabled(enabled);
+  }
+
+  @Mutation(() => Boolean)
+  @Directive('@authz(rules: ["isAdmin"])')
+  async setGraphQLPlaygroundEnabled(@Arg('enabled') enabled: boolean): Promise<boolean> {
+    return this.config.setGraphQLPlaygroundEnabled(enabled);
+  }
+
+  @Query(() => DocsBranding)
+  async docsBranding(): Promise<DocsBranding> {
+    return this.config.getDocsBranding();
+  }
+
+  @Mutation(() => DocsBranding)
+  @Directive('@authz(rules: ["isAdmin"])')
+  async setDocsBranding(
+    @Arg('brandName', { nullable: true }) brandName?: string,
+    @Arg('heroTitle', { nullable: true }) heroTitle?: string,
+    @Arg('heroSubtitle', { nullable: true }) heroSubtitle?: string
+  ): Promise<DocsBranding> {
+    return this.config.setDocsBranding({
+      brandName: brandName ?? null,
+      heroTitle: heroTitle ?? null,
+      heroSubtitle: heroSubtitle ?? null
+    });
   }
 }
