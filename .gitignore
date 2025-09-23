@@ -120,3 +120,4 @@ packages/services/**/__pycache__/**
 packages/services/**/.hf-cache/**
 packages/gateway/mini-introspection.json
 **/target/**
+packages/gateway/docs/AWS_MARKETPLACE_GUIDE.md

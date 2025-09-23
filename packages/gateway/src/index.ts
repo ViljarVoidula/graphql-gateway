@@ -2,7 +2,7 @@ import 'reflect-metadata';
 // This file now only starts the server. Telemetry is initialized from src/telemetry.ts before this file is imported.
 import { startServer } from './gateway';
 import { log } from './utils/logger';
-import { startApiKeyUsageConsolidator, stopApiKeyUsageConsolidator } from './workers/api-key-usage-consolidator';
+import { startApiKeyUsageConsolidator } from './workers/api-key-usage-consolidator';
 
 let stopWorker: (() => void) | null = null;
 
@@ -18,7 +18,7 @@ async function bootstrap() {
       stopWorker = await startApiKeyUsageConsolidator();
       log.info('Started API key usage consolidator (in-process)');
     } catch (err) {
-      log.error({ err }, 'Failed to start API key usage consolidator');
+      log.error('Failed to start API key usage consolidator', { error: err instanceof Error ? err : String(err) });
     }
   }
 }

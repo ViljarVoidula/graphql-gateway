@@ -1,5 +1,7 @@
 import { stitchSchemas } from '@graphql-tools/stitch';
 // Use local compat wrapper to avoid TS type conflicts across @graphql-tools packages
+import { createRedisCache } from '@envelop/response-cache-redis';
+import { cacheControlDirective, useResponseCache } from '@graphql-yoga/plugin-response-cache';
 import cors from '@koa/cors';
 import * as fs from 'fs';
 import { GraphQLSchema, buildSchema } from 'graphql';
@@ -9,10 +11,11 @@ import compress from 'koa-compress';
 import koaHelmet from 'koa-helmet';
 import responseTime from 'koa-response-time';
 import * as path from 'path';
+import Redis from 'ioredis';
 import { getStitchingDirectivesTransformer } from './utils/stitchingDirectivesCompat';
 // reflect-metadata is loaded in src/index.ts
 import { Container } from 'typedi';
-import { initializeRedis } from './auth/session.config';
+import { initializeRedis, redisClient } from './auth/session.config';
 import { useSession } from './auth/session.plugin';
 import { dataSource } from './db/datasource';
 import { ApiKeyUsage } from './entities/api-key-usage.entity';
@@ -240,7 +243,11 @@ const loader = new SchemaLoader(
 
     return stitchSchemas({
       subschemaConfigTransforms: [stitchingDirectivesTransformer],
-      subschemas
+      subschemas,
+      // Provide cache control directive definition so gateway/local schemas can annotate TTLs
+      typeDefs: /* GraphQL */ `
+        ${cacheControlDirective}
+      `
     });
   },
   [] // Will be populated after database connection
@@ -295,6 +302,21 @@ app.use(
   })
 );
 
+// Shared Redis cache for response cache plugin; reuse existing Redis URL and initialize once
+const responseCacheRedisUrl = process.env.RESPONSE_CACHE_REDIS_URL || process.env.REDIS_URL || 'redis://localhost:6379';
+const responseCacheRedis = new Redis(responseCacheRedisUrl);
+const responseCacheInstance = createRedisCache({ redis: responseCacheRedis as any });
+
+// Runtime response cache config snapshot (updated periodically)
+const responseCacheConfig = {
+  enabled: false,
+  ttlMs: 30_000,
+  includeExtensions: process.env.NODE_ENV === 'development',
+  scope: 'per-session' as 'global' | 'per-session',
+  ttlPerType: {} as Record<string, number>,
+  ttlPerSchemaCoordinate: {} as Record<string, number>
+};
+
 const yoga = createYoga({
   schema: () => loader.schema,
   maskedErrors: false,
@@ -313,6 +335,27 @@ const yoga = createYoga({
       fallbackSampleRate: parseFloat(process.env.LATENCY_TRACKING_FALLBACK_SAMPLE_RATE || '0.01'),
       enableTelemetry: process.env.LATENCY_TRACKING_ENABLE_TELEMETRY !== 'false',
       maxLatencyMs: parseInt(process.env.LATENCY_TRACKING_MAX_MS || '300000')
+    }),
+    // Response cache must be last so it can wrap executor
+    useResponseCache({
+      cache: responseCacheInstance,
+      includeExtensionMetadata: responseCacheConfig.includeExtensions,
+      enabled: () => responseCacheConfig.enabled,
+      // Default TTL (ms)
+      ttl: responseCacheConfig.ttlMs,
+      ttlPerType: responseCacheConfig.ttlPerType,
+      ttlPerSchemaCoordinate: responseCacheConfig.ttlPerSchemaCoordinate,
+      // Default: invalidate cache entries touched by mutations
+      invalidateViaMutation: true,
+      session: (context: any) => {
+        if (responseCacheConfig.scope === 'global') return null;
+        const parts: string[] = [];
+        if (context?.application?.id) parts.push(`app:${context.application.id}`);
+        if (context?.apiKey?.id) parts.push(`key:${context.apiKey.id}`);
+        if (context?.user?.id) parts.push(`user:${context.user.id}`);
+        if (context?.sessionId) parts.push(`sess:${context.sessionId}`);
+        return parts.length ? parts.join('|') : null;
+      }
     })
   ],
   graphiql: {
@@ -334,10 +377,36 @@ const yoga = createYoga({
   }
 });
 
+// Expose DI helper to clear response cache keys, initialized once
+Container.set('ResponseCacheInvalidate', async () => {
+  try {
+    const redis: any = responseCacheRedis;
+    if (redis && typeof redis.scan === 'function') {
+      const prefixes = ['envelop:response-cache:', 'response-cache:'];
+      for (const prefix of prefixes) {
+        let cursor = '0';
+        do {
+          const [next, keys] = await redis.scan(cursor, 'MATCH', `${prefix}*`, 'COUNT', 1000);
+          cursor = next;
+          if (Array.isArray(keys) && keys.length) {
+            await redis.del(...keys);
+          }
+        } while (cursor !== '0');
+      }
+    }
+    return true;
+  } catch (e) {
+    log.warn('Failed to clear response cache', e);
+    return false;
+  }
+});
+
 // We'll store the server instance returned by app.listen() so stopServer can close it
 let server: import('http').Server | undefined;
 // Optional memory usage logging interval id
 let memoryLogInterval: NodeJS.Timeout | undefined;
+// Response cache config refresh interval id
+let responseCacheRefreshInterval: NodeJS.Timeout | undefined;
 
 // Health check middleware
 // Health and admin middleware
@@ -957,6 +1026,48 @@ export async function startServer() {
     });
   }
 
+  // Periodically refresh response cache settings from DB
+  try {
+    const cfg = Container.get(ConfigurationService);
+    const refresh = async () => {
+      try {
+        responseCacheConfig.enabled = await cfg.isResponseCacheEnabled();
+        responseCacheConfig.ttlMs = await cfg.getResponseCacheTtlMs();
+        responseCacheConfig.includeExtensions = await cfg.isResponseCacheIncludeExtensions();
+        responseCacheConfig.scope = await cfg.getResponseCacheScope();
+        // Update TTL maps in-place to preserve references held by the plugin
+        const newPerType = await cfg.getResponseCacheTtlPerType();
+        for (const key of Object.keys(responseCacheConfig.ttlPerType)) {
+          if (!(key in newPerType)) delete (responseCacheConfig.ttlPerType as any)[key];
+        }
+        Object.assign(responseCacheConfig.ttlPerType, newPerType);
+
+        const newPerCoord = await cfg.getResponseCacheTtlPerSchemaCoordinate();
+        for (const key of Object.keys(responseCacheConfig.ttlPerSchemaCoordinate)) {
+          if (!(key in newPerCoord)) delete (responseCacheConfig.ttlPerSchemaCoordinate as any)[key];
+        }
+        Object.assign(responseCacheConfig.ttlPerSchemaCoordinate, newPerCoord);
+        log.debug('Refreshed response cache config', {
+          operation: 'responseCacheRefresh',
+          metadata: {
+            enabled: responseCacheConfig.enabled,
+            ttlMs: responseCacheConfig.ttlMs,
+            includeExtensions: responseCacheConfig.includeExtensions,
+            scope: responseCacheConfig.scope,
+            ttlPerTypeKeys: Object.keys(responseCacheConfig.ttlPerType || {}).length,
+            ttlPerSchemaCoordinateKeys: Object.keys(responseCacheConfig.ttlPerSchemaCoordinate || {}).length
+          }
+        });
+      } catch (e) {
+        log.warn('Failed to refresh response cache config', e);
+      }
+    };
+    await refresh();
+    responseCacheRefreshInterval = setInterval(refresh, 15_000);
+  } catch (e) {
+    log.warn('Response cache config refresh loop not started', e);
+  }
+
   // Start Koa server
   await new Promise<void>((resolve) => {
     // log starting
@@ -1013,6 +1124,9 @@ export async function stopServer() {
     if ((server as any).memoryLogInterval) {
       clearInterval((server as any).memoryLogInterval);
     }
+    if ((server as any).responseCacheRefreshInterval) {
+      clearInterval((server as any).responseCacheRefreshInterval);
+    }
 
     // Close the HTTP server
     await new Promise<void>((resolve, reject) => {
@@ -1044,5 +1158,29 @@ export async function stopServer() {
   if (dataSource.isInitialized) {
     await dataSource.destroy();
     log.debug('Database connection closed');
+  }
+
+  // Clear response cache refresh interval
+  if (responseCacheRefreshInterval) {
+    clearInterval(responseCacheRefreshInterval);
+    responseCacheRefreshInterval = undefined;
+  }
+
+  // Close response cache Redis connection
+  try {
+    if (responseCacheRedis) {
+      responseCacheRedis.disconnect();
+    }
+  } catch (e) {
+    log.warn('Failed to close response cache Redis connection', e);
+  }
+
+  // Close session Redis connection
+  try {
+    if (redisClient && typeof (redisClient as any).disconnect === 'function') {
+      (redisClient as any).disconnect();
+    }
+  } catch (e) {
+    log.warn('Failed to close session Redis connection', e);
   }
 }

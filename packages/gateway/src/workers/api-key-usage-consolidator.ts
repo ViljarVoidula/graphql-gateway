@@ -21,7 +21,8 @@ async function hgetallAndDel(key: string): Promise<Record<string, string>> {
     end
     return v
   `;
-  const flat = (await redisClient.eval(script, { keys: [key] })) as string[];
+  // ioredis eval signature: eval(script, numKeys, key1, ...)
+  const flat = (await (redisClient as any).eval(script, 1, key)) as string[];
   const out: Record<string, string> = {};
   for (let i = 0; i < flat.length; i += 2) out[flat[i]] = flat[i + 1];
   return out;
@@ -64,10 +65,12 @@ async function runOnce() {
   let cursor = '0';
   const batch: any[] = [];
   while (true) {
-    // node-redis v5 returns { cursor: string, keys: string[] }
-    const res = await (redisClient as any).scan(cursor, { MATCH: pattern, COUNT: 1000 });
-    cursor = res.cursor as string;
-    const keys = (res.keys as string[]) || [];
+    // ioredis returns [cursor, keys]
+    const [next, keys] = (await (redisClient as any).scan(cursor, 'MATCH', pattern, 'COUNT', 1000)) as [
+      string,
+      string[]
+    ];
+    cursor = next as string;
     for (const key of keys) {
       const meta = parseKey(prefix, key);
       const fields = await hgetallAndDel(key);
@@ -101,8 +104,9 @@ export async function startApiKeyUsageConsolidator() {
   if (timer) return stopApiKeyUsageConsolidator; // already running
   const tick = async () => {
     try {
-      const got = await redisClient.set(lockKey, String(process.pid), { PX: intervalMs * 2, NX: true } as any);
-      if (got) {
+      // ioredis: pass flags as separate args
+      const got = await (redisClient as any).set(lockKey, String(process.pid), 'PX', intervalMs * 2, 'NX');
+      if (got === 'OK') {
         await runOnce();
       }
     } catch (e) {

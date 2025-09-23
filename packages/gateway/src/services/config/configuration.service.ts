@@ -81,6 +81,13 @@ export class ConfigurationService {
   private readonly GRAPHQL_VOYAGER_ENABLED_KEY = 'graphql.voyager.enabled';
   private readonly GRAPHQL_PLAYGROUND_ENABLED_KEY = 'graphql.playground.enabled';
   private readonly LATENCY_TRACKING_ENABLED_KEY = 'latency.tracking.enabled';
+  // Response cache settings
+  private readonly RESPONSE_CACHE_ENABLED_KEY = 'responseCache.enabled';
+  private readonly RESPONSE_CACHE_TTL_MS_KEY = 'responseCache.ttlMs';
+  private readonly RESPONSE_CACHE_INCLUDE_EXT_KEY = 'responseCache.includeExtensions';
+  private readonly RESPONSE_CACHE_SCOPE_KEY = 'responseCache.scope'; // 'global' | 'per-session'
+  private readonly RESPONSE_CACHE_TTL_PER_TYPE_KEY = 'responseCache.ttlPerType'; // json: { [TypeName]: number(ms) }
+  private readonly RESPONSE_CACHE_TTL_PER_COORD_KEY = 'responseCache.ttlPerSchemaCoordinate'; // json: { ["Type.field"]: number(ms) }
 
   /**
    * Returns audit log retention in days. Falls back to env or default if not yet configured.
@@ -303,5 +310,140 @@ export class ConfigurationService {
       metadata: { enabled }
     });
     return enabled;
+  }
+
+  /** Response cache: enabled flag. Defaults to false unless explicitly enabled. */
+  async isResponseCacheEnabled(): Promise<boolean> {
+    const value = await this.load(this.RESPONSE_CACHE_ENABLED_KEY);
+    if (typeof value === 'boolean') return value;
+    const envVal = process.env.RESPONSE_CACHE_ENABLED;
+    if (envVal !== undefined) return ['true', '1', 'yes', 'on'].includes(envVal.toLowerCase());
+    return false;
+  }
+
+  async setResponseCacheEnabled(enabled: boolean): Promise<boolean> {
+    await this.upsert(this.RESPONSE_CACHE_ENABLED_KEY, enabled);
+    gatewayInternalLog.info('Updated response cache enabled setting', {
+      operation: 'configurationUpdate',
+      metadata: { enabled }
+    });
+    return enabled;
+  }
+
+  /** Response cache TTL in ms. Default 30s. Clamp 0..86400000 (1 day), where 0 means "no TTL" (infinite). */
+  async getResponseCacheTtlMs(): Promise<number> {
+    const value = await this.load(this.RESPONSE_CACHE_TTL_MS_KEY);
+    if (typeof value === 'number' && Number.isFinite(value)) return this.clampTtl(value);
+    const envVal = process.env.RESPONSE_CACHE_TTL_MS ? parseInt(process.env.RESPONSE_CACHE_TTL_MS, 10) : NaN;
+    return !isNaN(envVal) ? this.clampTtl(envVal) : 30_000;
+  }
+
+  async setResponseCacheTtlMs(ttlMs: number): Promise<number> {
+    ttlMs = this.clampTtl(ttlMs);
+    await this.upsert(this.RESPONSE_CACHE_TTL_MS_KEY, ttlMs);
+    gatewayInternalLog.info('Updated response cache TTL', {
+      operation: 'configurationUpdate',
+      metadata: { ttlMs }
+    });
+    return ttlMs;
+  }
+
+  private clampTtl(ttlMs: number): number {
+    if (!Number.isFinite(ttlMs) || ttlMs < 0) ttlMs = 0;
+    if (ttlMs > 86_400_000) ttlMs = 86_400_000; // 1 day cap
+    return Math.round(ttlMs);
+  }
+
+  /** Include extension metadata (hit/miss) on responses. Default true in dev, false otherwise unless set. */
+  async isResponseCacheIncludeExtensions(): Promise<boolean> {
+    const value = await this.load(this.RESPONSE_CACHE_INCLUDE_EXT_KEY);
+    if (typeof value === 'boolean') return value;
+    if (process.env.NODE_ENV === 'development') return true;
+    const envVal = process.env.RESPONSE_CACHE_INCLUDE_EXTENSIONS;
+    if (envVal !== undefined) return ['true', '1', 'yes', 'on'].includes(envVal.toLowerCase());
+    return false;
+  }
+
+  async setResponseCacheIncludeExtensions(enabled: boolean): Promise<boolean> {
+    await this.upsert(this.RESPONSE_CACHE_INCLUDE_EXT_KEY, enabled);
+    gatewayInternalLog.info('Updated response cache includeExtensions setting', {
+      operation: 'configurationUpdate',
+      metadata: { enabled }
+    });
+    return enabled;
+  }
+
+  /** Scope: 'global' (no session key) or 'per-session' (keyed by session/application). Default 'per-session'. */
+  async getResponseCacheScope(): Promise<'global' | 'per-session'> {
+    const value = await this.load(this.RESPONSE_CACHE_SCOPE_KEY);
+    if (value === 'global' || value === 'per-session') return value;
+    const envVal = process.env.RESPONSE_CACHE_SCOPE;
+    if (envVal === 'global' || envVal === 'per-session') return envVal;
+    return 'per-session';
+  }
+
+  async setResponseCacheScope(scope: 'global' | 'per-session'): Promise<'global' | 'per-session'> {
+    const normalized = scope === 'global' ? 'global' : 'per-session';
+    await this.upsert(this.RESPONSE_CACHE_SCOPE_KEY, normalized);
+    gatewayInternalLog.info('Updated response cache scope', {
+      operation: 'configurationUpdate',
+      metadata: { scope: normalized }
+    });
+    return normalized;
+  }
+
+  /**
+   * Per-type TTL map. Example: { User: 500 }
+   * Values are clamped to 0..86_400_000. Invalid entries are dropped. Default: {}.
+   */
+  async getResponseCacheTtlPerType(): Promise<Record<string, number>> {
+    const value = await this.load(this.RESPONSE_CACHE_TTL_PER_TYPE_KEY);
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return this.sanitizeTtlMap(value as Record<string, any>);
+    }
+    return {};
+  }
+
+  async setResponseCacheTtlPerType(map: Record<string, any>): Promise<Record<string, number>> {
+    const sanitized = this.sanitizeTtlMap(map);
+    await this.upsert(this.RESPONSE_CACHE_TTL_PER_TYPE_KEY, sanitized as any);
+    gatewayInternalLog.info('Updated response cache per-type TTL map', {
+      operation: 'configurationUpdate',
+      metadata: { keys: Object.keys(sanitized).length }
+    });
+    return sanitized;
+  }
+
+  /**
+   * Per-schema-coordinate TTL map. Example: { 'Query.lazy': 10_000 }
+   * Values are clamped to 0..86_400_000. Invalid entries are dropped. Default: {}.
+   */
+  async getResponseCacheTtlPerSchemaCoordinate(): Promise<Record<string, number>> {
+    const value = await this.load(this.RESPONSE_CACHE_TTL_PER_COORD_KEY);
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return this.sanitizeTtlMap(value as Record<string, any>);
+    }
+    return {};
+  }
+
+  async setResponseCacheTtlPerSchemaCoordinate(map: Record<string, any>): Promise<Record<string, number>> {
+    const sanitized = this.sanitizeTtlMap(map);
+    await this.upsert(this.RESPONSE_CACHE_TTL_PER_COORD_KEY, sanitized as any);
+    gatewayInternalLog.info('Updated response cache per-coordinate TTL map', {
+      operation: 'configurationUpdate',
+      metadata: { keys: Object.keys(sanitized).length }
+    });
+    return sanitized;
+  }
+
+  private sanitizeTtlMap(input: Record<string, any>): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(input || {})) {
+      if (!k || typeof k !== 'string') continue;
+      const num = typeof v === 'number' ? v : Number(v);
+      if (!Number.isFinite(num)) continue;
+      out[k] = this.clampTtl(num);
+    }
+    return out;
   }
 }

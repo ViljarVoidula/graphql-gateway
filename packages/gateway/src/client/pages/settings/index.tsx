@@ -69,6 +69,25 @@ export const SessionSettings: React.FC = () => {
   const [latencyTrackingInitial, setLatencyTrackingInitial] = useState<boolean | null>(null);
   const [latencySaving, setLatencySaving] = useState<boolean>(false);
   const [latencyError, setLatencyError] = useState<string | null>(null);
+  // Response Cache
+  const [rcLoading, setRcLoading] = useState<boolean>(true);
+  const [rcError, setRcError] = useState<string | null>(null);
+  const [rcSaving, setRcSaving] = useState<boolean>(false);
+  const [rcEnabled, setRcEnabled] = useState<boolean | null>(null);
+  const [rcEnabledInitial, setRcEnabledInitial] = useState<boolean | null>(null);
+  const [rcTtlMs, setRcTtlMs] = useState<number | null>(null);
+  const [rcTtlInitial, setRcTtlInitial] = useState<number | null>(null);
+  const [rcIncludeExt, setRcIncludeExt] = useState<boolean | null>(null);
+  const [rcIncludeExtInitial, setRcIncludeExtInitial] = useState<boolean | null>(null);
+  const [rcScope, setRcScope] = useState<'global' | 'per-session' | null>(null);
+  const [rcScopeInitial, setRcScopeInitial] = useState<'global' | 'per-session' | null>(null);
+  const [rcClearing, setRcClearing] = useState<boolean>(false);
+  const [rcClearMsg, setRcClearMsg] = useState<string | null>(null);
+  const [rcTtlPerType, setRcTtlPerType] = useState<Record<string, number>>({});
+  const [rcTtlPerTypeInitial, setRcTtlPerTypeInitial] = useState<Record<string, number>>({});
+  const [rcTtlPerCoord, setRcTtlPerCoord] = useState<Record<string, number>>({});
+  const [rcTtlPerCoordInitial, setRcTtlPerCoordInitial] = useState<Record<string, number>>({});
+  const [rcTtlErr, setRcTtlErr] = useState<string | null>(null);
 
   useEffect(() => {
     // Load current settings
@@ -87,7 +106,7 @@ export const SessionSettings: React.FC = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            query: `query Settings { settings { auditLogRetentionDays publicDocumentationMode enforceDownstreamAuth graphqlVoyagerEnabled graphqlPlaygroundEnabled latencyTrackingEnabled } }`
+            query: `query Settings { settings { auditLogRetentionDays publicDocumentationMode enforceDownstreamAuth graphqlVoyagerEnabled graphqlPlaygroundEnabled latencyTrackingEnabled responseCacheEnabled responseCacheTtlMs responseCacheIncludeExtensions responseCacheScope responseCacheTtlPerType responseCacheTtlPerSchemaCoordinate } }`
           })
         });
         const data = await res.json();
@@ -114,11 +133,41 @@ export const SessionSettings: React.FC = () => {
             setLatencyTrackingEnabled(data.data.settings.latencyTrackingEnabled);
             setLatencyTrackingInitial(data.data.settings.latencyTrackingEnabled);
           }
+          // Response cache
+          if (typeof data.data.settings.responseCacheEnabled === 'boolean') {
+            setRcEnabled(data.data.settings.responseCacheEnabled);
+            setRcEnabledInitial(data.data.settings.responseCacheEnabled);
+          }
+          if (typeof data.data.settings.responseCacheTtlMs === 'number') {
+            setRcTtlMs(data.data.settings.responseCacheTtlMs);
+            setRcTtlInitial(data.data.settings.responseCacheTtlMs);
+          }
+          if (typeof data.data.settings.responseCacheIncludeExtensions === 'boolean') {
+            setRcIncludeExt(data.data.settings.responseCacheIncludeExtensions);
+            setRcIncludeExtInitial(data.data.settings.responseCacheIncludeExtensions);
+          }
+          if (typeof data.data.settings.responseCacheScope === 'string') {
+            const scope = (data.data.settings.responseCacheScope as 'global' | 'per-session') || 'global';
+            setRcScope(scope);
+            setRcScopeInitial(scope);
+          }
+          if (data.data.settings.responseCacheTtlPerType && typeof data.data.settings.responseCacheTtlPerType === 'object') {
+            setRcTtlPerType(data.data.settings.responseCacheTtlPerType);
+            setRcTtlPerTypeInitial(data.data.settings.responseCacheTtlPerType);
+          }
+          if (
+            data.data.settings.responseCacheTtlPerSchemaCoordinate &&
+            typeof data.data.settings.responseCacheTtlPerSchemaCoordinate === 'object'
+          ) {
+            setRcTtlPerCoord(data.data.settings.responseCacheTtlPerSchemaCoordinate);
+            setRcTtlPerCoordInitial(data.data.settings.responseCacheTtlPerSchemaCoordinate);
+          }
         }
       } catch (e: any) {
         setAuditError(e?.message || 'Failed to load settings');
       } finally {
         setAuditLoading(false);
+        setRcLoading(false);
       }
     })();
 
@@ -169,6 +218,307 @@ export const SessionSettings: React.FC = () => {
         <IconSettings size={24} />
         <Title order={2}>Gateway Settings</Title>
       </Group>
+
+      <Card shadow="sm" p="lg" radius="md" withBorder>
+        <Stack spacing="md">
+          <Group spacing="sm">
+            <IconDatabase size={20} />
+            <Text weight={500} size="md">
+              Response Cache
+            </Text>
+          </Group>
+          {rcLoading ? (
+            <Group>
+              <Loader size="sm" /> <Text size="sm">Loading settings...</Text>
+            </Group>
+          ) : rcError ? (
+            <Alert color="red" title="Failed to load" icon={<IconInfoCircle size={16} />}>
+              {rcError}
+            </Alert>
+          ) : (
+            <>
+              <Group position="apart">
+                <div>
+                  <Text weight={500} size="sm">
+                    Enable Response Cache
+                  </Text>
+                  <Text size="xs" color="dimmed">
+                    Cache GraphQL responses in Redis to speed up repeated queries
+                  </Text>
+                </div>
+                <Switch
+                  checked={!!rcEnabled}
+                  onChange={(e) => setRcEnabled(e.currentTarget.checked)}
+                  onLabel="ON"
+                  offLabel="OFF"
+                />
+              </Group>
+
+              <NumberInput
+                label="Default TTL (ms)"
+                description="Time-to-live for cached responses. 0 disables TTL (not recommended)."
+                min={0}
+                max={86_400_000}
+                value={rcTtlMs === null ? undefined : rcTtlMs}
+                onChange={(val) => setRcTtlMs(typeof val === 'number' ? Math.max(0, Math.min(86_400_000, val)) : rcTtlMs)}
+              />
+
+              <Group position="apart">
+                <div>
+                  <Text weight={500} size="sm">
+                    Include extension metadata
+                  </Text>
+                  <Text size="xs" color="dimmed">
+                    When enabled, cache also stores GraphQL extensions metadata
+                  </Text>
+                </div>
+                <Switch
+                  checked={!!rcIncludeExt}
+                  onChange={(e) => setRcIncludeExt(e.currentTarget.checked)}
+                  onLabel="ON"
+                  offLabel="OFF"
+                />
+              </Group>
+
+              <Select
+                label="Cache scope"
+                description="Global: shared across users and keys. Per-session: varies by user/session."
+                value={rcScope ?? undefined}
+                onChange={(v) => setRcScope((v as any) || rcScope)}
+                data={[
+                  { value: 'global', label: 'Global' },
+                  { value: 'per-session', label: 'Per-session' }
+                ]}
+              />
+
+              <Stack spacing={4}>
+                <Text size="sm">TTL per Type (JSON)</Text>
+                <textarea
+                  style={{ width: '100%', minHeight: 120, padding: 8, fontFamily: 'monospace' }}
+                  placeholder={'{\n  "User": 500,\n  "Post": 1000\n}'}
+                  value={Object.keys(rcTtlPerType || {}).length ? JSON.stringify(rcTtlPerType, null, 2) : ''}
+                  onChange={(e) => {
+                    setRcTtlErr(null);
+                    try {
+                      const text = e.target.value;
+                      if (!text.trim()) {
+                        setRcTtlPerType({});
+                        return;
+                      }
+                      const parsed = JSON.parse(text);
+                      setRcTtlPerType(parsed || {});
+                    } catch (err: any) {
+                      setRcTtlErr('Invalid JSON for TTL per Type');
+                    }
+                  }}
+                />
+              </Stack>
+
+              <Stack spacing={4}>
+                <Text size="sm">TTL per Schema Coordinate (JSON)</Text>
+                <textarea
+                  style={{ width: '100%', minHeight: 120, padding: 8, fontFamily: 'monospace' }}
+                  placeholder={'{\n  "Query.lazy": 10000,\n  "User.friends": 5000\n}'}
+                  value={Object.keys(rcTtlPerCoord || {}).length ? JSON.stringify(rcTtlPerCoord, null, 2) : ''}
+                  onChange={(e) => {
+                    setRcTtlErr(null);
+                    try {
+                      const text = e.target.value;
+                      if (!text.trim()) {
+                        setRcTtlPerCoord({});
+                        return;
+                      }
+                      const parsed = JSON.parse(text);
+                      setRcTtlPerCoord(parsed || {});
+                    } catch (err: any) {
+                      setRcTtlErr('Invalid JSON for TTL per Schema Coordinate');
+                    }
+                  }}
+                />
+              </Stack>
+
+              <Group spacing="sm">
+                <Button
+                  size="xs"
+                  loading={rcSaving}
+                  disabled={
+                    rcSaving ||
+                    !!rcTtlErr ||
+                    (rcEnabled === rcEnabledInitial &&
+                      rcTtlMs === rcTtlInitial &&
+                      rcIncludeExt === rcIncludeExtInitial &&
+                      rcScope === rcScopeInitial &&
+                      JSON.stringify(rcTtlPerType) === JSON.stringify(rcTtlPerTypeInitial) &&
+                      JSON.stringify(rcTtlPerCoord) === JSON.stringify(rcTtlPerCoordInitial))
+                  }
+                  onClick={async () => {
+                    setRcSaving(true);
+                    setRcError(null);
+                    try {
+                      // Save only changed values via separate mutations
+                      const ops: Promise<any>[] = [];
+                      if (rcEnabled !== rcEnabledInitial && rcEnabled !== null) {
+                        ops.push(
+                          authenticatedFetch('/graphql', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              query: `mutation Set($enabled:Boolean!){ setResponseCacheEnabled(enabled:$enabled) }`,
+                              variables: { enabled: rcEnabled }
+                            })
+                          }).then((r) => r.json())
+                        );
+                      }
+                      if (rcTtlMs !== rcTtlInitial && rcTtlMs !== null) {
+                        ops.push(
+                          authenticatedFetch('/graphql', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              query: `mutation Set($ttlMs:Int!){ setResponseCacheTtlMs(ttlMs:$ttlMs) }`,
+                              variables: { ttlMs: rcTtlMs }
+                            })
+                          }).then((r) => r.json())
+                        );
+                      }
+                      if (rcIncludeExt !== rcIncludeExtInitial && rcIncludeExt !== null) {
+                        ops.push(
+                          authenticatedFetch('/graphql', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              query: `mutation Set($enabled:Boolean!){ setResponseCacheIncludeExtensions(enabled:$enabled) }`,
+                              variables: { enabled: rcIncludeExt }
+                            })
+                          }).then((r) => r.json())
+                        );
+                      }
+                      if (rcScope !== rcScopeInitial && rcScope) {
+                        ops.push(
+                          authenticatedFetch('/graphql', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              query: `mutation Set($scope:String!){ setResponseCacheScope(scope:$scope) }`,
+                              variables: { scope: rcScope }
+                            })
+                          }).then((r) => r.json())
+                        );
+                      }
+                      if (JSON.stringify(rcTtlPerType) !== JSON.stringify(rcTtlPerTypeInitial)) {
+                        ops.push(
+                          authenticatedFetch('/graphql', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              query: `mutation Set($map: JSON!){ setResponseCacheTtlPerType(map:$map) }`,
+                              variables: { map: rcTtlPerType }
+                            })
+                          }).then((r) => r.json())
+                        );
+                      }
+                      if (JSON.stringify(rcTtlPerCoord) !== JSON.stringify(rcTtlPerCoordInitial)) {
+                        ops.push(
+                          authenticatedFetch('/graphql', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              query: `mutation Set($map: JSON!){ setResponseCacheTtlPerSchemaCoordinate(map:$map) }`,
+                              variables: { map: rcTtlPerCoord }
+                            })
+                          }).then((r) => r.json())
+                        );
+                      }
+                      const results = await Promise.all(ops);
+                      const err = results.find((j) => j?.errors?.length);
+                      if (err) throw new Error(err.errors[0]?.message || 'Failed to save');
+
+                      // Update initials
+                      setRcEnabledInitial(rcEnabled);
+                      setRcTtlInitial(rcTtlMs);
+                      setRcIncludeExtInitial(rcIncludeExt);
+                      setRcScopeInitial(rcScope);
+                      setRcTtlPerTypeInitial(rcTtlPerType);
+                      setRcTtlPerCoordInitial(rcTtlPerCoord);
+                    } catch (e: any) {
+                      setRcError(e?.message || 'Failed to save');
+                    } finally {
+                      setRcSaving(false);
+                    }
+                  }}
+                >
+                  Save
+                </Button>
+                {(rcEnabled !== rcEnabledInitial ||
+                  rcTtlMs !== rcTtlInitial ||
+                  rcIncludeExt !== rcIncludeExtInitial ||
+                  rcScope !== rcScopeInitial ||
+                  JSON.stringify(rcTtlPerType) !== JSON.stringify(rcTtlPerTypeInitial) ||
+                  JSON.stringify(rcTtlPerCoord) !== JSON.stringify(rcTtlPerCoordInitial)) && (
+                  <Button
+                    variant="subtle"
+                    size="xs"
+                    disabled={rcSaving}
+                    onClick={() => {
+                      setRcEnabled(rcEnabledInitial);
+                      setRcTtlMs(rcTtlInitial);
+                      setRcIncludeExt(rcIncludeExtInitial);
+                      setRcScope(rcScopeInitial);
+                      setRcTtlPerType(rcTtlPerTypeInitial);
+                      setRcTtlPerCoord(rcTtlPerCoordInitial);
+                    }}
+                  >
+                    Reset
+                  </Button>
+                )}
+                <Button
+                  variant="light"
+                  size="xs"
+                  loading={rcClearing}
+                  onClick={async () => {
+                    setRcClearing(true);
+                    setRcClearMsg(null);
+                    try {
+                      const res = await authenticatedFetch('/graphql', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query: `mutation { clearResponseCache }` })
+                      });
+                      const json = await res.json();
+                      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to clear');
+                      setRcClearMsg('Cache cleared');
+                    } catch (e: any) {
+                      setRcClearMsg(e?.message || 'Failed to clear');
+                    } finally {
+                      setRcClearing(false);
+                    }
+                  }}
+                >
+                  Clear Cache
+                </Button>
+              </Group>
+              {rcClearMsg && (
+                <Alert color="blue" icon={<IconInfoCircle size={16} />}>
+                  {' '}
+                  {rcClearMsg}{' '}
+                </Alert>
+              )}
+              {rcTtlErr && (
+                <Alert color="red" icon={<IconInfoCircle size={16} />}>
+                  {' '}
+                  {rcTtlErr}{' '}
+                </Alert>
+              )}
+              <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+                <Text size="xs">
+                  Response cache reduces load and latency by caching operation results in Redis. Changes apply within seconds
+                  without restart. Use per-session scope when results depend on user identity or permissions.
+                </Text>
+              </Alert>
+            </>
+          )}
+        </Stack>
+      </Card>
 
       <Card shadow="sm" p="lg" radius="md" withBorder>
         <Stack spacing="md">

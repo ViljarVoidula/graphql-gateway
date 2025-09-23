@@ -1,5 +1,5 @@
 import { YogaInitialContext } from 'graphql-yoga';
-import { createClient } from 'redis';
+import Redis from 'ioredis';
 import { log } from '../utils/logger';
 
 export interface SessionData {
@@ -21,18 +21,17 @@ export interface YogaContext extends YogaInitialContext {
   sessionId: string | null;
 }
 
-// Redis client for session storage
-export const redisClient: any = createClient({
-  url: process.env.REDIS_URL || 'redis://localhost:6379'
-});
+// Redis client for session storage (ioredis)
+export const redisClient: any = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 export const SESSION_COOKIE_NAME = 'gateway-session';
 export const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
 export async function initializeRedis() {
   try {
-    await redisClient.connect();
-    log.debug('Redis connected for session storage');
+    // ioredis connects lazily; issue a ping to verify connectivity
+    await redisClient.ping();
+    log.debug('Redis reachable for session storage');
   } catch (error) {
     log.error('Failed to connect to Redis:', error);
     throw error;
@@ -52,11 +51,8 @@ export async function saveSession(sessionId: string, data: SessionData): Promise
     lastActivity: data.lastActivity.toISOString()
   });
 
-  await redisClient.setEx(
-    sessionKey,
-    SESSION_DURATION / 1000, // Redis expects seconds
-    serializedData
-  );
+  // setex(key, seconds, value)
+  await redisClient.setex(sessionKey, SESSION_DURATION / 1000, serializedData);
 }
 
 export async function getSession(sessionId: string): Promise<SessionData | null> {

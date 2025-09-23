@@ -23,7 +23,7 @@ import { showNotification } from '@mantine/notifications';
 import { useCreate } from '@refinedev/core';
 import { IconAlertCircle, IconArrowLeft, IconCheck, IconKey, IconPlus, IconServer } from '@tabler/icons-react';
 import React from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 
 interface ServiceFormData {
@@ -54,7 +54,8 @@ export const ServiceCreate: React.FC = () => {
     register,
     handleSubmit,
     formState: { errors },
-    watch
+    watch,
+    control
   } = useForm<ServiceFormData>({
     defaultValues: {
       name: '',
@@ -194,18 +195,27 @@ export const ServiceCreate: React.FC = () => {
                   </Title>
                   <Grid gutter="lg">
                     <Grid.Col span={6}>
-                      <NumberInput
-                        label="Timeout (ms)"
-                        placeholder="5000"
-                        min={100}
-                        max={30000}
-                        error={errors.timeout?.message}
-                        {...register('timeout', {
+                      <Controller
+                        name="timeout"
+                        control={control}
+                        rules={{
                           required: 'Timeout is required',
                           min: { value: 100, message: 'Minimum timeout is 100ms' },
                           max: { value: 30000, message: 'Maximum timeout is 30000ms' }
-                        })}
-                        styles={{ label: { fontWeight: 500, fontSize: '14px' } }}
+                        }}
+                        render={({ field }) => (
+                          <NumberInput
+                            label="Timeout (ms)"
+                            placeholder="5000"
+                            min={100}
+                            max={30000}
+                            error={errors.timeout?.message}
+                            value={field.value}
+                            onChange={(val) => field.onChange(typeof val === 'number' ? val : Number(val))}
+                            onBlur={field.onBlur}
+                            styles={{ label: { fontWeight: 500, fontSize: '14px' } }}
+                          />
+                        )}
                       />
                     </Grid.Col>
                     <Grid.Col span={6}>
