@@ -234,7 +234,7 @@ export class AIResolver {
     const decryptedKey = payload?.secret ? safeDecrypt(payload.secret) : null;
     const apiKey = decryptedKey || envKey || null;
     const baseUrl = payload?.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
-    const model = payload?.model || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+    const model = payload?.model || process.env.OPENAI_MODEL || 'gpt5-mini';
 
     for (const svc of services) {
       // Determine slug and existing doc
@@ -315,7 +315,7 @@ export class AIResolver {
     const decryptedKey = payload?.secret ? safeDecrypt(payload.secret) : null;
     const apiKey = decryptedKey || envKey || null;
     const baseUrl = payload?.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
-    const model = payload?.model || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+    const model = payload?.model || process.env.OPENAI_MODEL || 'gpt5-mini';
 
     // If no key, provide a basic heuristic fallback snippet
     if (!apiKey) {
@@ -431,7 +431,7 @@ export class AIResolver {
     const decryptedKey = payload?.secret ? safeDecrypt(payload.secret) : null;
     const apiKey = decryptedKey || envKey || null;
     const baseUrl = payload?.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
-    const model = payload?.model || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+    const model = payload?.model || process.env.OPENAI_MODEL || 'gpt5-mini';
     return { apiKey, baseUrl, model };
   }
 }

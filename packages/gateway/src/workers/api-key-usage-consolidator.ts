@@ -1,7 +1,6 @@
 import 'reflect-metadata';
-import { dataSource } from '../db/datasource';
 import { redisClient } from '../auth/session.config';
-import { ApiKeyUsage } from '../entities/api-key-usage.entity';
+import { dataSource } from '../db/datasource';
 
 function parseKey(prefix: string, key: string) {
   // format: <prefix>:YYYY-MM-DD:<apiKeyId>:<serviceId or ∅>
@@ -66,10 +65,7 @@ async function runOnce() {
   const batch: any[] = [];
   while (true) {
     // ioredis returns [cursor, keys]
-    const [next, keys] = (await (redisClient as any).scan(cursor, 'MATCH', pattern, 'COUNT', 1000)) as [
-      string,
-      string[]
-    ];
+    const [next, keys] = (await (redisClient as any).scan(cursor, 'MATCH', pattern, 'COUNT', 1000)) as [string, string[]];
     cursor = next as string;
     for (const key of keys) {
       const meta = parseKey(prefix, key);

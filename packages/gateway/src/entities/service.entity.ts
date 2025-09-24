@@ -20,6 +20,14 @@ export enum ServiceStatus {
 
 registerEnumType(ServiceStatus, { name: 'ServiceStatus' });
 
+export enum SubscriptionTransport {
+  AUTO = 'auto',
+  SSE = 'sse',
+  WS = 'ws'
+}
+
+registerEnumType(SubscriptionTransport, { name: 'SubscriptionTransport' });
+
 @ObjectType()
 @Entity('services')
 export class Service {
@@ -93,4 +101,14 @@ export class Service {
   @Field(() => [ID]) // Expose as array of IDs for GraphQL to avoid circular import issues
   @OneToMany('ServiceKey', 'service')
   keys: any[];
+
+  // Subscription transport config for downstream services
+  @Field(() => SubscriptionTransport)
+  @Column({ type: 'varchar', default: SubscriptionTransport.AUTO })
+  subscriptionTransport: SubscriptionTransport;
+
+  // Optional custom subscription path (e.g., '/graphql/stream' or '/ws')
+  @Field({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
+  subscriptionPath?: string | null;
 }

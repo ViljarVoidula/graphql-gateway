@@ -183,7 +183,7 @@ export const SessionSettings: React.FC = () => {
         if (json?.data?.aiDocsConfig) {
           setAiProvider('OPENAI');
           setAiBaseUrl(json.data.aiDocsConfig.baseUrl || '');
-          setAiModel(json.data.aiDocsConfig.model || 'gpt-4o-mini');
+          setAiModel(json.data.aiDocsConfig.model || 'gpt5-mini');
           setAiKeySet(!!json.data.aiDocsConfig.apiKeySet);
         }
       } catch (e) {
@@ -603,7 +603,7 @@ export const SessionSettings: React.FC = () => {
                 <input
                   value={aiModel}
                   onChange={(e) => setAiModel(e.target.value)}
-                  placeholder="gpt-4o-mini"
+                  placeholder="gpt5-mini"
                   style={{ padding: 8, border: '1px solid #e5e7eb', borderRadius: 6 }}
                 />
               </Stack>

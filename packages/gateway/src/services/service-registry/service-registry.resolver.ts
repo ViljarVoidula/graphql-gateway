@@ -2,7 +2,7 @@ import { Arg, Ctx, Directive, Field, ID, InputType, Mutation, ObjectType, Query,
 import { Service } from 'typedi';
 import { YogaContext } from '../../auth/session.config';
 import { ServiceKey } from '../../entities/service-key.entity';
-import { Service as ServiceEntity, ServiceStatus } from '../../entities/service.entity';
+import { Service as ServiceEntity, ServiceStatus, SubscriptionTransport } from '../../entities/service.entity';
 import { ServiceRegistryService } from './service-registry.service';
 
 @ObjectType()
@@ -72,6 +72,12 @@ class RegisterServiceInput {
 
   @Field({ defaultValue: true })
   externally_accessible?: boolean;
+
+  @Field(() => SubscriptionTransport, { nullable: true })
+  subscriptionTransport?: SubscriptionTransport;
+
+  @Field({ nullable: true })
+  subscriptionPath?: string;
 }
 
 @InputType()
@@ -102,6 +108,12 @@ class UpdateServiceInput {
 
   @Field(() => ServiceStatus, { nullable: true })
   status?: ServiceStatus;
+
+  @Field(() => SubscriptionTransport, { nullable: true })
+  subscriptionTransport?: SubscriptionTransport;
+
+  @Field({ nullable: true })
+  subscriptionPath?: string;
 }
 
 @Service()

@@ -15,7 +15,8 @@ export class AddRateLimitAndAudit1756830683394 implements MigrationInterface {
         "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         "eventType" text NOT NULL,
         "applicationId" uuid NULL REFERENCES "applications"(id) ON DELETE CASCADE,
-        "userId" uuid NULL REFERENCES "users"(id) ON DELETE SET NULL,
+        -- Note: user table is named "user" (singular) in initial schema
+        "userId" uuid NULL REFERENCES "user"(id) ON DELETE SET NULL,
         "metadata" jsonb NOT NULL DEFAULT '{}'::jsonb,
         "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT now()
       );

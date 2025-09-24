@@ -56,10 +56,10 @@ export class DocEmbeddingChunk {
   embedding?: number[]; // stored via pgvector extension eventually
 
   @Field()
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 
   @Field()
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
 }

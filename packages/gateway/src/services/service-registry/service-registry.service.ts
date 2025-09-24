@@ -70,6 +70,9 @@ export class ServiceRegistryService {
     timeout?: number;
     enableBatching?: boolean;
     externally_accessible?: boolean;
+    // New subscription configuration fields
+    subscriptionTransport?: any;
+    subscriptionPath?: string | null;
   }): Promise<{ service: ServiceEntity; hmacKey?: any }> {
     // Disallow registering internal gateway pseudo endpoints
     if (data.url.startsWith('internal://')) {
@@ -86,7 +89,10 @@ export class ServiceRegistryService {
       ...data,
       externally_accessible: data.externally_accessible !== false,
       ownerId: owner.id,
-      status: ServiceStatus.ACTIVE
+      status: ServiceStatus.ACTIVE,
+      // Persist subscription configuration if provided
+      subscriptionTransport: data.subscriptionTransport,
+      subscriptionPath: data.subscriptionPath ?? null
     });
 
     const savedService = await this.serviceRepository.save(service);

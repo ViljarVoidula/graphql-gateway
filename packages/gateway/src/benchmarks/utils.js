@@ -2,7 +2,7 @@ import { check, sleep } from 'k6';
 import http from 'k6/http';
 
 export const GATEWAY_URL = __ENV.GATEWAY_URL || 'http://localhost:4000/graphql';
-export const API_KEY = __ENV.API_KEY || 'app_d77aa741018569d1e3bd61f61b388dab21ab4973f534770d932631e150fa5ea0';
+export const API_KEY = __ENV.API_KEY || 'app_9d2f70402d05d591d23ae72b6f06751d939c9ca72524e7e4cbd24b80a9ea876f';
 
 export function headers(extra = {}) {
   const h = { 'Content-Type': 'application/json', ...extra };

@@ -1,5 +1,5 @@
 import { Field, ID, ObjectType } from 'type-graphql';
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { DocDocument } from './document.entity';
 
 @ObjectType()
@@ -36,6 +36,7 @@ export class DocRevision {
   id!: string;
 
   @ManyToOne(() => DocDocument, (d) => d.revisions, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'document_id' })
   document!: DocDocument;
 
   @Field()
@@ -47,11 +48,11 @@ export class DocRevision {
   state!: string; // DRAFT, IN_REVIEW, APPROVED, PUBLISHED, ARCHIVED
 
   @Field()
-  @Column({ type: 'text' })
+  @Column({ type: 'text', name: 'mdx_raw' })
   mdxRaw!: string;
 
   @Field(() => DocFrontmatter, { nullable: true })
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: 'jsonb', nullable: true, name: 'frontmatter_json' })
   frontmatterJson?: DocFrontmatter;
 
   @Field(() => [DocHeading], { nullable: true })
@@ -59,18 +60,18 @@ export class DocRevision {
   headings?: DocHeading[];
 
   @Field()
-  @Column({ type: 'varchar', length: 64 })
+  @Column({ type: 'varchar', length: 64, name: 'created_by' })
   createdBy!: string; // user id reference
 
   @Field({ nullable: true })
-  @Column({ type: 'timestamptz', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true, name: 'published_at' })
   publishedAt?: Date | null;
 
   @Field()
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 
   @Field()
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
 }

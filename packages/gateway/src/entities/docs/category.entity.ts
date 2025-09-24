@@ -18,17 +18,17 @@ export class DocCategory {
   name!: string;
 
   @Field({ nullable: true })
-  @Column({ type: 'int', default: 0 })
+  @Column({ type: 'int', default: 0, name: 'order_index' })
   orderIndex!: number;
 
   @OneToMany(() => DocDocument, (d) => d.category)
   documents!: DocDocument[];
 
   @Field()
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 
   @Field()
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
 }

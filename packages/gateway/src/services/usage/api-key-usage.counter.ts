@@ -23,12 +23,12 @@ export class ApiKeyUsageCounterService {
     const date = this.today();
     const k = this.key(date, apiKeyId, serviceId);
     const multi = redisClient.multi();
-    multi.hIncrBy(k, 'req', 1);
-    if (opts.error) multi.hIncrBy(k, 'err', 1);
-    if (opts.rateLimited) multi.hIncrBy(k, 'rl', 1);
+    multi.hincrby(k, 'req', 1);
+    if (opts.error) multi.hincrby(k, 'err', 1);
+    if (opts.rateLimited) multi.hincrby(k, 'rl', 1);
     // store metadata for consolidation
-    multi.hSetNX(k, 'applicationId', applicationId);
-    if (serviceId) multi.hSetNX(k, 'serviceId', serviceId);
+    multi.hsetnx(k, 'applicationId', applicationId);
+    if (serviceId) multi.hsetnx(k, 'serviceId', serviceId);
     multi.expire(k, this.ttlSeconds);
     await multi.exec();
   }

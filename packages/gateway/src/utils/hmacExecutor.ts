@@ -1,8 +1,11 @@
 import { buildHTTPExecutor } from '@graphql-tools/executor-http';
-import { GraphQLError } from 'graphql';
+import { DocumentNode, ExecutionResult, getOperationAST, GraphQLError, print } from 'graphql';
+import { createClient as createSSEClient } from 'graphql-sse';
+import { createClient as createWSClient, Client as WSClient } from 'graphql-ws';
 import { Container } from 'typedi';
+import WebSocket from 'ws';
 import { dataSource } from '../db/datasource';
-import { Service } from '../entities/service.entity';
+import { Service, SubscriptionTransport } from '../entities/service.entity';
 import { HMACUtils } from '../security/hmac';
 import { keyManager } from '../security/keyManager';
 import { AuditLogService } from '../services/audit/audit-log.service';
@@ -44,113 +47,118 @@ export interface HMACExecutorOptions {
 export function buildHMACExecutor(options: HMACExecutorOptions): any {
   const { endpoint, timeout = 5000, enableHMAC = true, useMsgPack = false } = options;
 
-  return buildHTTPExecutor({
+  // Helper to prepare downstream headers (auth, tracing, hmac, msgpack)
+  const prepareHeaders = async (url: URL, requestOptions: any, context: any): Promise<Record<string, string>> => {
+    // Get the original request object (context might be undefined during introspection)
+    const req = context?.req ?? requestOptions;
+
+    // Start with existing headers
+    const headers: Record<string, string> = {};
+
+    // Properly merge existing headers, but exclude Content-Length to avoid mismatches
+    if (requestOptions.headers) {
+      if (Array.isArray(requestOptions.headers)) {
+        requestOptions.headers.forEach(([key, value]) => {
+          if (key.toLowerCase() !== 'content-length') {
+            headers[key] = value;
+          }
+        });
+      } else {
+        Object.entries(requestOptions.headers).forEach(([key, value]) => {
+          if (typeof value === 'string' && key.toLowerCase() !== 'content-length') {
+            headers[key] = value;
+          }
+        });
+      }
+    }
+
+    // Add existing header passthrough logic from context request
+    const contextHeaders = context?.req?.headers || {};
+
+    if (contextHeaders.authorization) {
+      headers['Authorization'] = contextHeaders.authorization;
+    }
+
+    if (contextHeaders.cookie) {
+      headers['Cookie'] = contextHeaders.cookie;
+    }
+
+    if (contextHeaders['x-request-id']) {
+      headers['x-request-id'] = contextHeaders['x-request-id'];
+    }
+
+    if (contextHeaders['x-correlation-id']) {
+      headers['x-correlation-id'] = contextHeaders['x-correlation-id'];
+    }
+
+    if (contextHeaders.traceparent) {
+      headers['traceparent'] = contextHeaders.traceparent;
+    }
+
+    // Propagate API key header to downstream if present (some downstream services may authorize at their edge)
+    if (contextHeaders['x-api-key']) {
+      headers['x-api-key'] = contextHeaders['x-api-key'];
+    }
+
+    // Propagate MessagePack preference if enabled for this service and present on incoming request
+    if (useMsgPack) {
+      // Always request msgpack from downstream if the service is configured for it
+      headers['x-msgpack-enabled'] = '1';
+      // Accept header for clarity (remote may ignore)
+      headers['Accept'] = headers['Accept']
+        ? headers['Accept'] + ',application/x-msgpack'
+        : 'application/x-msgpack,application/json';
+    }
+
+    // Add HMAC signing if enabled
+    if (enableHMAC) {
+      const serviceKey = keyManager.getActiveKey(endpoint);
+      if (serviceKey) {
+        try {
+          const method = requestOptions.method || 'POST';
+          const body = requestOptions.body ? String(requestOptions.body) : undefined;
+
+          const hmacHeaders = HMACUtils.createHeaders(
+            {
+              method,
+              url: url.toString(),
+              body,
+              keyId: serviceKey.keyId
+            },
+            serviceKey.secretKey
+          );
+
+          // Add HMAC headers
+          Object.assign(headers, hmacHeaders);
+
+          log.debug(`Added HMAC signature for request to ${endpoint}, keyId: ${serviceKey.keyId}`);
+        } catch (error) {
+          log.error(`Failed to generate HMAC signature for ${endpoint}:`, error);
+          // Continue without HMAC if signing fails
+        }
+      } else {
+        log.warn(`No active HMAC key found for service: ${endpoint}`);
+        // throw new GraphQLError(`No active HMAC key found for service: ${endpoint}`, {
+        //   extensions: {
+        //     code: 'HMAC_KEY_NOT_FOUND',
+        //     service: endpoint
+        //   }
+        // });
+      }
+    }
+
+    return headers;
+  };
+
+  // HTTP executor with custom fetch for queries/mutations
+  const httpExecutor = buildHTTPExecutor({
     endpoint,
     timeout,
     fetch: async (url, requestOptions, context) => {
-      // Get the original request object (context might be undefined during introspection)
-      const req = context?.req ?? requestOptions;
-
-      // Start with existing headers
-      const headers: Record<string, string> = {};
-
-      // Properly merge existing headers, but exclude Content-Length to avoid mismatches
-      if (requestOptions.headers) {
-        if (Array.isArray(requestOptions.headers)) {
-          requestOptions.headers.forEach(([key, value]) => {
-            if (key.toLowerCase() !== 'content-length') {
-              headers[key] = value;
-            }
-          });
-        } else {
-          Object.entries(requestOptions.headers).forEach(([key, value]) => {
-            if (typeof value === 'string' && key.toLowerCase() !== 'content-length') {
-              headers[key] = value;
-            }
-          });
-        }
-      }
-
-      // Add existing header passthrough logic from context request
-      const contextHeaders = context?.req?.headers || {};
-
-      if (contextHeaders.authorization) {
-        headers['Authorization'] = contextHeaders.authorization;
-      }
-
-      if (contextHeaders.cookie) {
-        headers['Cookie'] = contextHeaders.cookie;
-      }
-
-      if (contextHeaders['x-request-id']) {
-        headers['x-request-id'] = contextHeaders['x-request-id'];
-      }
-
-      if (contextHeaders['x-correlation-id']) {
-        headers['x-correlation-id'] = contextHeaders['x-correlation-id'];
-      }
-
-      if (contextHeaders.traceparent) {
-        headers['traceparent'] = contextHeaders.traceparent;
-      }
-
-      // Propagate API key header to downstream if present (some downstream services may authorize at their edge)
-      if (contextHeaders['x-api-key']) {
-        headers['x-api-key'] = contextHeaders['x-api-key'];
-      }
-
-      // Propagate MessagePack preference if enabled for this service and present on incoming request
-      if (useMsgPack) {
-        // Always request msgpack from downstream if the service is configured for it
-        headers['x-msgpack-enabled'] = '1';
-        // Accept header for clarity (remote may ignore)
-        headers['Accept'] = headers['Accept']
-          ? headers['Accept'] + ',application/x-msgpack'
-          : 'application/x-msgpack,application/json';
-      }
-
-      // Add HMAC signing if enabled
-      if (enableHMAC) {
-        const serviceKey = keyManager.getActiveKey(endpoint);
-        if (serviceKey) {
-          try {
-            const method = requestOptions.method || 'POST';
-            const body = requestOptions.body ? String(requestOptions.body) : undefined;
-
-            const hmacHeaders = HMACUtils.createHeaders(
-              {
-                method,
-                url: url.toString(),
-                body,
-                keyId: serviceKey.keyId
-              },
-              serviceKey.secretKey
-            );
-
-            // Add HMAC headers
-            Object.assign(headers, hmacHeaders);
-
-            log.debug(`Added HMAC signature for request to ${endpoint}, keyId: ${serviceKey.keyId}`);
-          } catch (error) {
-            log.error(`Failed to generate HMAC signature for ${endpoint}:`, error);
-            // Continue without HMAC if signing fails
-          }
-        } else {
-          log.warn(`No active HMAC key found for service: ${endpoint}`);
-          // throw new GraphQLError(`No active HMAC key found for service: ${endpoint}`, {
-          //   extensions: {
-          //     code: 'HMAC_KEY_NOT_FOUND',
-          //     service: endpoint
-          //   }
-          // });
-        }
-      }
+      const headers = await prepareHeaders(new URL(String(url)), requestOptions, context);
 
       // Update request options with new headers
-      const updatedOptions = {
-        ...requestOptions,
-        headers
-      };
+      const updatedOptions = { ...requestOptions, headers };
 
       // Enforce downstream authentication if configured: must have either user session or application (api-key)
       try {
@@ -346,6 +354,246 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
       );
     }
   });
+
+  // Helper: create AsyncIterable via graphql-sse
+  function subscribeViaSSE(args: { url: string; headers: Record<string, string>; body: any; customPath?: string | null }) {
+    const parsedUrl = new URL(args.url);
+    const sseUrl = new URL(parsedUrl.toString());
+    if (args.customPath) {
+      sseUrl.pathname = args.customPath;
+    } else {
+      if (!sseUrl.pathname.endsWith('/stream')) sseUrl.pathname = sseUrl.pathname.replace(/\/?$/, '/stream');
+    }
+
+    const sseClient = createSSEClient({
+      url: sseUrl.toString(),
+      headers: () => args.headers,
+      // Provide custom fetch to add HMAC signature per request issued by graphql-sse client
+      fetchFn: async (input: any, init?: any) => {
+        const u = new URL(String(input));
+        const method = init?.method || 'GET';
+        const body = init?.body ? String(init.body as any) : undefined;
+        const headers = { ...(init?.headers as Record<string, string> | undefined), ...args.headers } as Record<string, string>;
+        if (enableHMAC) {
+          const serviceKey = keyManager.getActiveKey(endpoint);
+          if (serviceKey) {
+            try {
+              const h = HMACUtils.createHeaders(
+                { method, url: u.toString(), body, keyId: serviceKey.keyId },
+                serviceKey.secretKey
+              );
+              Object.assign(headers, h);
+            } catch (e) {
+              log.warn('Failed to sign SSE control request with HMAC', e);
+            }
+          }
+        }
+        return fetch(u, { ...(init || {}), headers });
+      }
+    });
+
+    const { query, variables, operationName, extensions } = args.body;
+
+    const asyncIterable: AsyncIterable<ExecutionResult> = {
+      [Symbol.asyncIterator](): AsyncIterator<ExecutionResult> {
+        let dispose: (() => void) | undefined;
+        const queue: Array<ExecutionResult> = [];
+        let pending: ((value: IteratorResult<ExecutionResult>) => void) | null = null;
+        let done = false;
+
+        dispose = sseClient.subscribe(
+          { query, variables, operationName, extensions },
+          {
+            next: (value) => {
+              const casted = value as unknown as ExecutionResult;
+              if (pending) {
+                const p = pending;
+                pending = null;
+                p({ value: casted, done: false });
+              } else {
+                queue.push(casted);
+              }
+            },
+            error: (err) => {
+              done = true;
+              if (pending) {
+                const p = pending;
+                pending = null;
+                p({ value: { errors: [{ message: String(err) }] } as any, done: true });
+              }
+            },
+            complete: () => {
+              done = true;
+              if (pending) {
+                const p = pending;
+                pending = null;
+                p({ value: undefined as any, done: true });
+              }
+            }
+          }
+        );
+
+        return {
+          next() {
+            if (queue.length) {
+              return Promise.resolve({ value: queue.shift()!, done: false });
+            }
+            if (done) return Promise.resolve({ value: undefined as any, done: true });
+            return new Promise<IteratorResult<ExecutionResult>>((resolve) => (pending = resolve));
+          },
+          return() {
+            if (dispose) dispose();
+            done = true;
+            return Promise.resolve({ value: undefined as any, done: true });
+          },
+          throw(error) {
+            if (dispose) dispose();
+            done = true;
+            return Promise.reject(error);
+          }
+        } as AsyncIterator<ExecutionResult>;
+      }
+    };
+    return asyncIterable;
+  }
+
+  // Helper: create AsyncIterable via graphql-ws (fallback)
+  function subscribeViaWS(args: { url: string; headers: Record<string, string>; body: any; customPath?: string | null }) {
+    const httpUrl = new URL(args.url);
+    const wsUrl = new URL(args.url);
+    wsUrl.protocol = httpUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+    // Use configured path when provided; otherwise strip /stream if present
+    if (args.customPath) {
+      wsUrl.pathname = args.customPath;
+    } else {
+      wsUrl.pathname = wsUrl.pathname.replace(/\/stream$/, '');
+    }
+
+    const connectionParams = {
+      // Pass auth-related headers in connectionParams; many servers accept this pattern
+      headers: args.headers
+    } as any;
+
+    const client: WSClient = createWSClient({
+      url: wsUrl.toString(),
+      webSocketImpl: WebSocket,
+      connectionParams
+    });
+
+    const { query, variables, operationName, extensions } = args.body;
+
+    const asyncIterable: AsyncIterable<ExecutionResult> = {
+      [Symbol.asyncIterator](): AsyncIterator<ExecutionResult> {
+        let unsubscribe: (() => void) | undefined;
+        const queue: Array<ExecutionResult> = [];
+        let pending: ((value: IteratorResult<ExecutionResult>) => void) | null = null;
+        let done = false;
+
+        unsubscribe = client.subscribe(
+          { query, variables, operationName, extensions },
+          {
+            next: (value) => {
+              const casted = value as unknown as ExecutionResult;
+              if (pending) {
+                const p = pending;
+                pending = null;
+                p({ value: casted, done: false });
+              } else {
+                queue.push(casted);
+              }
+            },
+            error: (err) => {
+              done = true;
+              if (pending) {
+                const p = pending;
+                pending = null;
+                p({ value: { errors: [{ message: String(err) }] } as any, done: true });
+              }
+            },
+            complete: () => {
+              done = true;
+              if (pending) {
+                const p = pending;
+                pending = null;
+                p({ value: undefined as any, done: true });
+              }
+            }
+          }
+        );
+
+        return {
+          next() {
+            if (queue.length) {
+              return Promise.resolve({ value: queue.shift()!, done: false });
+            }
+            if (done) return Promise.resolve({ value: undefined as any, done: true });
+            return new Promise<IteratorResult<ExecutionResult>>((resolve) => (pending = resolve));
+          },
+          return() {
+            if (unsubscribe) unsubscribe();
+            done = true;
+            return Promise.resolve({ value: undefined as any, done: true });
+          },
+          throw(error) {
+            if (unsubscribe) unsubscribe();
+            done = true;
+            return Promise.reject(error);
+          }
+        } as AsyncIterator<ExecutionResult>;
+      }
+    };
+    return asyncIterable;
+  }
+
+  // Final executor: route subscriptions via SSE/WS, others via HTTP
+  return async function executor(request: any) {
+    const op = getOperationAST(request.document as DocumentNode, request.operationName);
+    const isSubscription = op?.operation === 'subscription';
+
+    if (!isSubscription) {
+      return httpExecutor(request);
+    }
+
+    // For subscriptions, prepare headers using a faux POST body to compute HMAC
+    const url = new URL(endpoint);
+    const body = {
+      query: typeof request.document === 'string' ? request.document : print(request.document as DocumentNode),
+      variables: request.variables,
+      operationName: request.operationName,
+      extensions: (request as any).extensions
+    };
+    const baseHeaders = await prepareHeaders(url, { method: 'POST', body: JSON.stringify(body), headers: {} }, request.context);
+    // Remove content headers inappropriate for SSE establish
+    delete (baseHeaders as any)['content-length'];
+    delete (baseHeaders as any)['content-type'];
+
+    // Inspect per-service subscription configuration
+    let transportPref: SubscriptionTransport = SubscriptionTransport.AUTO;
+    let customPath: string | null | undefined = null;
+    try {
+      const repo = dataSource.getRepository(Service);
+      const svc = await repo.findOne({ where: { url: endpoint } });
+      if (svc) {
+        transportPref = (svc as any).subscriptionTransport || SubscriptionTransport.AUTO;
+        customPath = (svc as any).subscriptionPath ?? null;
+      }
+    } catch {}
+
+    // Route based on transport preference
+    if (transportPref === SubscriptionTransport.WS) {
+      return subscribeViaWS({ url: url.toString(), headers: baseHeaders, body, customPath });
+    }
+    if (transportPref === SubscriptionTransport.SSE) {
+      return subscribeViaSSE({ url: url.toString(), headers: baseHeaders, body, customPath });
+    }
+    // AUTO: try SSE then fallback to WS
+    try {
+      return subscribeViaSSE({ url: url.toString(), headers: baseHeaders, body, customPath });
+    } catch (e) {
+      log.warn('SSE subscription setup failed, falling back to WebSocket', e);
+      return subscribeViaWS({ url: url.toString(), headers: baseHeaders, body, customPath });
+    }
+  };
 }
 
 /**

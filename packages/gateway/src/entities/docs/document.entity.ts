@@ -4,6 +4,7 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
@@ -29,6 +30,7 @@ export class DocDocument {
   title!: string;
 
   @ManyToOne(() => DocCategory, (c) => c.documents, { nullable: true })
+  @JoinColumn({ name: 'category_id' })
   category?: DocCategory | null;
 
   @Field(() => [String])
@@ -40,17 +42,17 @@ export class DocDocument {
   status!: string;
 
   @Field({ nullable: true })
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: 'uuid', nullable: true, name: 'primary_revision_id' })
   primaryRevisionId?: string | null;
 
   @OneToMany(() => DocRevision, (r) => r.document)
   revisions!: DocRevision[];
 
   @Field()
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 
   @Field()
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
 }

@@ -1,21 +1,42 @@
 import * as bcrypt from 'bcrypt';
+import * as dotenv from 'dotenv';
+import * as fs from 'fs';
+import * as path from 'path';
 import { MigrationInterface, QueryRunner } from 'typeorm';
+
+function loadEnvFromFiles() {
+  try {
+    const root = path.resolve(__dirname, '..', '..');
+    const envLocal = path.join(root, '.env.local');
+    const env = path.join(root, '.env');
+    if (fs.existsSync(envLocal)) dotenv.config({ path: envLocal });
+    if (fs.existsSync(env)) dotenv.config({ path: env });
+  } catch {
+    // best-effort only
+  }
+}
 
 export class CreateInitialAdminUser1756830683392 implements MigrationInterface {
   name = 'CreateInitialAdminUser1756830683392';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    // Best-effort: load env from .env.local/.env when running via CLI without script wrappers
+    if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD) {
+      loadEnvFromFiles();
+    }
     // Normalize env vars
     const rawEmail = process.env.ADMIN_EMAIL || '';
     const rawPassword = process.env.ADMIN_PASSWORD || '';
     const adminEmail = rawEmail.trim();
     const adminPassword = rawPassword.trim();
 
-    if (!adminEmail) {
-      throw new Error('ADMIN_EMAIL environment variable is required for creating initial admin user');
-    }
-    if (!adminPassword) {
-      throw new Error('ADMIN_PASSWORD environment variable is required for creating initial admin user');
+    // If required env vars are missing, skip creating the initial admin user.
+    // Migrations should be data/structure focused and not fail due to missing runtime configuration.
+    if (!adminEmail || !adminPassword) {
+      console.log(
+        'CreateInitialAdminUser1756830683392: Missing ADMIN_EMAIL or ADMIN_PASSWORD in environment, skipping admin user creation.'
+      );
+      return;
     }
 
     // Check if admin user already exists

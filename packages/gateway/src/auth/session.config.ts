@@ -22,7 +22,34 @@ export interface YogaContext extends YogaInitialContext {
 }
 
 // Redis client for session storage (ioredis)
-export const redisClient: any = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+// Lazily initialize so env vars (like REDIS_URL) can be set by test setup before first use
+let __redis: Redis | null = null;
+function getOrCreateRedis(): Redis {
+  if (!__redis) {
+    __redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+  }
+  return __redis;
+}
+
+export const redisClient: any = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      const client = getOrCreateRedis() as any;
+      const value = client[prop];
+      return typeof value === 'function' ? value.bind(client) : value;
+    },
+    set(_target, prop, value) {
+      const client = getOrCreateRedis() as any;
+      client[prop] = value;
+      return true;
+    },
+    has(_target, prop) {
+      const client = getOrCreateRedis() as any;
+      return prop in client;
+    }
+  }
+);
 
 export const SESSION_COOKIE_NAME = 'gateway-session';
 export const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours

@@ -1,17 +1,19 @@
 import { stitchSchemas } from '@graphql-tools/stitch';
 // Use local compat wrapper to avoid TS type conflicts across @graphql-tools packages
 import { createRedisCache } from '@envelop/response-cache-redis';
+import { useGraphQLSSE } from '@graphql-yoga/plugin-graphql-sse';
 import { cacheControlDirective, useResponseCache } from '@graphql-yoga/plugin-response-cache';
+import { createRedisEventTarget } from '@graphql-yoga/redis-event-target';
 import cors from '@koa/cors';
 import * as fs from 'fs';
 import { GraphQLSchema, buildSchema } from 'graphql';
-import { createYoga } from 'graphql-yoga';
+import { createPubSub, createYoga } from 'graphql-yoga';
+import Redis from 'ioredis';
 import Koa from 'koa';
 import compress from 'koa-compress';
 import koaHelmet from 'koa-helmet';
 import responseTime from 'koa-response-time';
 import * as path from 'path';
-import Redis from 'ioredis';
 import { getStitchingDirectivesTransformer } from './utils/stitchingDirectivesCompat';
 // reflect-metadata is loaded in src/index.ts
 import { Container } from 'typedi';
@@ -307,6 +309,17 @@ const responseCacheRedisUrl = process.env.RESPONSE_CACHE_REDIS_URL || process.en
 const responseCacheRedis = new Redis(responseCacheRedisUrl);
 const responseCacheInstance = createRedisCache({ redis: responseCacheRedis as any });
 
+// PubSub over Redis for distributed subscription resolvers (if any local subscriptions exist)
+const pubsubRedisUrl = process.env.PUBSUB_REDIS_URL || process.env.REDIS_URL || 'redis://localhost:6379';
+const pubsubRedisPublisher = new Redis(pubsubRedisUrl);
+const pubsubRedisSubscriber = new Redis(pubsubRedisUrl);
+const pubSub = createPubSub({
+  eventTarget: createRedisEventTarget({
+    publishClient: pubsubRedisPublisher as any,
+    subscribeClient: pubsubRedisSubscriber as any
+  })
+});
+
 // Runtime response cache config snapshot (updated periodically)
 const responseCacheConfig = {
   enabled: false,
@@ -324,6 +337,8 @@ const yoga = createYoga({
   logging: 'debug',
   landingPage: false,
   plugins: [
+    // Enable single-connection SSE endpoint at /graphql/stream for clients using graphql-sse
+    useGraphQLSSE(),
     // Rate limit (must come before session if it doesn't need session info; here we rely only on API key auth data)
     createRateLimitPlugin(),
     useSession(),
@@ -359,7 +374,9 @@ const yoga = createYoga({
     })
   ],
   graphiql: {
-    title: 'GraphQL Gateway with Session Security'
+    title: 'GraphQL Gateway with Session Security',
+    // Ensure GraphiQL uses SSE for subscriptions
+    subscriptionsProtocol: 'SSE'
   },
   // GraphQL Playground will be handled at a separate endpoint (/playground)
   // to allow conditional access based on configuration settings
@@ -368,7 +385,8 @@ const yoga = createYoga({
     return {
       request,
       keyManager,
-      schemaLoader: loader
+      schemaLoader: loader,
+      pubSub
     };
   },
   cors: {
@@ -1182,5 +1200,13 @@ export async function stopServer() {
     }
   } catch (e) {
     log.warn('Failed to close session Redis connection', e);
+  }
+
+  // Close PubSub Redis connections
+  try {
+    if (pubsubRedisPublisher) pubsubRedisPublisher.disconnect();
+    if (pubsubRedisSubscriber) pubsubRedisSubscriber.disconnect();
+  } catch (e) {
+    log.warn('Failed to close PubSub Redis connections', e);
   }
 }
