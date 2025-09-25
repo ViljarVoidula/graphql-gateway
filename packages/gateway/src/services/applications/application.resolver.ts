@@ -1,5 +1,14 @@
 import { GraphQLError } from 'graphql';
-import { Arg, Ctx, Directive, ID, Int, Mutation, Query, Resolver } from 'type-graphql';
+import {
+  Arg,
+  Ctx,
+  Directive,
+  ID,
+  Int,
+  Mutation,
+  Query,
+  Resolver,
+} from 'type-graphql';
 import { Inject, Service } from 'typedi';
 import { Repository } from 'typeorm';
 import { ApiKeyService } from '../../auth/api-key.service';
@@ -7,25 +16,36 @@ import { ExtendedYogaContext } from '../../auth/auth.types';
 import { dataSource } from '../../db/datasource';
 import { ApiKey, ApiKeyStatus } from '../../entities/api-key.entity';
 import { Application } from '../../entities/application.entity';
-import { AuditCategory, AuditEventType, AuditSeverity } from '../../entities/audit-log.entity';
-import { Service as ServiceEntity, ServiceStatus } from '../../entities/service.entity';
+import {
+  AuditCategory,
+  AuditEventType,
+  AuditSeverity,
+} from '../../entities/audit-log.entity';
+import {
+  Service as ServiceEntity,
+  ServiceStatus,
+} from '../../entities/service.entity';
 import { AuditLogService } from '../audit/audit-log.service';
 
 @Service()
 @Resolver(Application)
 export class ApplicationResolver {
   constructor(
-    @Inject('ApplicationRepository') private readonly applicationRepository: Repository<Application>,
-    @Inject('ServiceRepository') private readonly serviceRepository: Repository<ServiceEntity>,
+    @Inject('ApplicationRepository')
+    private readonly applicationRepository: Repository<Application>,
+    @Inject('ServiceRepository')
+    private readonly serviceRepository: Repository<ServiceEntity>,
     @Inject() private readonly apiKeyService: ApiKeyService
   ) {}
 
   @Query(() => [Application])
   @Directive('@authz(rules: ["isAuthenticated"])')
-  async myApplications(@Ctx() context: ExtendedYogaContext): Promise<Application[]> {
+  async myApplications(
+    @Ctx() context: ExtendedYogaContext
+  ): Promise<Application[]> {
     return this.applicationRepository.find({
       where: { ownerId: context.user!.id },
-      relations: ['owner', 'apiKeys', 'whitelistedServices']
+      relations: ['owner', 'apiKeys', 'whitelistedServices'],
     });
   }
 
@@ -33,7 +53,18 @@ export class ApplicationResolver {
   @Directive('@authz(rules: ["isAdmin"])')
   async allApplications(): Promise<Application[]> {
     return this.applicationRepository.find({
-      relations: ['owner', 'apiKeys', 'whitelistedServices']
+      relations: ['owner', 'apiKeys', 'whitelistedServices'],
+    });
+  }
+
+  @Query(() => [Application])
+  @Directive('@authz(rules: ["isAdmin"])')
+  async applicationsByUser(
+    @Arg('userId', () => ID) userId: string
+  ): Promise<Application[]> {
+    return this.applicationRepository.find({
+      where: { ownerId: userId },
+      relations: ['owner', 'apiKeys', 'whitelistedServices'],
     });
   }
 
@@ -47,14 +78,14 @@ export class ApplicationResolver {
     const application = this.applicationRepository.create({
       name,
       description,
-      ownerId: context.user!.id
+      ownerId: context.user!.id,
     });
     const saved = await this.applicationRepository.save(application);
     const audit = new AuditLogService();
     await audit.log(AuditEventType.APPLICATION_CREATED, {
       applicationId: saved.id,
       userId: context.user!.id,
-      metadata: { name }
+      metadata: { name },
     });
     return saved;
   }
@@ -68,7 +99,7 @@ export class ApplicationResolver {
   ): Promise<boolean> {
     const application = await this.applicationRepository.findOne({
       where: { id: applicationId },
-      relations: ['whitelistedServices']
+      relations: ['whitelistedServices'],
     });
 
     if (!application) {
@@ -76,13 +107,20 @@ export class ApplicationResolver {
     }
 
     // Check ownership (unless admin)
-    if (application.ownerId !== context.user!.id && !context.user?.permissions?.includes('admin')) {
+    if (
+      application.ownerId !== context.user!.id &&
+      !context.user?.permissions?.includes('admin')
+    ) {
       throw new GraphQLError('Insufficient permissions');
     }
 
     // Check if service is externally accessible
     const service = await this.serviceRepository.findOne({
-      where: { id: serviceId, externally_accessible: true, status: ServiceStatus.ACTIVE }
+      where: {
+        id: serviceId,
+        externally_accessible: true,
+        status: ServiceStatus.ACTIVE,
+      },
     });
 
     if (!service) {
@@ -108,7 +146,7 @@ export class ApplicationResolver {
   ): Promise<boolean> {
     const application = await this.applicationRepository.findOne({
       where: { id: applicationId },
-      relations: ['whitelistedServices']
+      relations: ['whitelistedServices'],
     });
 
     if (!application) {
@@ -116,11 +154,16 @@ export class ApplicationResolver {
     }
 
     // Check ownership (unless admin)
-    if (application.ownerId !== context.user!.id && !context.user?.permissions?.includes('admin')) {
+    if (
+      application.ownerId !== context.user!.id &&
+      !context.user?.permissions?.includes('admin')
+    ) {
       throw new GraphQLError('Insufficient permissions');
     }
 
-    application.whitelistedServices = application.whitelistedServices.filter((s) => s.id !== serviceId);
+    application.whitelistedServices = application.whitelistedServices.filter(
+      (s) => s.id !== serviceId
+    );
 
     await this.applicationRepository.save(application);
     return true;
@@ -137,7 +180,7 @@ export class ApplicationResolver {
   ): Promise<string> {
     const application = await this.applicationRepository.findOne({
       where: { id: applicationId },
-      relations: ['owner']
+      relations: ['owner'],
     });
 
     if (!application) {
@@ -145,11 +188,19 @@ export class ApplicationResolver {
     }
 
     // Check ownership (unless admin)
-    if (application.ownerId !== context.user!.id && !context.user?.permissions?.includes('admin')) {
+    if (
+      application.ownerId !== context.user!.id &&
+      !context.user?.permissions?.includes('admin')
+    ) {
       throw new GraphQLError('Insufficient permissions');
     }
 
-    const { apiKey } = await this.apiKeyService.generateApiKey(applicationId, name, scopes, expiresAt);
+    const { apiKey } = await this.apiKeyService.generateApiKey(
+      applicationId,
+      name,
+      scopes,
+      expiresAt
+    );
     const audit = new AuditLogService();
     await audit.log(AuditEventType.API_KEY_CREATED, {
       applicationId,
@@ -160,7 +211,7 @@ export class ApplicationResolver {
       action: 'create_api_key',
       success: true,
       resourceType: 'api_key',
-      resourceId: applicationId
+      resourceId: applicationId,
     } as any);
     // Only return the key once - it won't be shown again
     return apiKey;
@@ -168,10 +219,13 @@ export class ApplicationResolver {
 
   @Mutation(() => Boolean)
   @Directive('@authz(rules: ["isAuthenticated"])')
-  async revokeApiKey(@Arg('apiKeyId', () => ID) apiKeyId: string, @Ctx() context: ExtendedYogaContext): Promise<boolean> {
+  async revokeApiKey(
+    @Arg('apiKeyId', () => ID) apiKeyId: string,
+    @Ctx() context: ExtendedYogaContext
+  ): Promise<boolean> {
     const apiKey = await dataSource.getRepository(ApiKey).findOne({
       where: { id: apiKeyId },
-      relations: ['application']
+      relations: ['application'],
     });
 
     if (!apiKey) {
@@ -179,11 +233,16 @@ export class ApplicationResolver {
     }
 
     // Check ownership (unless admin)
-    if (apiKey.application.ownerId !== context.user!.id && !context.user?.permissions?.includes('admin')) {
+    if (
+      apiKey.application.ownerId !== context.user!.id &&
+      !context.user?.permissions?.includes('admin')
+    ) {
       throw new GraphQLError('Insufficient permissions');
     }
 
-    await dataSource.getRepository(ApiKey).update(apiKeyId, { status: ApiKeyStatus.REVOKED });
+    await dataSource
+      .getRepository(ApiKey)
+      .update(apiKeyId, { status: ApiKeyStatus.REVOKED });
     const audit = new AuditLogService();
     await audit.log(AuditEventType.API_KEY_REVOKED, {
       applicationId: apiKey.application.id,
@@ -194,7 +253,7 @@ export class ApplicationResolver {
       action: 'revoke_api_key',
       success: true,
       resourceType: 'api_key',
-      resourceId: apiKeyId
+      resourceId: apiKeyId,
     } as any);
     return true;
   }
@@ -207,7 +266,7 @@ export class ApplicationResolver {
   ): Promise<ServiceEntity[]> {
     const application = await this.applicationRepository.findOne({
       where: { id: applicationId },
-      relations: ['owner', 'whitelistedServices']
+      relations: ['owner', 'whitelistedServices'],
     });
 
     if (!application) {
@@ -215,7 +274,10 @@ export class ApplicationResolver {
     }
 
     // Check ownership or admin rights
-    if (application.ownerId !== context.user!.id && !context.user?.permissions?.includes('admin')) {
+    if (
+      application.ownerId !== context.user!.id &&
+      !context.user?.permissions?.includes('admin')
+    ) {
       throw new GraphQLError('Insufficient permissions');
     }
 
@@ -230,7 +292,7 @@ export class ApplicationResolver {
   ): Promise<ApiKey[]> {
     const application = await this.applicationRepository.findOne({
       where: { id: applicationId },
-      relations: ['owner', 'apiKeys']
+      relations: ['owner', 'apiKeys'],
     });
 
     if (!application) {
@@ -238,7 +300,10 @@ export class ApplicationResolver {
     }
 
     // Check ownership or admin rights
-    if (application.ownerId !== context.user!.id && !context.user?.permissions?.includes('admin')) {
+    if (
+      application.ownerId !== context.user!.id &&
+      !context.user?.permissions?.includes('admin')
+    ) {
       throw new GraphQLError('Insufficient permissions');
     }
 
@@ -253,7 +318,9 @@ export class ApplicationResolver {
     @Arg('perDay', () => Int, { nullable: true }) perDay: number,
     @Arg('disabled', { nullable: true }) disabled: boolean
   ): Promise<Application> {
-    const app = await this.applicationRepository.findOne({ where: { id: applicationId } });
+    const app = await this.applicationRepository.findOne({
+      where: { id: applicationId },
+    });
     if (!app) throw new GraphQLError('Application not found');
     app.rateLimitPerMinute = perMinute ?? app.rateLimitPerMinute ?? null;
     app.rateLimitPerDay = perDay ?? app.rateLimitPerDay ?? null;

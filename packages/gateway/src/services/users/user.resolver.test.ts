@@ -2,6 +2,7 @@ import assert from 'node:assert';
 import { after, before, beforeEach, describe, it } from 'node:test';
 import { Container } from 'typedi';
 import { JWTService } from '../../auth/jwt.service';
+import { Service as ServiceEntity } from '../../entities/service.entity';
 import { TestDatabaseManager } from '../../test/test-utils';
 import { SessionService } from '../sessions/session.service';
 import { User } from './user.entity';
@@ -24,6 +25,7 @@ describe('UserResolver', () => {
   let userRepository: any;
   let sessionService: SessionService;
   let jwtService: JWTService;
+  let serviceRepository: any;
 
   before(async () => {
     await TestDatabaseManager.setupDatabase();
@@ -36,9 +38,15 @@ describe('UserResolver', () => {
   beforeEach(async () => {
     await TestDatabaseManager.clearDatabase();
     userRepository = await TestDatabaseManager.getRepository(User);
+    serviceRepository = await TestDatabaseManager.getRepository(ServiceEntity);
     sessionService = Container.get(SessionService);
     jwtService = Container.get(JWTService);
-    userResolver = new UserResolver(userRepository, sessionService, jwtService);
+    userResolver = new UserResolver(
+      userRepository,
+      sessionService,
+      jwtService,
+      serviceRepository
+    );
   });
 
   describe('createUser', () => {
@@ -62,6 +70,29 @@ describe('UserResolver', () => {
       });
       assert.ok(dbUser);
       assert.strictEqual(dbUser.email, userData.email);
+    });
+
+    it('should respect provided permissions and verification flag', async () => {
+      const userData = {
+        email: 'AdminUser@Example.com ',
+        password: 'password123',
+        permissions: ['ADMIN', 'user', ''],
+        isEmailVerified: true,
+      } as any;
+
+      const user = await userResolver.createUser(userData);
+
+      assert.ok(user.id);
+      assert.strictEqual(user.email, 'adminuser@example.com');
+      assert.deepStrictEqual(user.permissions.sort(), ['admin', 'user']);
+      assert.strictEqual(user.isEmailVerified, true);
+
+      const dbUser = await userRepository.findOne({
+        where: { email: 'adminuser@example.com' },
+      });
+      assert.ok(dbUser);
+      assert.strictEqual(dbUser.isEmailVerified, true);
+      assert.deepStrictEqual(dbUser.permissions.sort(), ['admin', 'user']);
     });
 
     it('should throw error for duplicate email', async () => {

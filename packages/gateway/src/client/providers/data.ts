@@ -80,10 +80,10 @@ export const dataProvider: DataProvider = {
     const response = await authenticatedFetch(API_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       credentials: 'include',
-      body: JSON.stringify({ query })
+      body: JSON.stringify({ query }),
     });
 
     const result = await response.json();
@@ -92,11 +92,16 @@ export const dataProvider: DataProvider = {
       throw new Error(result.errors[0].message);
     }
 
-    const data = result.data[resource] || result.data.myServices || result.data.myApplications || result.data.sessions || [];
+    const data =
+      result.data[resource] ||
+      result.data.myServices ||
+      result.data.myApplications ||
+      result.data.sessions ||
+      [];
 
     return {
       data,
-      total: data.length
+      total: data.length,
     };
   },
 
@@ -105,15 +110,43 @@ export const dataProvider: DataProvider = {
 
     if (resource === 'users') {
       query = `
-        query GetUser($id: String!) {
+        query GetUser($id: ID!) {
           user(id: $id) {
             id
             email
             permissions
             isEmailVerified
             createdAt
+            updatedAt
+            lastLoginAt
             failedLoginAttempts
             lockedUntil
+            sessions {
+              id
+              isActive
+              ipAddress
+              userAgent
+              createdAt
+              lastActivity
+              expiresAt
+            }
+            ownedServices {
+              id
+              name
+              status
+              url
+              updatedAt
+            }
+          }
+          applicationsByUser(userId: $id) {
+            id
+            name
+            description
+            createdAt
+            updatedAt
+            rateLimitPerMinute
+            rateLimitPerDay
+            rateLimitDisabled
           }
         }
       `;
@@ -165,7 +198,7 @@ export const dataProvider: DataProvider = {
     const response = await authenticatedFetch(API_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       credentials: 'include',
       body: JSON.stringify(
@@ -173,9 +206,9 @@ export const dataProvider: DataProvider = {
           ? { query }
           : {
               query,
-              variables: { id }
+              variables: { id },
             }
-      )
+      ),
     });
 
     const result = await response.json();
@@ -184,14 +217,28 @@ export const dataProvider: DataProvider = {
       throw new Error(result.errors[0].message);
     }
 
-    let data = result.data.user || result.data.service;
+    if (resource === 'users') {
+      const user = result.data.user;
+      if (!user) {
+        return { data: null };
+      }
+      const applications = result.data.applicationsByUser || [];
+      return {
+        data: {
+          ...user,
+          applications,
+        },
+      };
+    }
+
+    let data = result.data.service;
     if (resource === 'applications') {
       const apps = result.data.myApplications || [];
       data = apps.find((a: any) => a.id === id);
     }
 
     return {
-      data
+      data,
     };
   },
 
@@ -261,7 +308,7 @@ export const dataProvider: DataProvider = {
     const response = await authenticatedFetch(API_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       credentials: 'include',
       body: JSON.stringify({
@@ -272,9 +319,12 @@ export const dataProvider: DataProvider = {
             : resource === 'users'
               ? { data: variables }
               : resource === 'applications'
-                ? { name: (variables as any).name, description: (variables as any).description }
-                : {}
-      })
+                ? {
+                    name: (variables as any).name,
+                    description: (variables as any).description,
+                  }
+                : {},
+      }),
     });
 
     const result = await response.json();
@@ -289,7 +339,7 @@ export const dataProvider: DataProvider = {
     else if (resource === 'applications') data = result.data.createApplication;
 
     return {
-      data
+      data,
     };
   },
 
@@ -334,13 +384,16 @@ export const dataProvider: DataProvider = {
     const response = await authenticatedFetch(API_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       credentials: 'include',
       body: JSON.stringify({
         query: mutation,
-        variables: resource === 'services' ? { id, input: inputVariables } : { id, data: variables }
-      })
+        variables:
+          resource === 'services'
+            ? { id, input: inputVariables }
+            : { id, data: variables },
+      }),
     });
 
     const result = await response.json();
@@ -353,11 +406,11 @@ export const dataProvider: DataProvider = {
     if (resource === 'services') {
       const getResult = await dataProvider.getOne({ resource, id });
       return {
-        data: getResult.data as any
+        data: getResult.data as any,
       };
     } else {
       return {
-        data: result.data.updateUser as any
+        data: result.data.updateUser as any,
       };
     }
   },
@@ -382,13 +435,13 @@ export const dataProvider: DataProvider = {
     const response = await authenticatedFetch(API_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       credentials: 'include',
       body: JSON.stringify({
         query: mutation,
-        variables: { id }
-      })
+        variables: { id },
+      }),
     });
 
     const result = await response.json();
@@ -398,7 +451,7 @@ export const dataProvider: DataProvider = {
     }
 
     return {
-      data: { id } as any
+      data: { id } as any,
     };
   },
 
@@ -418,7 +471,16 @@ export const dataProvider: DataProvider = {
     throw new Error('UpdateMany operation not implemented');
   },
 
-  custom: async ({ url, method, filters, sorters, payload, query, headers, meta }) => {
+  custom: async ({
+    url,
+    method,
+    filters,
+    sorters,
+    payload,
+    query,
+    headers,
+    meta,
+  }) => {
     if (meta?.operation === 'createApplicationApiKey') {
       const mutation = `
         mutation CreateAppKey($applicationId: ID!, $name: String!, $scopes: [String!], $expiresAt: DateTimeISO)
@@ -431,8 +493,8 @@ export const dataProvider: DataProvider = {
         credentials: 'include',
         body: JSON.stringify({
           query: mutation,
-          variables: payload
-        })
+          variables: payload,
+        }),
       });
 
       const result = await response.json();
@@ -449,7 +511,7 @@ export const dataProvider: DataProvider = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ query: mutation, variables: payload })
+        body: JSON.stringify({ query: mutation, variables: payload }),
       });
       const result = await response.json();
       if (result.errors) throw new Error(result.errors[0].message);
@@ -464,7 +526,7 @@ export const dataProvider: DataProvider = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ query: queryString })
+        body: JSON.stringify({ query: queryString }),
       });
       const result = await response.json();
       if (result.errors) throw new Error(result.errors[0].message);
@@ -479,7 +541,7 @@ export const dataProvider: DataProvider = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ query: mutation, variables: payload })
+        body: JSON.stringify({ query: mutation, variables: payload }),
       });
       const result = await response.json();
       if (result.errors) throw new Error(result.errors[0].message);
@@ -494,7 +556,7 @@ export const dataProvider: DataProvider = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ query: mutation, variables: payload })
+        body: JSON.stringify({ query: mutation, variables: payload }),
       });
       const result = await response.json();
       if (result.errors) throw new Error(result.errors[0].message);
@@ -518,13 +580,13 @@ export const dataProvider: DataProvider = {
       const response = await authenticatedFetch(API_URL, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         credentials: 'include',
         body: JSON.stringify({
           query: mutation,
-          variables: { serviceId: (payload as any)?.serviceId }
-        })
+          variables: { serviceId: (payload as any)?.serviceId },
+        }),
       });
 
       const result = await response.json();
@@ -534,7 +596,7 @@ export const dataProvider: DataProvider = {
       }
 
       return {
-        data: result.data.rotateServiceKey
+        data: result.data.rotateServiceKey,
       };
     }
 
@@ -554,13 +616,13 @@ export const dataProvider: DataProvider = {
       const response = await authenticatedFetch(API_URL, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         credentials: 'include',
         body: JSON.stringify({
           query: queryString,
-          variables: { serviceId: (payload as any)?.serviceId }
-        })
+          variables: { serviceId: (payload as any)?.serviceId },
+        }),
       });
 
       const result = await response.json();
@@ -570,7 +632,7 @@ export const dataProvider: DataProvider = {
       }
 
       return {
-        data: result.data.serviceKeys
+        data: result.data.serviceKeys,
       };
     }
 
@@ -584,7 +646,7 @@ export const dataProvider: DataProvider = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ query: mutation, variables: payload })
+        body: JSON.stringify({ query: mutation, variables: payload }),
       });
       const result = await response.json();
       if (result.errors) throw new Error(result.errors[0].message);
@@ -612,7 +674,7 @@ export const dataProvider: DataProvider = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ query: mutation, variables: payload })
+        body: JSON.stringify({ query: mutation, variables: payload }),
       });
       const result = await response.json();
       if (result.errors) throw new Error(result.errors[0].message);
@@ -638,7 +700,7 @@ export const dataProvider: DataProvider = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ query, variables: payload })
+        body: JSON.stringify({ query, variables: payload }),
       });
       const result = await response.json();
       if (result.errors) throw new Error(result.errors[0].message);
@@ -665,7 +727,7 @@ export const dataProvider: DataProvider = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ query, variables: payload })
+        body: JSON.stringify({ query, variables: payload }),
       });
       const result = await response.json();
       if (result.errors) throw new Error(result.errors[0].message);
@@ -673,5 +735,5 @@ export const dataProvider: DataProvider = {
     }
 
     throw new Error('Custom operation not implemented');
-  }
+  },
 };
