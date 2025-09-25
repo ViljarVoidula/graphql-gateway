@@ -1,5 +1,14 @@
 // Use relative import to work with ts-node without path alias mapping issues
-import { Arg, Field, ID, InputType, Mutation, ObjectType, Query, Resolver } from 'type-graphql';
+import {
+  Arg,
+  Field,
+  ID,
+  InputType,
+  Mutation,
+  ObjectType,
+  Query,
+  Resolver,
+} from 'type-graphql';
 import { Service } from 'typedi';
 import { dataSource } from '../../db/datasource';
 import { DocDocument } from '../../entities/docs/document.entity';
@@ -151,9 +160,9 @@ export class DocsAuthoringResolver {
               state: latest.state,
               mdxRaw: latest.mdxRaw,
               updatedAt: latest.updatedAt,
-              publishedAt: latest.publishedAt
+              publishedAt: latest.publishedAt,
             }
-          : undefined
+          : undefined,
       } as DocumentWithLatestRevision;
     });
   }
@@ -163,7 +172,7 @@ export class DocsAuthoringResolver {
     // Get all active documents with their published revisions
     const docs = await this.docRepo.find({
       where: { status: 'ACTIVE' },
-      relations: { revisions: true }
+      relations: { revisions: true },
     });
 
     const publishedDocs: PublishedDocumentDTO[] = [];
@@ -174,12 +183,16 @@ export class DocsAuthoringResolver {
 
       if (doc.primaryRevisionId) {
         // Try to find the primary revision
-        publishedRevision = doc.revisions.find((r) => r.id === doc.primaryRevisionId);
+        publishedRevision = doc.revisions.find(
+          (r) => r.id === doc.primaryRevisionId
+        );
       }
 
       // If no primary revision found, find the latest published revision
       if (!publishedRevision) {
-        publishedRevision = doc.revisions.filter((r) => r.state === 'PUBLISHED').sort((a, b) => b.version - a.version)[0];
+        publishedRevision = doc.revisions
+          .filter((r) => r.state === 'PUBLISHED')
+          .sort((a, b) => b.version - a.version)[0];
       }
 
       if (publishedRevision && publishedRevision.state === 'PUBLISHED') {
@@ -194,7 +207,7 @@ export class DocsAuthoringResolver {
           description: frontmatter.description,
           category: frontmatter.category,
           publishedAt: publishedRevision.publishedAt || new Date(),
-          version: publishedRevision.version
+          version: publishedRevision.version,
         });
       }
     }
@@ -209,10 +222,12 @@ export class DocsAuthoringResolver {
   }
 
   @Query(() => PublishedDocumentDTO, { nullable: true })
-  async publishedDoc(@Arg('slug') slug: string): Promise<PublishedDocumentDTO | null> {
+  async publishedDoc(
+    @Arg('slug') slug: string
+  ): Promise<PublishedDocumentDTO | null> {
     const doc = await this.docRepo.findOne({
       where: { slug, status: 'ACTIVE' },
-      relations: { revisions: true }
+      relations: { revisions: true },
     });
 
     if (!doc) return null;
@@ -221,11 +236,15 @@ export class DocsAuthoringResolver {
     let publishedRevision = null;
 
     if (doc.primaryRevisionId) {
-      publishedRevision = doc.revisions.find((r) => r.id === doc.primaryRevisionId);
+      publishedRevision = doc.revisions.find(
+        (r) => r.id === doc.primaryRevisionId
+      );
     }
 
     if (!publishedRevision) {
-      publishedRevision = doc.revisions.filter((r) => r.state === 'PUBLISHED').sort((a, b) => b.version - a.version)[0];
+      publishedRevision = doc.revisions
+        .filter((r) => r.state === 'PUBLISHED')
+        .sort((a, b) => b.version - a.version)[0];
     }
 
     if (!publishedRevision || publishedRevision.state !== 'PUBLISHED') {
@@ -242,7 +261,7 @@ export class DocsAuthoringResolver {
       description: frontmatter.description,
       category: frontmatter.category,
       publishedAt: publishedRevision.publishedAt || new Date(),
-      version: publishedRevision.version
+      version: publishedRevision.version,
     };
   }
 
@@ -250,7 +269,12 @@ export class DocsAuthoringResolver {
   async revision(@Arg('id') id: string): Promise<DocRevisionDTO | null> {
     const rev = await this.revRepo.findOne({ where: { id } });
     if (!rev) return null;
-    return { id: rev.id, version: rev.version, state: rev.state, mdxRaw: rev.mdxRaw };
+    return {
+      id: rev.id,
+      version: rev.version,
+      state: rev.state,
+      mdxRaw: rev.mdxRaw,
+    };
   }
 
   @Query(() => String)
@@ -260,51 +284,87 @@ export class DocsAuthoringResolver {
   }
 
   @Mutation(() => DocRevisionDTO)
-  async createDocument(@Arg('input') input: CreateDocumentInput): Promise<DocRevisionDTO> {
-    const existing = await this.docRepo.findOne({ where: { slug: input.slug } });
+  async createDocument(
+    @Arg('input') input: CreateDocumentInput
+  ): Promise<DocRevisionDTO> {
+    const existing = await this.docRepo.findOne({
+      where: { slug: input.slug },
+    });
     if (existing) throw new Error('Slug already exists');
     const compiled = await compileMDX(input.mdxRaw);
-    const doc = this.docRepo.create({ slug: input.slug, title: input.title, tags: [] });
+    const doc = this.docRepo.create({
+      slug: input.slug,
+      title: input.title,
+      tags: [],
+    });
     await this.docRepo.save(doc);
     const rev = this.revRepo.create({
-      document: doc,
+      document: { id: doc.id } as any,
       version: 1,
       state: 'DRAFT',
       mdxRaw: input.mdxRaw,
       frontmatterJson: compiled.frontmatter,
       headings: compiled.headings,
-      createdBy: 'system'
+      createdBy: 'system',
     });
     await this.revRepo.save(rev);
-    return { id: rev.id, version: rev.version, state: rev.state, mdxRaw: rev.mdxRaw };
+    return {
+      id: rev.id,
+      version: rev.version,
+      state: rev.state,
+      mdxRaw: rev.mdxRaw,
+    };
   }
 
   @Mutation(() => DocRevisionDTO)
-  async updateRevision(@Arg('input') input: UpdateRevisionInput): Promise<DocRevisionDTO> {
-    const rev = await this.revRepo.findOne({ where: { id: input.revisionId }, relations: { document: true } });
+  async updateRevision(
+    @Arg('input') input: UpdateRevisionInput
+  ): Promise<DocRevisionDTO> {
+    const rev = await this.revRepo.findOne({
+      where: { id: input.revisionId },
+      relations: { document: true },
+    });
     if (!rev) throw new Error('Revision not found');
     if (input.mdxRaw) {
       const compiled = await compileMDX(input.mdxRaw);
+      // Partial update to avoid touching relations
+      await this.revRepo.update(
+        { id: rev.id },
+        {
+          mdxRaw: input.mdxRaw,
+          frontmatterJson: compiled.frontmatter,
+          headings: compiled.headings,
+        }
+      );
+      // Reflect changes locally for return value
       rev.mdxRaw = input.mdxRaw;
-      rev.frontmatterJson = compiled.frontmatter;
-      rev.headings = compiled.headings;
+      rev.frontmatterJson = compiled.frontmatter as any;
+      rev.headings = compiled.headings as any;
     }
     if (input.title) {
       rev.document.title = input.title;
       await this.docRepo.save(rev.document);
     }
-    await this.revRepo.save(rev);
-    return { id: rev.id, version: rev.version, state: rev.state, mdxRaw: rev.mdxRaw };
+    return {
+      id: rev.id,
+      version: rev.version,
+      state: rev.state,
+      mdxRaw: rev.mdxRaw,
+    };
   }
 
   @Mutation(() => DocDTO)
-  async updateDocument(@Arg('input') input: UpdateDocumentInput): Promise<DocDTO> {
+  async updateDocument(
+    @Arg('input') input: UpdateDocumentInput
+  ): Promise<DocDTO> {
     const doc = await this.docRepo.findOne({ where: { id: input.documentId } });
     if (!doc) throw new Error('Document not found');
 
     // Update slug if provided and changed
     if (input.slug && input.slug !== doc.slug) {
-      const exists = await this.docRepo.findOne({ where: { slug: input.slug } });
+      const exists = await this.docRepo.findOne({
+        where: { slug: input.slug },
+      });
       if (exists) throw new Error('Slug already exists');
       const oldSlug = doc.slug;
       doc.slug = input.slug;
@@ -321,7 +381,11 @@ export class DocsAuthoringResolver {
     }
 
     // Update title if provided
-    if (typeof input.title === 'string' && input.title.length > 0 && input.title !== doc.title) {
+    if (
+      typeof input.title === 'string' &&
+      input.title.length > 0 &&
+      input.title !== doc.title
+    ) {
       doc.title = input.title;
     }
 
@@ -330,60 +394,104 @@ export class DocsAuthoringResolver {
   }
 
   @Mutation(() => PublishResult)
-  async publishRevision(@Arg('revisionId') revisionId: string): Promise<PublishResult> {
-    const rev = await this.revRepo.findOne({ where: { id: revisionId }, relations: { document: true } });
+  async publishRevision(
+    @Arg('revisionId') revisionId: string
+  ): Promise<PublishResult> {
+    const rev = await this.revRepo.findOne({
+      where: { id: revisionId },
+      relations: { document: true },
+    });
     if (!rev) throw new Error('Revision not found');
-    rev.state = 'PUBLISHED';
-    rev.publishedAt = new Date();
-    await this.revRepo.save(rev);
-    rev.document.primaryRevisionId = rev.id;
-    await this.docRepo.save(rev.document);
-    const chunksCreated = await chunkAndStoreRevision(rev);
+    const now = new Date();
+    // Partial update to avoid touching relations
+    await this.revRepo.update(
+      { id: rev.id },
+      { state: 'PUBLISHED', publishedAt: now }
+    );
+    await this.docRepo.update(
+      { id: rev.document.id },
+      { primaryRevisionId: rev.id }
+    );
+    const chunksCreated = await chunkAndStoreRevision(rev, rev.document.slug);
     return { documentId: rev.document.id, revisionId: rev.id, chunksCreated };
   }
 
   @Mutation(() => DocRevisionDTO)
-  async createDraft(@Arg('documentId') documentId: string): Promise<DocRevisionDTO> {
-    const doc = await this.docRepo.findOne({ where: { id: documentId }, relations: { revisions: true } });
+  async createDraft(
+    @Arg('documentId') documentId: string
+  ): Promise<DocRevisionDTO> {
+    const doc = await this.docRepo.findOne({
+      where: { id: documentId },
+      relations: { revisions: true },
+    });
     if (!doc) throw new Error('Document not found');
     // If an existing DRAFT revision exists, return it instead of creating a new one
     const existingDraft = doc.revisions.find((r) => r.state === 'DRAFT');
     if (existingDraft) {
-      return { id: existingDraft.id, version: existingDraft.version, state: existingDraft.state, mdxRaw: existingDraft.mdxRaw };
+      return {
+        id: existingDraft.id,
+        version: existingDraft.version,
+        state: existingDraft.state,
+        mdxRaw: existingDraft.mdxRaw,
+      };
     }
     const latest = doc.revisions.sort((a, b) => b.version - a.version)[0];
     const base = latest || null;
     const rev = this.revRepo.create({
-      document: doc,
+      document: { id: doc.id } as any,
       version: (latest?.version || 0) + 1,
       state: 'DRAFT',
-      mdxRaw: base?.mdxRaw || '---\n' + `title: "${doc.title.replace(/"/g, '\"')}"` + '\n---\n\n# ' + doc.title + '\n',
+      mdxRaw:
+        base?.mdxRaw ||
+        '---\n' +
+          `title: "${doc.title.replace(/"/g, '\"')}"` +
+          '\n---\n\n# ' +
+          doc.title +
+          '\n',
       frontmatterJson: base?.frontmatterJson || { title: doc.title },
       headings: base?.headings || [],
-      createdBy: 'system'
+      createdBy: 'system',
     });
     await this.revRepo.save(rev);
-    return { id: rev.id, version: rev.version, state: rev.state, mdxRaw: rev.mdxRaw };
+    return {
+      id: rev.id,
+      version: rev.version,
+      state: rev.state,
+      mdxRaw: rev.mdxRaw,
+    };
   }
 
   @Mutation(() => DocDTO)
-  async duplicateDocument(@Arg('documentId') documentId: string, @Arg('newSlug') newSlug: string): Promise<DocDTO> {
-    const existingSlug = await this.docRepo.findOne({ where: { slug: newSlug } });
+  async duplicateDocument(
+    @Arg('documentId') documentId: string,
+    @Arg('newSlug') newSlug: string
+  ): Promise<DocDTO> {
+    const existingSlug = await this.docRepo.findOne({
+      where: { slug: newSlug },
+    });
     if (existingSlug) throw new Error('newSlug already exists');
-    const doc = await this.docRepo.findOne({ where: { id: documentId }, relations: { revisions: true } });
+    const doc = await this.docRepo.findOne({
+      where: { id: documentId },
+      relations: { revisions: true },
+    });
     if (!doc) throw new Error('Document not found');
     const latest = doc.revisions.sort((a, b) => b.version - a.version)[0];
-    const copy = this.docRepo.create({ slug: newSlug, title: doc.title + ' Copy', tags: [...doc.tags], status: 'ACTIVE' });
+    const copy = this.docRepo.create({
+      slug: newSlug,
+      title: doc.title + ' Copy',
+      tags: [...doc.tags],
+      status: 'ACTIVE',
+    });
     await this.docRepo.save(copy);
     if (latest) {
       const newRev = this.revRepo.create({
-        document: copy,
+        document: { id: copy.id } as any,
         version: 1,
         state: 'DRAFT',
         mdxRaw: latest.mdxRaw,
         frontmatterJson: latest.frontmatterJson,
         headings: latest.headings,
-        createdBy: 'system'
+        createdBy: 'system',
       });
       await this.revRepo.save(newRev);
     }
@@ -391,7 +499,9 @@ export class DocsAuthoringResolver {
   }
 
   @Mutation(() => Boolean)
-  async archiveDocument(@Arg('documentId') documentId: string): Promise<boolean> {
+  async archiveDocument(
+    @Arg('documentId') documentId: string
+  ): Promise<boolean> {
     const doc = await this.docRepo.findOne({ where: { id: documentId } });
     if (!doc) throw new Error('Document not found');
     if (doc.status === 'ARCHIVED') return true;
@@ -401,7 +511,9 @@ export class DocsAuthoringResolver {
   }
 
   @Mutation(() => Boolean)
-  async restoreDocument(@Arg('documentId') documentId: string): Promise<boolean> {
+  async restoreDocument(
+    @Arg('documentId') documentId: string
+  ): Promise<boolean> {
     const doc = await this.docRepo.findOne({ where: { id: documentId } });
     if (!doc) throw new Error('Document not found');
     if (doc.status !== 'ARCHIVED') return true;
@@ -411,7 +523,9 @@ export class DocsAuthoringResolver {
   }
 
   @Mutation(() => Boolean)
-  async deleteDocument(@Arg('documentId') documentId: string): Promise<boolean> {
+  async deleteDocument(
+    @Arg('documentId') documentId: string
+  ): Promise<boolean> {
     // Find the document first to obtain slug for cleanup
     const doc = await this.docRepo.findOne({ where: { id: documentId } });
     if (!doc) throw new Error('Document not found');
@@ -427,5 +541,33 @@ export class DocsAuthoringResolver {
     // Delete the document; revisions cascade via FK ON DELETE CASCADE
     await this.docRepo.delete({ id: documentId });
     return true;
+  }
+
+  @Query(() => [String])
+  async validateDocsIntegrity(): Promise<string[]> {
+    const errors: string[] = [];
+    // Revisions missing document_id (should not exist)
+    const raw = await dataSource.query(
+      `SELECT id FROM docs_document_revisions WHERE document_id IS NULL LIMIT 50`
+    );
+    if (raw.length) {
+      errors.push(
+        `Revisions with NULL document_id: ${raw.map((r: any) => r.id).join(', ')}`
+      );
+    }
+    // Documents pointing to non-existent primary revision
+    const orphanPrimary = await dataSource.query(
+      `SELECT d.id, d.primary_revision_id FROM docs_documents d
+       LEFT JOIN docs_document_revisions r ON r.id = d.primary_revision_id
+       WHERE d.primary_revision_id IS NOT NULL AND r.id IS NULL LIMIT 50`
+    );
+    if (orphanPrimary.length) {
+      errors.push(
+        `Docs with missing primary revision: ${orphanPrimary
+          .map((r: any) => r.id + '->' + r.primary_revision_id)
+          .join(', ')}`
+      );
+    }
+    return errors;
   }
 }

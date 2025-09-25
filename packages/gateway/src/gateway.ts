@@ -1,8 +1,12 @@
 import { stitchSchemas } from '@graphql-tools/stitch';
+import 'reflect-metadata';
 // Use local compat wrapper to avoid TS type conflicts across @graphql-tools packages
 import { createRedisCache } from '@envelop/response-cache-redis';
 import { useGraphQLSSE } from '@graphql-yoga/plugin-graphql-sse';
-import { cacheControlDirective, useResponseCache } from '@graphql-yoga/plugin-response-cache';
+import {
+  cacheControlDirective,
+  useResponseCache,
+} from '@graphql-yoga/plugin-response-cache';
 import { createRedisEventTarget } from '@graphql-yoga/redis-event-target';
 import cors from '@koa/cors';
 import * as fs from 'fs';
@@ -15,6 +19,12 @@ import koaHelmet from 'koa-helmet';
 import responseTime from 'koa-response-time';
 import * as path from 'path';
 import { getStitchingDirectivesTransformer } from './utils/stitchingDirectivesCompat';
+// Ensure experimental metadata API is available for type-graphql decorators
+if (!(Reflect as any)?.defineMetadata) {
+  throw new Error(
+    'reflect-metadata not loaded. Ensure import "reflect-metadata" runs before any decorated classes.'
+  );
+}
 // reflect-metadata is loaded in src/index.ts
 import { Container } from 'typedi';
 import { initializeRedis, redisClient } from './auth/session.config';
@@ -50,8 +60,12 @@ import './services/docs/docs.resolver';
 import './services/latency/latency-health.resolver';
 import './services/latency/request-latency.resolver';
 import './services/search/search.resolver';
-import { ServiceCacheManager, ServiceRegistryService } from './services/service-registry/service-registry.service';
+import {
+  ServiceCacheManager,
+  ServiceRegistryService,
+} from './services/service-registry/service-registry.service';
 import { SessionService } from './services/sessions/session.service';
+import './services/subscriptions/gateway-message-channel.resolver';
 import './services/theme/theme.resolver';
 import { ApplicationUsageService } from './services/usage/application-usage.service';
 import { User } from './services/users/user.entity';
@@ -86,8 +100,8 @@ async function checkHealth() {
     components: {
       database: { status: 'unknown' },
       redis: { status: 'unknown' },
-      services: { status: 'unknown', count: 0 }
-    }
+      services: { status: 'unknown', count: 0 },
+    },
   };
 
   // Check database connection
@@ -105,7 +119,7 @@ async function checkHealth() {
     log.error('Database health check failed', {
       operation: 'healthCheck',
       error: error instanceof Error ? error : new Error(String(error)),
-      metadata: { component: 'database' }
+      metadata: { component: 'database' },
     });
   }
 
@@ -120,7 +134,7 @@ async function checkHealth() {
     log.error('Redis health check failed', {
       operation: 'healthCheck',
       error: error instanceof Error ? error : new Error(String(error)),
-      metadata: { component: 'redis' }
+      metadata: { component: 'redis' },
     });
   }
 
@@ -146,7 +160,7 @@ async function checkHealth() {
     (health as any).serviceMonitor = {
       unhealthyCount: summary.unhealthyCount,
       unhealthy: summary.unhealthy,
-      totalTracked: summary.totalTracked
+      totalTracked: summary.totalTracked,
     };
     if (summary.unhealthyCount > 0 && health.status === 'healthy') {
       health.status = 'degraded';
@@ -157,7 +171,10 @@ async function checkHealth() {
 }
 
 // Service endpoint cache using Map for better control
-export const serviceEndpointCache = new Map<string, { endpoints: string[]; lastUpdated: number }>();
+export const serviceEndpointCache = new Map<
+  string,
+  { endpoints: string[]; lastUpdated: number }
+>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache TTL
 
 async function loadServicesFromDatabase(): Promise<string[]> {
@@ -169,7 +186,7 @@ async function loadServicesFromDatabase(): Promise<string[]> {
   if (cached && now - cached.lastUpdated < CACHE_TTL) {
     log.debug('Using cached service endpoints', {
       operation: 'loadServicesFromDatabase',
-      metadata: { source: 'cache', endpointCount: cached.endpoints.length }
+      metadata: { source: 'cache', endpointCount: cached.endpoints.length },
     });
     return cached.endpoints;
   }
@@ -182,26 +199,34 @@ async function loadServicesFromDatabase(): Promise<string[]> {
     // Update cache on successful fetch
     serviceEndpointCache.set(cacheKey, {
       endpoints,
-      lastUpdated: now
+      lastUpdated: now,
     });
 
     log.debug('Loaded services from database', {
       operation: 'loadServicesFromDatabase',
-      metadata: { source: 'database', endpointCount: endpoints.length, cached: true }
+      metadata: {
+        source: 'database',
+        endpointCount: endpoints.length,
+        cached: true,
+      },
     });
     return endpoints;
   } catch (error) {
     log.error('Failed to load services from database', {
       operation: 'loadServicesFromDatabase',
       error: error instanceof Error ? error : new Error(String(error)),
-      metadata: { source: 'database' }
+      metadata: { source: 'database' },
     });
 
     // Return cached endpoints if available, even if expired
     if (cached) {
       log.warn('Database unavailable, using cached service endpoints', {
         operation: 'loadServicesFromDatabase',
-        metadata: { source: 'cache', fallback: true, endpointCount: cached.endpoints.length }
+        metadata: {
+          source: 'cache',
+          fallback: true,
+          endpointCount: cached.endpoints.length,
+        },
       });
       return cached.endpoints;
     }
@@ -209,7 +234,7 @@ async function loadServicesFromDatabase(): Promise<string[]> {
     // No cache available, return empty array
     log.warn('No cached services available, returning empty array', {
       operation: 'loadServicesFromDatabase',
-      metadata: { source: 'fallback', endpointCount: 0 }
+      metadata: { source: 'fallback', endpointCount: 0 },
     });
     return [];
   }
@@ -226,34 +251,58 @@ function cleanupServiceCache() {
     serviceEndpointCache.delete(cacheKey);
     log.debug('Cleaned up expired service cache', {
       operation: 'cleanupServiceCache',
-      metadata: { source: 'cache' }
+      metadata: { source: 'cache' },
     });
   }
 }
 
 const loader = new SchemaLoader(
   function buildSchemaFromEndpoints(loadedEndpoints) {
-    const subschemas: Array<GraphQLSchema | any> = loadedEndpoints.map(({ sdl, url, useMsgPack }) => ({
-      schema: buildSchema(sdl),
-      executor: buildHMACExecutor({ endpoint: url, timeout: 5000, enableHMAC: true, useMsgPack: !!useMsgPack }),
-      batch: true
-    }));
+    const subschemas: Array<GraphQLSchema | any> = loadedEndpoints.map(
+      ({ sdl, url, useMsgPack }) => ({
+        schema: buildSchema(sdl),
+        executor: buildHMACExecutor({
+          endpoint: url,
+          timeout: 5000,
+          enableHMAC: true,
+          useMsgPack: !!useMsgPack,
+        }),
+        batch: true,
+      })
+    );
 
     // Add local resolvers schema
     const localSchema = makeEndpointsSchema(loader);
     subschemas.push(localSchema as any);
 
+    // Provide cache control directive SDL to the gateway schema
+    const typeDefs = [
+      /* GraphQL */ `
+        ${cacheControlDirective}
+      `,
+    ];
+
     return stitchSchemas({
       subschemaConfigTransforms: [stitchingDirectivesTransformer],
       subschemas,
-      // Provide cache control directive definition so gateway/local schemas can annotate TTLs
-      typeDefs: /* GraphQL */ `
-        ${cacheControlDirective}
-      `
+      typeDefs,
     });
   },
   [] // Will be populated after database connection
 );
+
+// Try to build an initial local-only schema so early requests have a schema.
+try {
+  if (!loader.schema) {
+    loader.schema = makeEndpointsSchema(loader);
+    log.debug('Built initial local schema before first reload');
+  }
+} catch (e) {
+  log.warn('Failed to build initial local schema; will rely on lazy reload', {
+    operation: 'initialSchemaBuild',
+    error: e instanceof Error ? e : new Error(String(e)),
+  });
+}
 
 // Koa application will host the Yoga handler and additional routes
 const app = new Koa();
@@ -272,25 +321,37 @@ app.use(
       directives: {
         defaultSrc: ["'self'"],
         imgSrc: ["'self'", 'data:', 'https://raw.githubusercontent.com'],
-        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://unpkg.com', 'https://cdn.jsdelivr.net', 'blob:'], // Allow unpkg.com for GraphiQL, jsdelivr.net for Voyager, blob: for workers, and unsafe-eval for WebAssembly
-        styleSrc: ["'self'", "'unsafe-inline'", 'https://unpkg.com', 'https://cdn.jsdelivr.net'], // Allow unpkg.com for GraphiQL and jsdelivr.net for Voyager
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "'unsafe-eval'",
+          'https://unpkg.com',
+          'https://cdn.jsdelivr.net',
+          'blob:',
+        ], // Allow unpkg.com for GraphiQL, jsdelivr.net for Voyager, blob: for workers, and unsafe-eval for WebAssembly
+        styleSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          'https://unpkg.com',
+          'https://cdn.jsdelivr.net',
+        ], // Allow unpkg.com for GraphiQL and jsdelivr.net for Voyager
         workerSrc: ["'self'", 'blob:'], // Allow blob workers for Voyager
         connectSrc: [
           "'self'",
           'data:', // Allow data URLs for Voyager's graphviz worker
           'https://cdn.jsdelivr.net', // Allow source maps and other connections to jsdelivr.net
           // Allow configured CORS origin if provided (useful for Admin UI/dev)
-          ...(process.env.CORS_ORIGIN ? [process.env.CORS_ORIGIN] : [])
+          ...(process.env.CORS_ORIGIN ? [process.env.CORS_ORIGIN] : []),
         ],
-        fontSrc: ["'self'", 'data:']
-      }
-    }
+        fontSrc: ["'self'", 'data:'],
+      },
+    },
   })
 );
 app.use(
   cors({
     origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-    credentials: true
+    credentials: true,
   })
 );
 // Skip gzip/deflate for MsgPack since it's already a dense binary format
@@ -300,25 +361,37 @@ app.use(
       if (!contentType) return true;
       if (contentType.includes('application/x-msgpack')) return false; // no compression for msgpack
       return compress.filter ? compress.filter(contentType) : true;
-    }
+    },
   })
 );
 
 // Shared Redis cache for response cache plugin; reuse existing Redis URL and initialize once
-const responseCacheRedisUrl = process.env.RESPONSE_CACHE_REDIS_URL || process.env.REDIS_URL || 'redis://localhost:6379';
+const responseCacheRedisUrl =
+  process.env.RESPONSE_CACHE_REDIS_URL ||
+  process.env.REDIS_URL ||
+  'redis://localhost:6379';
 const responseCacheRedis = new Redis(responseCacheRedisUrl);
-const responseCacheInstance = createRedisCache({ redis: responseCacheRedis as any });
+const responseCacheInstance = createRedisCache({
+  redis: responseCacheRedis as any,
+});
 
 // PubSub over Redis for distributed subscription resolvers (if any local subscriptions exist)
-const pubsubRedisUrl = process.env.PUBSUB_REDIS_URL || process.env.REDIS_URL || 'redis://localhost:6379';
+const pubsubRedisUrl =
+  process.env.PUBSUB_REDIS_URL ||
+  process.env.REDIS_URL ||
+  'redis://localhost:6379';
 const pubsubRedisPublisher = new Redis(pubsubRedisUrl);
 const pubsubRedisSubscriber = new Redis(pubsubRedisUrl);
 const pubSub = createPubSub({
   eventTarget: createRedisEventTarget({
     publishClient: pubsubRedisPublisher as any,
-    subscribeClient: pubsubRedisSubscriber as any
-  })
+    subscribeClient: pubsubRedisSubscriber as any,
+  }),
 });
+
+// Register PubSub instance and GatewayMessagePublisher in DI container
+Container.set('PubSub', pubSub);
+Container.set({ id: 'PubSub', value: pubSub });
 
 // Runtime response cache config snapshot (updated periodically)
 const responseCacheConfig = {
@@ -327,11 +400,42 @@ const responseCacheConfig = {
   includeExtensions: process.env.NODE_ENV === 'development',
   scope: 'per-session' as 'global' | 'per-session',
   ttlPerType: {} as Record<string, number>,
-  ttlPerSchemaCoordinate: {} as Record<string, number>
+  ttlPerSchemaCoordinate: {} as Record<string, number>,
 };
 
 const yoga = createYoga({
-  schema: () => loader.schema,
+  // Always provide a schema at request time. If not ready yet, reload lazily.
+  schema: async () => {
+    if (!loader.schema) {
+      try {
+        await loader.reload();
+      } catch (e) {
+        log.error('Lazy schema reload failed while handling request', {
+          operation: 'createYoga.schema',
+          error: e instanceof Error ? e : new Error(String(e)),
+        });
+      }
+    }
+    if (!loader.schema) {
+      // As a last resort, build the local schema so plugins (e.g., SSE) never see a missing schema
+      try {
+        const fallback = makeEndpointsSchema(loader);
+        loader.schema = fallback;
+        log.warn(
+          'Using fallback local schema as stitched schema was unavailable',
+          {
+            operation: 'createYoga.schema',
+          }
+        );
+      } catch (e) {
+        log.error('Failed to construct fallback local schema', {
+          operation: 'createYoga.schema',
+          error: e instanceof Error ? e : new Error(String(e)),
+        });
+      }
+    }
+    return loader.schema as any;
+  },
   maskedErrors: false,
   multipart: true,
   logging: 'debug',
@@ -346,10 +450,14 @@ const yoga = createYoga({
     createLatencyTrackingPlugin({
       enabled: process.env.LATENCY_TRACKING_ENABLED !== 'false',
       useBatching: process.env.LATENCY_TRACKING_USE_BATCHING !== 'false',
-      useIntelligentSampling: process.env.LATENCY_TRACKING_USE_INTELLIGENT_SAMPLING !== 'false',
-      fallbackSampleRate: parseFloat(process.env.LATENCY_TRACKING_FALLBACK_SAMPLE_RATE || '0.01'),
-      enableTelemetry: process.env.LATENCY_TRACKING_ENABLE_TELEMETRY !== 'false',
-      maxLatencyMs: parseInt(process.env.LATENCY_TRACKING_MAX_MS || '300000')
+      useIntelligentSampling:
+        process.env.LATENCY_TRACKING_USE_INTELLIGENT_SAMPLING !== 'false',
+      fallbackSampleRate: parseFloat(
+        process.env.LATENCY_TRACKING_FALLBACK_SAMPLE_RATE || '0.01'
+      ),
+      enableTelemetry:
+        process.env.LATENCY_TRACKING_ENABLE_TELEMETRY !== 'false',
+      maxLatencyMs: parseInt(process.env.LATENCY_TRACKING_MAX_MS || '300000'),
     }),
     // Response cache must be last so it can wrap executor
     useResponseCache({
@@ -365,18 +473,19 @@ const yoga = createYoga({
       session: (context: any) => {
         if (responseCacheConfig.scope === 'global') return null;
         const parts: string[] = [];
-        if (context?.application?.id) parts.push(`app:${context.application.id}`);
+        if (context?.application?.id)
+          parts.push(`app:${context.application.id}`);
         if (context?.apiKey?.id) parts.push(`key:${context.apiKey.id}`);
         if (context?.user?.id) parts.push(`user:${context.user.id}`);
         if (context?.sessionId) parts.push(`sess:${context.sessionId}`);
         return parts.length ? parts.join('|') : null;
-      }
-    })
+      },
+    }),
   ],
   graphiql: {
     title: 'GraphQL Gateway with Session Security',
     // Ensure GraphiQL uses SSE for subscriptions
-    subscriptionsProtocol: 'SSE'
+    subscriptionsProtocol: 'SSE',
   },
   // GraphQL Playground will be handled at a separate endpoint (/playground)
   // to allow conditional access based on configuration settings
@@ -386,13 +495,13 @@ const yoga = createYoga({
       request,
       keyManager,
       schemaLoader: loader,
-      pubSub
+      pubSub,
     };
   },
   cors: {
     origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-    credentials: true // Important for sessions
-  }
+    credentials: true, // Important for sessions
+  },
 });
 
 // Expose DI helper to clear response cache keys, initialized once
@@ -404,7 +513,13 @@ Container.set('ResponseCacheInvalidate', async () => {
       for (const prefix of prefixes) {
         let cursor = '0';
         do {
-          const [next, keys] = await redis.scan(cursor, 'MATCH', `${prefix}*`, 'COUNT', 1000);
+          const [next, keys] = await redis.scan(
+            cursor,
+            'MATCH',
+            `${prefix}*`,
+            'COUNT',
+            1000
+          );
           cursor = next;
           if (Array.isArray(keys) && keys.length) {
             await redis.del(...keys);
@@ -449,7 +564,9 @@ app.use(async (ctx, next) => {
       }
 
       // Import voyager only when needed
-      const { default: koaMiddleware } = await import('graphql-voyager/middleware/koa');
+      const { default: koaMiddleware } = await import(
+        'graphql-voyager/middleware/koa'
+      );
       const voyagerHandler = koaMiddleware({
         endpointUrl: '/graphql',
         displayOptions: {
@@ -457,8 +574,8 @@ app.use(async (ctx, next) => {
           skipDeprecated: false,
           showLeafFields: true,
           sortByAlphabet: false,
-          hideRoot: false
-        }
+          hideRoot: false,
+        },
       });
 
       await voyagerHandler(ctx, next);
@@ -466,7 +583,7 @@ app.use(async (ctx, next) => {
     } catch (error) {
       log.error('Failed to serve GraphQL Voyager', {
         operation: 'voyagerMiddleware',
-        error: error instanceof Error ? error : new Error(String(error))
+        error: error instanceof Error ? error : new Error(String(error)),
       });
       ctx.status = 500;
       ctx.body = 'Failed to load GraphQL Voyager';
@@ -492,7 +609,7 @@ app.use(async (ctx, next) => {
     } catch (error) {
       log.error('Failed to serve GraphQL Playground', {
         operation: 'playgroundRedirect',
-        error: error instanceof Error ? error : new Error(String(error))
+        error: error instanceof Error ? error : new Error(String(error)),
       });
       ctx.status = 500;
       ctx.body = 'Failed to load GraphQL Playground';
@@ -506,7 +623,10 @@ app.use(async (ctx, next) => {
     try {
       // Keys namespace: docs.theme.token.<name>
       const repo = dataSource.getRepository(Setting);
-      const rows = await repo.createQueryBuilder('s').where('s.key LIKE :prefix', { prefix: 'docs.theme.token.%' }).getMany();
+      const rows = await repo
+        .createQueryBuilder('s')
+        .where('s.key LIKE :prefix', { prefix: 'docs.theme.token.%' })
+        .getMany();
 
       const tokens: Record<string, string> = {};
       for (const row of rows) {
@@ -523,7 +643,7 @@ app.use(async (ctx, next) => {
       }
 
       // Always provide defaults for missing tokens, then override with saved values
-      const allTokens = {
+  const allTokens: Record<string, string> = {
         // Primary brand colors - TESTING WITH GREEN
         'color-primary': '#059669',
         'color-primary-hover': '#047857',
@@ -543,7 +663,10 @@ app.use(async (ctx, next) => {
         'color-background': '#ffffff',
         'color-background-secondary': '#f9fafb',
         'color-background-tertiary': '#f3f4f6',
-        'color-background-code': '#1e293b',
+    'color-background-code': '#1e293b',
+    // New dedicated code tokens (will be overridden if theme provides them)
+    'color-code-bg': '#1e293b',
+    'color-code-text': '#e2e8f0',
 
         // Border colors
         'color-border': '#e5e7eb',
@@ -553,7 +676,8 @@ app.use(async (ctx, next) => {
         // Typography
         'font-family-sans':
           '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-        'font-family-mono': '"JetBrains Mono", "Fira Code", Consolas, "Liberation Mono", Menlo, Courier, monospace',
+        'font-family-mono':
+          '"JetBrains Mono", "Fira Code", Consolas, "Liberation Mono", Menlo, Courier, monospace',
         'font-size-xs': '0.75rem',
         'font-size-sm': '0.875rem',
         'font-size-base': '1rem',
@@ -587,9 +711,12 @@ app.use(async (ctx, next) => {
 
         // Shadows
         'shadow-sm': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-        'shadow-md': '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-        'shadow-lg': '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-        'shadow-xl': '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+        'shadow-md':
+          '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+        'shadow-lg':
+          '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+        'shadow-xl':
+          '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
 
         // Layout
         'max-width-prose': '65ch',
@@ -600,7 +727,7 @@ app.use(async (ctx, next) => {
         // Transitions
         'transition-fast': '150ms ease-in-out',
         'transition-normal': '300ms ease-in-out',
-        'transition-slow': '500ms ease-in-out'
+        'transition-slow': '500ms ease-in-out',
       };
 
       // Override defaults with saved tokens
@@ -608,14 +735,11 @@ app.use(async (ctx, next) => {
 
       // Provide a few compatibility aliases if not explicitly set
       if (!('color-surface' in allTokens)) {
-        allTokens['color-surface'] = allTokens['color-background-secondary'] || allTokens['color-background'];
+        allTokens['color-surface'] =
+          allTokens['color-background-secondary'] ||
+          allTokens['color-background'];
       }
-      if (!('color-code-bg' in allTokens)) {
-        allTokens['color-code-bg'] = allTokens['color-background-code'] || '#0f172a';
-      }
-      if (!('color-code-text' in allTokens)) {
-        allTokens['color-code-text'] = '#e2e8f0';
-      }
+      // code tokens already present in defaults; compatibility logic retained if needed for legacy themes
       if (!('color-primary-foreground' in allTokens)) {
         // Default readable foreground for primary surfaces
         allTokens['color-primary-foreground'] = '#ffffff';
@@ -640,7 +764,9 @@ app.use(async (ctx, next) => {
     try {
       const repo = dataSource.getRepository(Asset);
       if (ctx.path === '/docs-assets/hero-image') {
-        const row = await repo.findOne({ where: { key: 'public.docs.heroImage' } });
+        const row = await repo.findOne({
+          where: { key: 'public.docs.heroImage' },
+        });
         if (!row) {
           ctx.status = 404;
           return;
@@ -651,7 +777,9 @@ app.use(async (ctx, next) => {
         return;
       }
       if (ctx.path === '/docs-assets/favicon') {
-        const row = await repo.findOne({ where: { key: 'public.docs.favicon' } });
+        const row = await repo.findOne({
+          where: { key: 'public.docs.favicon' },
+        });
         if (!row) {
           ctx.status = 404;
           return;
@@ -662,7 +790,9 @@ app.use(async (ctx, next) => {
         return;
       }
       if (ctx.path === '/docs-assets/brand-icon') {
-        const row = await repo.findOne({ where: { key: 'public.docs.brandIcon' } });
+        const row = await repo.findOne({
+          where: { key: 'public.docs.brandIcon' },
+        });
         if (!row) {
           ctx.status = 404;
           return;
@@ -679,7 +809,10 @@ app.use(async (ctx, next) => {
   }
 
   // Documentation pages gating & static file serving (public). Avoid capturing admin docs management now under /admin/docs.
-  if ((ctx.path === '/docs' || ctx.path.startsWith('/docs/')) && !ctx.path.startsWith('/admin/docs/')) {
+  if (
+    (ctx.path === '/docs' || ctx.path.startsWith('/docs/')) &&
+    !ctx.path.startsWith('/admin/docs/')
+  ) {
     const config = Container.get(ConfigurationService);
     const mode = await config.getPublicDocumentationMode();
     if (mode === 'disabled') {
@@ -695,27 +828,42 @@ app.use(async (ctx, next) => {
       } catch {}
       if (!authenticated) {
         ctx.status = 401;
-        ctx.body = 'Authentication required to view documentation (preview mode)';
+        ctx.body =
+          'Authentication required to view documentation (preview mode)';
         return;
       }
     }
 
     // Serve the built docs.html if available
     if (ctx.path === '/docs') {
-      const docsHtmlPath = path.join(__dirname, '..', 'dist', 'client', 'docs.html');
+      const docsHtmlPath = path.join(
+        __dirname,
+        '..',
+        'dist',
+        'client',
+        'docs.html'
+      );
       if (fs.existsSync(docsHtmlPath)) {
         let html = fs.readFileSync(docsHtmlPath, 'utf-8');
         // Inject a mode badge placeholder replacement if template contains marker, else prepend small badge bar.
         if (html.includes('<!-- PUBLIC_DOC_MODE -->')) {
-          html = html.replace('<!-- PUBLIC_DOC_MODE -->', `<meta name="x-public-doc-mode" content="${mode}" />`);
+          html = html.replace(
+            '<!-- PUBLIC_DOC_MODE -->',
+            `<meta name="x-public-doc-mode" content="${mode}" />`
+          );
         } else {
           // naive injection before closing head tag
-          html = html.replace('</head>', `  <meta name="x-public-doc-mode" content="${mode}" />\n</head>`);
+          html = html.replace(
+            '</head>',
+            `  <meta name="x-public-doc-mode" content="${mode}" />\n</head>`
+          );
         }
         // Inject favicon if present
         try {
           const assetRepo = dataSource.getRepository(Asset);
-          const fav = await assetRepo.findOne({ where: { key: 'public.docs.favicon' } });
+          const fav = await assetRepo.findOne({
+            where: { key: 'public.docs.favicon' },
+          });
           if (fav) {
             const linkTag = `<link rel="icon" href="/docs-assets/favicon?ts=${fav.updatedAt.getTime()}" />`;
             html = html.replace('</head>', `  ${linkTag}\n</head>`);
@@ -735,7 +883,9 @@ app.use(async (ctx, next) => {
     if (ctx.path === '/docs/hero-image') {
       try {
         const repo = dataSource.getRepository(Asset);
-        const row = await repo.findOne({ where: { key: 'public.docs.heroImage' } });
+        const row = await repo.findOne({
+          where: { key: 'public.docs.heroImage' },
+        });
         if (!row) {
           ctx.status = 404;
           return;
@@ -753,7 +903,9 @@ app.use(async (ctx, next) => {
     if (ctx.path === '/docs/favicon') {
       try {
         const repo = dataSource.getRepository(Asset);
-        const row = await repo.findOne({ where: { key: 'public.docs.favicon' } });
+        const row = await repo.findOne({
+          where: { key: 'public.docs.favicon' },
+        });
         if (!row) {
           ctx.status = 404;
           return;
@@ -770,9 +922,18 @@ app.use(async (ctx, next) => {
     }
 
     // Potential future: static assets under /docs/assets/* served from dist/client/assets
-    const assetCandidate = path.join(__dirname, '..', 'dist', 'client', ctx.path.replace(/^\/docs\//, ''));
+    const assetCandidate = path.join(
+      __dirname,
+      '..',
+      'dist',
+      'client',
+      ctx.path.replace(/^\/docs\//, '')
+    );
     if (fs.existsSync(assetCandidate) && fs.statSync(assetCandidate).isFile()) {
-      ctx.type = path.extname(assetCandidate) === '.js' ? 'application/javascript' : undefined;
+      ctx.type =
+        path.extname(assetCandidate) === '.js'
+          ? 'application/javascript'
+          : undefined;
       ctx.body = fs.readFileSync(assetCandidate);
       return;
     }
@@ -781,7 +942,13 @@ app.use(async (ctx, next) => {
 
   // Admin UI (serve built static assets)
   if (ctx.path === '/admin' || ctx.path.startsWith('/admin/')) {
-    const adminHtmlPath = path.join(__dirname, '..', 'dist', 'client', 'index.html');
+    const adminHtmlPath = path.join(
+      __dirname,
+      '..',
+      'dist',
+      'client',
+      'index.html'
+    );
     const fallbackHtmlPath = path.join(__dirname, 'client', 'fallback.html');
 
     if (fs.existsSync(adminHtmlPath)) {
@@ -838,7 +1005,11 @@ app.use(async (ctx, next) => {
   try {
     if (!msgpackEncode) await ensureMsgPackEncodeLoaded();
     if (!msgpackEncode) return; // encoding lib unavailable
-    if (ctx.body && typeof ctx.body !== 'string' && !(ctx.body instanceof Uint8Array)) {
+    if (
+      ctx.body &&
+      typeof ctx.body !== 'string' &&
+      !(ctx.body instanceof Uint8Array)
+    ) {
       // Body may be an object; encode directly
       ctx.set('content-type', 'application/x-msgpack');
       ctx.body = Buffer.from(msgpackEncode(ctx.body));
@@ -874,21 +1045,25 @@ app.use(async (ctx, next) => {
 });
 
 export async function startServer() {
-  const REFERSH_INTERVAL = process.env.REFRESH_INTERVAL ? parseInt(process.env.REFRESH_INTERVAL, 10) : 30_000;
-  const MEMORY_LOG_INTERVAL = process.env.MEMORY_LOG_INTERVAL ? parseInt(process.env.MEMORY_LOG_INTERVAL, 10) : undefined; // disabled by default
+  const REFERSH_INTERVAL = process.env.REFRESH_INTERVAL
+    ? parseInt(process.env.REFRESH_INTERVAL, 10)
+    : 30_000;
+  const MEMORY_LOG_INTERVAL = process.env.MEMORY_LOG_INTERVAL
+    ? parseInt(process.env.MEMORY_LOG_INTERVAL, 10)
+    : undefined; // disabled by default
 
   // Initialize dataSource before creating schema
   try {
     await dataSource.initialize();
     log.info('Database connection initialized successfully', {
       operation: 'startServer',
-      metadata: { component: 'database' }
+      metadata: { component: 'database' },
     });
   } catch (error) {
     log.error('Failed to initialize database connection', {
       operation: 'startServer',
       error: error instanceof Error ? error : new Error(String(error)),
-      metadata: { component: 'database' }
+      metadata: { component: 'database' },
     });
     throw error;
   }
@@ -900,27 +1075,52 @@ export async function startServer() {
       if (pendingMigrations) {
         log.info('Running pending migrations', {
           operation: 'startServer',
-          metadata: { component: 'migrations' }
+          metadata: { component: 'migrations' },
         });
         await dataSource.runMigrations();
         log.info('Migrations completed successfully', {
           operation: 'startServer',
-          metadata: { component: 'migrations', status: 'completed' }
+          metadata: { component: 'migrations', status: 'completed' },
         });
       } else {
         log.info('No pending migrations', {
           operation: 'startServer',
-          metadata: { component: 'migrations', status: 'up-to-date' }
+          metadata: { component: 'migrations', status: 'up-to-date' },
         });
       }
     } catch (error) {
       log.error('Failed to run migrations', {
         operation: 'startServer',
         error: error instanceof Error ? error : new Error(String(error)),
-        metadata: { component: 'migrations' }
+        metadata: { component: 'migrations' },
       });
       throw error;
     }
+  }
+
+  // Ensure initial admin exists (non-fatal if env is missing)
+  try {
+    const { ensureInitialAdmin } = await import('./db/seed-admin');
+    const res = await ensureInitialAdmin({ bcryptSaltRounds: 10 });
+    if ((res as any).created) {
+      log.info('Created initial admin user', {
+        operation: 'ensureInitialAdmin',
+        metadata: { email: (res as any).email },
+      });
+    } else if ((res as any).existed) {
+      log.info('Initial admin already exists', {
+        operation: 'ensureInitialAdmin',
+        metadata: { email: (res as any).email },
+      });
+    } else {
+      // missing-env or error – log at debug to avoid noisy startup without creds
+      log.debug('Skipped ensuring initial admin (missing env or error)');
+    }
+  } catch (e) {
+    log.warn('Failed to ensure initial admin user during startup', {
+      operation: 'ensureInitialAdmin',
+      error: e instanceof Error ? e : new Error(String(e)),
+    });
   }
 
   // Initialize Redis for sessions
@@ -928,13 +1128,13 @@ export async function startServer() {
     await initializeRedis();
     log.info('Redis initialized for session storage', {
       operation: 'startServer',
-      metadata: { component: 'redis' }
+      metadata: { component: 'redis' },
     });
   } catch (error) {
     log.error('Failed to initialize Redis', {
       operation: 'startServer',
       error: error instanceof Error ? error : new Error(String(error)),
-      metadata: { component: 'redis' }
+      metadata: { component: 'redis' },
     });
     throw error;
   }
@@ -947,13 +1147,25 @@ export async function startServer() {
   Container.set('ServiceRepository', dataSource.getRepository(Service));
   Container.set('ServiceKeyRepository', dataSource.getRepository(ServiceKey));
   Container.set('AuditLogRepository', dataSource.getRepository(AuditLog));
-  Container.set('SchemaChangeRepository', dataSource.getRepository(SchemaChange));
-  Container.set('ApplicationUsageRepository', dataSource.getRepository(ApplicationUsage));
+  Container.set(
+    'SchemaChangeRepository',
+    dataSource.getRepository(SchemaChange)
+  );
+  Container.set(
+    'ApplicationUsageRepository',
+    dataSource.getRepository(ApplicationUsage)
+  );
   Container.set('ApiKeyUsageRepository', dataSource.getRepository(ApiKeyUsage));
-  Container.set('RequestLatencyRepository', dataSource.getRepository(RequestLatency));
+  Container.set(
+    'RequestLatencyRepository',
+    dataSource.getRepository(RequestLatency)
+  );
 
   Container.set('SessionService', Container.get(SessionService));
-  Container.set('ServiceRegistryService', Container.get(ServiceRegistryService));
+  Container.set(
+    'ServiceRegistryService',
+    Container.get(ServiceRegistryService)
+  );
 
   // JWTService is automatically registered via @Service() decorator
 
@@ -963,13 +1175,13 @@ export async function startServer() {
     await serviceRegistryService.loadServicesIntoKeyManager();
     log.info('Loaded existing services into key manager', {
       operation: 'startServer',
-      metadata: { component: 'keyManager' }
+      metadata: { component: 'keyManager' },
     });
   } catch (error) {
     log.error('Failed to load services into key manager', {
       operation: 'startServer',
       error: error instanceof Error ? error : new Error(String(error)),
-      metadata: { component: 'keyManager' }
+      metadata: { component: 'keyManager' },
     });
   }
 
@@ -983,17 +1195,22 @@ export async function startServer() {
     ServiceCacheManager.setSchemaLoader(loader);
     ServiceCacheManager.setServiceCache(serviceEndpointCache);
 
-    log.debug(`Loaded ${serviceEndpoints.length} services from database:`, serviceEndpoints);
+    log.debug(
+      `Loaded ${serviceEndpoints.length} services from database:`,
+      serviceEndpoints
+    );
   } catch (error) {
     log.error('Failed to load services from database', {
       operation: 'loadServicesFromDatabase',
       error: error instanceof Error ? error : new Error(String(error)),
-      metadata: { source: 'database' }
+      metadata: { source: 'database' },
     });
   }
 
   // Start periodic cleanup of expired keys and cache
-  const KEY_CLEANUP_INTERVAL = process.env.KEY_CLEANUP_INTERVAL ? parseInt(process.env.KEY_CLEANUP_INTERVAL, 10) : 60_000; // 1 minute default
+  const KEY_CLEANUP_INTERVAL = process.env.KEY_CLEANUP_INTERVAL
+    ? parseInt(process.env.KEY_CLEANUP_INTERVAL, 10)
+    : 60_000; // 1 minute default
 
   const cleanupInterval = setInterval(() => {
     keyManager.cleanupExpiredKeys();
@@ -1012,18 +1229,18 @@ export async function startServer() {
     try {
       const deleted = await cleanupExpiredAuditLogs({
         batchSize: securityConfig.auditLogCleanupBatchSize,
-        maxBatchesPerRun: securityConfig.auditLogCleanupMaxBatches
+        maxBatchesPerRun: securityConfig.auditLogCleanupMaxBatches,
       });
       if (deleted > 0) {
         log.debug('Audit retention cleanup deleted records', {
           operation: 'auditLogRetentionCleanup',
-          metadata: { deleted }
+          metadata: { deleted },
         });
       }
     } catch (err) {
       log.error('Audit retention cleanup failed', {
         operation: 'auditLogRetentionCleanup',
-        error: err instanceof Error ? err : new Error(String(err))
+        error: err instanceof Error ? err : new Error(String(err)),
       });
     }
   }, securityConfig.auditLogCleanupIntervalMs);
@@ -1040,7 +1257,7 @@ export async function startServer() {
   } catch (err) {
     log.error('Failed to start background flushers', {
       operation: 'startServer',
-      error: err instanceof Error ? err : new Error(String(err))
+      error: err instanceof Error ? err : new Error(String(err)),
     });
   }
 
@@ -1051,18 +1268,23 @@ export async function startServer() {
       try {
         responseCacheConfig.enabled = await cfg.isResponseCacheEnabled();
         responseCacheConfig.ttlMs = await cfg.getResponseCacheTtlMs();
-        responseCacheConfig.includeExtensions = await cfg.isResponseCacheIncludeExtensions();
+        responseCacheConfig.includeExtensions =
+          await cfg.isResponseCacheIncludeExtensions();
         responseCacheConfig.scope = await cfg.getResponseCacheScope();
         // Update TTL maps in-place to preserve references held by the plugin
         const newPerType = await cfg.getResponseCacheTtlPerType();
         for (const key of Object.keys(responseCacheConfig.ttlPerType)) {
-          if (!(key in newPerType)) delete (responseCacheConfig.ttlPerType as any)[key];
+          if (!(key in newPerType))
+            delete (responseCacheConfig.ttlPerType as any)[key];
         }
         Object.assign(responseCacheConfig.ttlPerType, newPerType);
 
         const newPerCoord = await cfg.getResponseCacheTtlPerSchemaCoordinate();
-        for (const key of Object.keys(responseCacheConfig.ttlPerSchemaCoordinate)) {
-          if (!(key in newPerCoord)) delete (responseCacheConfig.ttlPerSchemaCoordinate as any)[key];
+        for (const key of Object.keys(
+          responseCacheConfig.ttlPerSchemaCoordinate
+        )) {
+          if (!(key in newPerCoord))
+            delete (responseCacheConfig.ttlPerSchemaCoordinate as any)[key];
         }
         Object.assign(responseCacheConfig.ttlPerSchemaCoordinate, newPerCoord);
         log.debug('Refreshed response cache config', {
@@ -1072,9 +1294,12 @@ export async function startServer() {
             ttlMs: responseCacheConfig.ttlMs,
             includeExtensions: responseCacheConfig.includeExtensions,
             scope: responseCacheConfig.scope,
-            ttlPerTypeKeys: Object.keys(responseCacheConfig.ttlPerType || {}).length,
-            ttlPerSchemaCoordinateKeys: Object.keys(responseCacheConfig.ttlPerSchemaCoordinate || {}).length
-          }
+            ttlPerTypeKeys: Object.keys(responseCacheConfig.ttlPerType || {})
+              .length,
+            ttlPerSchemaCoordinateKeys: Object.keys(
+              responseCacheConfig.ttlPerSchemaCoordinate || {}
+            ).length,
+          },
         });
       } catch (e) {
         log.warn('Failed to refresh response cache config', e);
@@ -1089,9 +1314,13 @@ export async function startServer() {
   // Start Koa server
   await new Promise<void>((resolve) => {
     // log starting
-    log.info('Starting GraphQL Gateway server on http://localhost:4000', { operation: 'startServer' });
+    log.info('Starting GraphQL Gateway server on http://localhost:4000', {
+      operation: 'startServer',
+    });
     server = app.listen(4000, () => resolve());
-    log.info('GraphQL Gateway server started on http://localhost:4000', { operation: 'startServer' });
+    log.info('GraphQL Gateway server started on http://localhost:4000', {
+      operation: 'startServer',
+    });
   });
   log.debug('Gateway started on http://localhost:4000');
   log.debug(`HMAC key cleanup will run every ${KEY_CLEANUP_INTERVAL} ms`);
@@ -1116,8 +1345,8 @@ export async function startServer() {
           heapUsedMB: toMB(usage.heapUsed),
           externalMB: toMB(usage.external),
           arrayBuffersMB: toMB((usage as any).arrayBuffers || 0),
-          schemaLoader: loader.getMetrics()
-        }
+          schemaLoader: loader.getMetrics(),
+        },
       });
     }, MEMORY_LOG_INTERVAL);
     (server as any).memoryLogInterval = memoryLogInterval;
@@ -1159,7 +1388,7 @@ export async function stopServer() {
   } catch (e) {
     log.error('Failed to shutdown usage service cleanly', {
       operation: 'stopServer',
-      error: e instanceof Error ? e : new Error(String(e))
+      error: e instanceof Error ? e : new Error(String(e)),
     });
   }
   try {
@@ -1168,7 +1397,7 @@ export async function stopServer() {
   } catch (e) {
     log.error('Failed to shutdown audit service cleanly', {
       operation: 'stopServer',
-      error: e instanceof Error ? e : new Error(String(e))
+      error: e instanceof Error ? e : new Error(String(e)),
     });
   }
 

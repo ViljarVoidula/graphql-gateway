@@ -6,14 +6,21 @@ import {
   GraphQLSchema,
   IntrospectionQuery,
   parse,
-  printSchema
+  printSchema,
 } from 'graphql';
 import { dataSource } from './db/datasource';
-import { SchemaChange, SchemaChangeClassification } from './entities/schema-change.entity';
+import {
+  SchemaChange,
+  SchemaChangeClassification,
+} from './entities/schema-change.entity';
 import { Service, ServiceStatus } from './entities/service.entity';
 import { buildHMACExecutor } from './utils/hmacExecutor';
 import { log } from './utils/logger';
-import { classifyDiff, diffSchemas, semanticClassify } from './utils/schema-diff';
+import {
+  classifyDiff,
+  diffSchemas,
+  semanticClassify,
+} from './utils/schema-diff';
 import { healthMonitor } from './utils/service-health';
 
 interface LoadedEndpoint {
@@ -32,7 +39,10 @@ export const endpointCache = new WeakMap<SchemaLoader, EndpointCache>();
 const ENDPOINT_CACHE_TTL = 2 * 60 * 1000; // 2 minutes for endpoints
 
 // Schema cache for individual endpoints
-export const schemaCache = new Map<string, { sdl: string; lastUpdated: number }>();
+export const schemaCache = new Map<
+  string,
+  { sdl: string; lastUpdated: number }
+>();
 const SCHEMA_CACHE_TTL = 10 * 60 * 1000; // 10 minutes for individual schemas
 
 export class SchemaLoader {
@@ -56,7 +66,9 @@ export class SchemaLoader {
     // immediately get the currently active schema while awaiting the
     // eventual new one. This prevents dropping the active schema.
     if (this.reloading) {
-      log.debug('Reload requested while one in progress; returning existing schema');
+      log.debug(
+        'Reload requested while one in progress; returning existing schema'
+      );
       return this.schema; // Serve current schema; background promise will complete.
     }
 
@@ -75,10 +87,16 @@ export class SchemaLoader {
           const cachedSchema = schemaCache.get(url);
           // If service is currently unhealthy and backoff says skip, try to use cache and skip fetch
           if (!healthMonitor.shouldAttempt(url)) {
-            log.warn('Skipping schema fetch due to backoff (service unhealthy)', {
-              operation: 'schemaLoader.reload',
-              metadata: { url, nextRetryInMs: healthMonitor.nextRetryDelay(url) }
-            });
+            log.warn(
+              'Skipping schema fetch due to backoff (service unhealthy)',
+              {
+                operation: 'schemaLoader.reload',
+                metadata: {
+                  url,
+                  nextRetryInMs: healthMonitor.nextRetryDelay(url),
+                },
+              }
+            );
             if (cachedSchema) {
               // Include any known capability flags
               let useMsgPack: boolean | undefined;
@@ -91,7 +109,10 @@ export class SchemaLoader {
             }
             return;
           }
-          if (cachedSchema && now - cachedSchema.lastUpdated < SCHEMA_CACHE_TTL) {
+          if (
+            cachedSchema &&
+            now - cachedSchema.lastUpdated < SCHEMA_CACHE_TTL
+          ) {
             log.debug(`Using cached schema for ${url}`);
             loadedEndpoints.push({ url, sdl: cachedSchema.sdl });
             return;
@@ -100,8 +121,14 @@ export class SchemaLoader {
           try {
             log.debug(`Fetching SDL from ${url}`);
             const introspectionQuery = getIntrospectionQuery();
-            const executor = buildHMACExecutor({ endpoint: url, timeout: 1500, enableHMAC: false });
-            const maybeResult = await executor({ document: parse(introspectionQuery) });
+            const executor = buildHMACExecutor({
+              endpoint: url,
+              timeout: 1500,
+              enableHMAC: false,
+            });
+            const maybeResult = await executor({
+              document: parse(introspectionQuery),
+            });
             let result: ExecutionResult<IntrospectionQuery>;
             if (isAsyncIterable(maybeResult)) {
               const iterator = maybeResult[Symbol.asyncIterator]();
@@ -116,13 +143,13 @@ export class SchemaLoader {
               hasSchema: !!(data && data.__schema),
               resultKeys: data ? Object.keys(data) : [],
               errorCount: result.errors ? result.errors.length : 0,
-              errors: result.errors
+              errors: result.errors,
             });
             if (!data || !data.__schema) {
               log.error(`Invalid SDL response details for ${url}:`, {
                 data,
                 errors: result.errors,
-                result: result
+                result: result,
               });
               throw new Error(`Invalid SDL response from ${url}`);
             }
@@ -145,7 +172,8 @@ export class SchemaLoader {
                 const repo = dataSource.getRepository(Service);
                 const svc = await repo.findOne({ where: { url } });
                 // Only flip from INACTIVE -> ACTIVE automatically; respect MAINTENANCE
-                if (svc && svc.status === ServiceStatus.INACTIVE) await repo.update(svc.id, { status: ServiceStatus.ACTIVE });
+                if (svc && svc.status === ServiceStatus.INACTIVE)
+                  await repo.update(svc.id, { status: ServiceStatus.ACTIVE });
               } catch (e) {
                 log.warn('Failed to persist service recovery status', e);
               }
@@ -163,7 +191,8 @@ export class SchemaLoader {
                   // Combine semantic + textual heuristics (semantic overrides to BREAKING if detected)
                   let classification = classifyDiff(diff.diff);
                   const semantic = semanticClassify(service.sdl, sdl);
-                  if (semantic === SchemaChangeClassification.BREAKING) classification = semantic;
+                  if (semantic === SchemaChangeClassification.BREAKING)
+                    classification = semantic;
 
                   await changeRepo.insert({
                     serviceId: service.id,
@@ -171,12 +200,14 @@ export class SchemaLoader {
                     newHash: diff.newHash,
                     diff: diff.diff,
                     schemaSDL: sdl,
-                    classification
+                    classification,
                   });
                   // Update service current SDL snapshot
                   service.sdl = sdl;
                   await serviceRepo.save(service);
-                  log.info(`Recorded schema change for service ${service.name}`);
+                  log.info(
+                    `Recorded schema change for service ${service.name}`
+                  );
                 }
               }
             } catch (e) {
@@ -195,7 +226,8 @@ export class SchemaLoader {
                 const repo = dataSource.getRepository(Service);
                 const svc = await repo.findOne({ where: { url } });
                 // Only flip from ACTIVE -> INACTIVE automatically; respect MAINTENANCE
-                if (svc && svc.status === ServiceStatus.ACTIVE) await repo.update(svc.id, { status: ServiceStatus.INACTIVE });
+                if (svc && svc.status === ServiceStatus.ACTIVE)
+                  await repo.update(svc.id, { status: ServiceStatus.INACTIVE });
               } catch (e) {
                 log.warn('Failed to persist service unhealthy status', e);
               }
@@ -225,10 +257,15 @@ export class SchemaLoader {
         this.loadedEndpoints = loadedEndpoints;
         const newSchema = this.buildSchema(this.loadedEndpoints);
         this.schema = newSchema;
-        log.debug(`gateway reload ${new Date().toLocaleString()}, endpoints: ${this.loadedEndpoints.length}`);
+        log.debug(
+          `gateway reload ${new Date().toLocaleString()}, endpoints: ${this.loadedEndpoints.length}`
+        );
       } catch (err) {
         // Keep old schema if build failed
-        log.error('Failed to build stitched schema; keeping previous schema', err);
+        log.error(
+          'Failed to build stitched schema; keeping previous schema',
+          err
+        );
       }
       return this.schema;
     })();
@@ -290,8 +327,8 @@ export class SchemaLoader {
             operation: 'schemaLoader.loadEndpoints',
             metadata: {
               original: endpoints,
-              filtered
-            }
+              filtered,
+            },
           });
         }
         this.endpoints = filtered;
@@ -299,10 +336,12 @@ export class SchemaLoader {
         // Update cache on successful load
         endpointCache.set(this, {
           endpoints: this.endpoints,
-          lastUpdated: now
+          lastUpdated: now,
         });
 
-        log.debug(`Loaded ${this.endpoints.length} endpoints dynamically (cached)`);
+        log.debug(
+          `Loaded ${this.endpoints.length} endpoints dynamically (cached)`
+        );
         return this.endpoints;
       } catch (error) {
         log.error('Failed to load endpoints dynamically:', error);
@@ -312,13 +351,13 @@ export class SchemaLoader {
           log.warn('Endpoint loader failed, using cached endpoints');
           return cached.endpoints;
         }
-        debugger;
+        // no-op
         // Fallback to static endpoints
         log.warn('No cached endpoints available, using static endpoints');
         return this.endpoints.filter((e) => !e.startsWith('internal://'));
       }
     }
-    debugger;
+    // no-op
     return this.endpoints.filter((e) => !e.startsWith('internal://'));
   }
 
@@ -341,7 +380,7 @@ export class SchemaLoader {
       loadedEndpoints: this.loadedEndpoints.length,
       schemaCacheSize: schemaCache.size,
       endpointCacheSize: endpointCache.has(this) ? 1 : 0,
-      hasSchema: !!this.schema
+      hasSchema: !!this.schema,
     };
   }
 }

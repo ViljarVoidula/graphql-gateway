@@ -3,8 +3,10 @@
 import { config as dotenvConfig } from 'dotenv';
 import path from 'path';
 
-// Load .env files before anything else
-dotenvConfig({ path: path.join(__dirname, '..', '.env.local') });
+// Load .env files before anything else (skip local in test)
+if (process.env.NODE_ENV !== 'test') {
+  dotenvConfig({ path: path.join(__dirname, '..', '.env.local') });
+}
 dotenvConfig();
 
 import { initializeTelemetry } from './utils/telemetry/opentelemetry';

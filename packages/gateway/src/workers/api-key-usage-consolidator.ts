@@ -8,13 +8,17 @@ function parseKey(prefix: string, key: string) {
   const date = p[p.length - 3];
   const apiKeyId = p[p.length - 2];
   const servicePart = p[p.length - 1];
-  return { date, apiKeyId, serviceId: servicePart === '∅' ? null : servicePart };
+  return {
+    date,
+    apiKeyId,
+    serviceId: servicePart === '∅' ? null : servicePart,
+  };
 }
 
 async function hgetallAndDel(key: string): Promise<Record<string, string>> {
   // Use Lua to atomically read and delete
   const script = `
-    local v = redis.call('HGETALL', KEYS[1])
+    local v = redis.call('hgetall', KEYS[1])
     if next(v) ~= nil then
       redis.call('DEL', KEYS[1])
     end
@@ -46,7 +50,17 @@ async function flushBatch(
       return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7})`;
     })
     .join(',');
-  rows.forEach((r) => params.push(r.apiKeyId, r.applicationId, r.serviceId, r.date, r.req, r.err, r.rl));
+  rows.forEach((r) =>
+    params.push(
+      r.apiKeyId,
+      r.applicationId,
+      r.serviceId,
+      r.date,
+      r.req,
+      r.err,
+      r.rl
+    )
+  );
   const sql = `
     INSERT INTO api_key_usage ("apiKeyId","applicationId","serviceId","date","requestCount","errorCount","rateLimitExceededCount")
     VALUES ${values}
@@ -65,7 +79,13 @@ async function runOnce() {
   const batch: any[] = [];
   while (true) {
     // ioredis returns [cursor, keys]
-    const [next, keys] = (await (redisClient as any).scan(cursor, 'MATCH', pattern, 'COUNT', 1000)) as [string, string[]];
+    const [next, keys] = (await (redisClient as any).scan(
+      cursor,
+      'MATCH',
+      pattern,
+      'COUNT',
+      1000
+    )) as [string, string[]];
     cursor = next as string;
     for (const key of keys) {
       const meta = parseKey(prefix, key);
@@ -78,7 +98,7 @@ async function runOnce() {
         date: meta.date,
         req: parseInt(fields.req || '0', 10),
         err: parseInt(fields.err || '0', 10),
-        rl: parseInt(fields.rl || '0', 10)
+        rl: parseInt(fields.rl || '0', 10),
       });
       if (batch.length >= 1000) {
         await flushBatch(batch.splice(0));
@@ -95,13 +115,24 @@ export async function startApiKeyUsageConsolidator() {
   if (!dataSource.isInitialized) {
     await dataSource.initialize();
   }
-  const intervalMs = parseInt(process.env.API_KEY_USAGE_FLUSH_INTERVAL_MS || '5000', 10);
-  const lockKey = process.env.API_KEY_USAGE_LOCK_KEY || 'gqlgw:locks:api-key-usage-consolidator';
+  const intervalMs = parseInt(
+    process.env.API_KEY_USAGE_FLUSH_INTERVAL_MS || '5000',
+    10
+  );
+  const lockKey =
+    process.env.API_KEY_USAGE_LOCK_KEY ||
+    'gqlgw:locks:api-key-usage-consolidator';
   if (timer) return stopApiKeyUsageConsolidator; // already running
   const tick = async () => {
     try {
       // ioredis: pass flags as separate args
-      const got = await (redisClient as any).set(lockKey, String(process.pid), 'PX', intervalMs * 2, 'NX');
+      const got = await (redisClient as any).set(
+        lockKey,
+        String(process.pid),
+        'PX',
+        intervalMs * 2,
+        'NX'
+      );
       if (got === 'OK') {
         await runOnce();
       }

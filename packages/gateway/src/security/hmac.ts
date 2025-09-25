@@ -24,7 +24,10 @@ export class HMACUtils {
    */
   static generateSignature(request: HMACRequest, secretKey: string): string {
     const payload = this.createPayload(request);
-    return crypto.createHmac(this.ALGORITHM, secretKey).update(payload).digest('hex');
+    return crypto
+      .createHmac(this.ALGORITHM, secretKey)
+      .update(payload)
+      .digest('hex');
   }
 
   /**
@@ -39,7 +42,9 @@ export class HMACUtils {
     // Check timestamp to prevent replay attacks
     const now = Date.now();
     if (Math.abs(now - request.timestamp) > timeoutMs) {
-      log.warn(`HMAC timestamp verification failed. Request time: ${request.timestamp}, Current time: ${now}`);
+      log.warn(
+        `HMAC timestamp verification failed. Request time: ${request.timestamp}, Current time: ${now}`
+      );
       return false;
     }
 
@@ -54,11 +59,14 @@ export class HMACUtils {
   /**
    * Create HMAC headers for outbound requests
    */
-  static createHeaders(request: Omit<HMACRequest, 'timestamp'>, secretKey: string): HMACHeaders {
+  static createHeaders(
+    request: Omit<HMACRequest, 'timestamp'>,
+    secretKey: string
+  ): HMACHeaders {
     const timestamp = Date.now();
     const hmacRequest: HMACRequest = {
       ...request,
-      timestamp
+      timestamp,
     };
 
     const signature = this.generateSignature(hmacRequest, secretKey);
@@ -66,7 +74,7 @@ export class HMACUtils {
     return {
       'X-HMAC-Signature': signature,
       'X-HMAC-Timestamp': timestamp.toString(),
-      'X-HMAC-Key-ID': request.keyId
+      'X-HMAC-Key-ID': request.keyId,
     };
   }
 
@@ -98,16 +106,29 @@ export class HMACUtils {
    * Create standardized payload for HMAC calculation
    */
   private static createPayload(request: HMACRequest): string {
-    const bodyHash = request.body ? crypto.createHash('sha256').update(request.body).digest('hex') : '';
+    const bodyHash = request.body
+      ? crypto.createHash('sha256').update(request.body).digest('hex')
+      : '';
 
-    return [request.method.toUpperCase(), request.url, bodyHash, request.timestamp.toString(), request.keyId].join('\n');
+    return [
+      request.method.toUpperCase(),
+      request.url,
+      bodyHash,
+      request.timestamp.toString(),
+      request.keyId,
+    ].join('\n');
   }
 
   /**
    * Get header value (case-insensitive)
    */
-  private static getHeader(headers: Record<string, string | string[] | undefined>, name: string): string | null {
-    const key = Object.keys(headers).find((k) => k.toLowerCase() === name.toLowerCase());
+  private static getHeader(
+    headers: Record<string, string | string[] | undefined>,
+    name: string
+  ): string | null {
+    const key = Object.keys(headers).find(
+      (k) => k.toLowerCase() === name.toLowerCase()
+    );
     if (!key) return null;
 
     const value = headers[key];

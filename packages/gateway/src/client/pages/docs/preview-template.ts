@@ -1,6 +1,6 @@
 // Enhanced preview HTML template that showcases theme tokens
 export const DOCS_PREVIEW_HTML = `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-docs-theme-loaded="true">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -23,7 +23,9 @@ export const DOCS_PREVIEW_HTML = `<!DOCTYPE html>
       --color-background: #ffffff;
       --color-background-secondary: #f9fafb;
       --color-background-tertiary: #f3f4f6;
-      --color-background-code: #1e293b;
+  --color-background-code: #1e293b; /* legacy */
+  --color-code-bg: var(--color-background-code);
+  --color-code-text: #e2e8f0;
       --color-border: #e5e7eb;
       --color-border-light: #f3f4f6;
       --color-border-dark: #d1d5db;
@@ -169,8 +171,8 @@ export const DOCS_PREVIEW_HTML = `<!DOCTYPE html>
     }
 
     .typography-showcase pre {
-      background-color: var(--color-background-code);
-      color: var(--color-text-inverse);
+      background-color: var(--color-code-bg, var(--color-background-code));
+      color: var(--color-code-text, var(--color-text-inverse));
       padding: var(--spacing-lg);
       border-radius: var(--border-radius-lg);
       overflow-x: auto;
@@ -178,7 +180,7 @@ export const DOCS_PREVIEW_HTML = `<!DOCTYPE html>
       font-size: var(--font-size-sm);
       line-height: var(--line-height-relaxed);
       margin: var(--spacing-lg) 0;
-    }
+  }
 
     /* Cards */
     .card-grid {

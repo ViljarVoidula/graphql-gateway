@@ -12,6 +12,7 @@ import { DocCategory } from '../entities/docs/category.entity';
 import { DocDocument } from '../entities/docs/document.entity';
 import { DocEmbeddingChunk } from '../entities/docs/embedding-chunk.entity';
 import { DocRevision } from '../entities/docs/revision.entity';
+import { GatewayPublishedMessage } from '../entities/gateway-message.entity';
 import { RequestLatency } from '../entities/request-latency.entity';
 import { SchemaChange } from '../entities/schema-change.entity';
 import { ServiceKey } from '../entities/service-key.entity';
@@ -20,14 +21,25 @@ import { Session } from '../entities/session.entity';
 import { Setting } from '../entities/setting.entity';
 import { User } from '../services/users/user.entity';
 
+const url =
+  process.env.NODE_ENV === 'test'
+    ? 'postgres://postgres:password@localhost:5432/gateway_test'
+    : process.env.DATABASE_URL ||
+      'postgres://postgres:password@localhost:5432/gateway';
+
 // Create TypeORM dataSource
 export const dataSource = new TypeORM.DataSource({
   type: 'postgres',
-  url: process.env.DATABASE_URL || 'postgres://postgres:password@localhost:5432/gateway',
+  url,
   synchronize: false, // Use migrations instead of synchronization
   dropSchema: false, // Let test-utils handle schema management
   cache: process.env.NODE_ENV !== 'test', // Disable caching in tests for speed
-  logging: process.env.NODE_ENV === 'test' ? false : process.env.NODE_ENV === 'development' ? 'all' : ['error'],
+  logging:
+    process.env.NODE_ENV === 'test'
+      ? false
+      : process.env.NODE_ENV === 'development'
+        ? 'all'
+        : ['error'],
   entities: [
     User,
     Session,
@@ -48,7 +60,8 @@ export const dataSource = new TypeORM.DataSource({
     ChatThread,
     ChatMessage,
     Asset,
-    RequestLatency
+    RequestLatency,
+    GatewayPublishedMessage,
   ],
   migrations: ['src/migrations/*.ts'],
   migrationsRun: process.env.NODE_ENV === 'production', // Auto-run migrations in production
@@ -59,7 +72,7 @@ export const dataSource = new TypeORM.DataSource({
       max: 5, // Smaller connection pool for tests
       min: 1,
       idleTimeoutMillis: 1000, // Close idle connections faster
-      connectionTimeoutMillis: 1000 // Faster connection timeout
-    }
-  })
+      connectionTimeoutMillis: 1000, // Faster connection timeout
+    },
+  }),
 });

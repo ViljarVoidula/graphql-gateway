@@ -13,7 +13,7 @@ import {
   Text,
   TextInput,
   Title,
-  Tooltip
+  Tooltip,
 } from '@mantine/core';
 import { MDXProvider } from '@mdx-js/react';
 import {
@@ -26,9 +26,15 @@ import {
   IconPlus,
   IconSearch,
   IconTrash,
-  IconWand
+  IconWand,
 } from '@tabler/icons-react';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { authenticatedFetch } from '../../utils/auth';
 import { DOCUMENT_TEMPLATES, DocumentTemplate } from './templates';
 
@@ -38,7 +44,7 @@ import '@mdxeditor/editor/style.css';
 // Lazy load MDX Editor to avoid SSR issues
 const MDXEditor = React.lazy(() =>
   import('@mdxeditor/editor').then((module) => ({
-    default: module.MDXEditor
+    default: module.MDXEditor,
   }))
 );
 
@@ -68,7 +74,7 @@ import {
   tablePlugin,
   thematicBreakPlugin,
   toolbarPlugin,
-  UndoRedo
+  UndoRedo,
 } from '@mdxeditor/editor';
 
 interface DocItem {
@@ -116,7 +122,8 @@ export const DocsContentManager: React.FC = () => {
   const [newDocSlug, setNewDocSlug] = useState('');
   const [newDocTitle, setNewDocTitle] = useState('');
   const [duplicateSlug, setDuplicateSlug] = useState('');
-  const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplate | null>(null);
+  const [selectedTemplate, setSelectedTemplate] =
+    useState<DocumentTemplate | null>(null);
 
   // Action loading flags
   const [saving, setSaving] = useState(false);
@@ -148,7 +155,9 @@ export const DocsContentManager: React.FC = () => {
           .split(',')
           .map((sel: string) => sel.trim())
           .filter((sel: string) => sel.length > 0)
-          .map((sel: string) => (sel.startsWith(scope) ? sel : `${scope} ${sel}`))
+          .map((sel: string) =>
+            sel.startsWith(scope) ? sel : `${scope} ${sel}`
+          )
           .join(', ');
         return `${p1} ${scoped}{`;
       });
@@ -172,15 +181,22 @@ export const DocsContentManager: React.FC = () => {
   const [aiInstruction, setAiInstruction] = useState(
     'Draft a Quickstart section with a minimal query, curl, and integration snippets.'
   );
-  const [aiMode, setAiMode] = useState<'APPEND' | 'REPLACE' | 'SECTION'>('APPEND');
-  const [aiStyle, setAiStyle] = useState<'CONCISE' | 'TUTORIAL' | 'REFERENCE' | 'MARKETING'>('CONCISE');
+  const [aiMode, setAiMode] = useState<'APPEND' | 'REPLACE' | 'SECTION'>(
+    'APPEND'
+  );
+  const [aiStyle, setAiStyle] = useState<
+    'CONCISE' | 'TUTORIAL' | 'REFERENCE' | 'MARKETING'
+  >('CONCISE');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiPreview, setAiPreview] = useState<string>('');
   const [editorSelection, setEditorSelection] = useState<string>('');
   // Split view state (resizable divider between editor and preview)
   const [paneRatio, setPaneRatio] = useState<number>(() => {
-    const saved = typeof window !== 'undefined' ? window.localStorage.getItem('docs.paneRatio') : null;
+    const saved =
+      typeof window !== 'undefined'
+        ? window.localStorage.getItem('docs.paneRatio')
+        : null;
     const v = saved ? parseFloat(saved) : 0.5;
     return Number.isFinite(v) && v > 0.15 && v < 0.85 ? v : 0.5;
   });
@@ -188,8 +204,11 @@ export const DocsContentManager: React.FC = () => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   // Normalization info
   const [normalizationApplied, setNormalizationApplied] = useState<number>(0);
-  const [persistingNormalization, setPersistingNormalization] = useState<boolean>(false);
-  const [normalizationPersistedAt, setNormalizationPersistedAt] = useState<number | null>(null);
+  const [persistingNormalization, setPersistingNormalization] =
+    useState<boolean>(false);
+  const [normalizationPersistedAt, setNormalizationPersistedAt] = useState<
+    number | null
+  >(null);
 
   // Canonical language set and alias map (keep small to avoid duplicate dropdown entries)
   const CANONICAL_LANG_LABELS: Record<string, string> = {
@@ -202,7 +221,7 @@ export const DocsContentManager: React.FC = () => {
     sql: 'SQL',
     python: 'Python',
     graphql: 'GraphQL',
-    http: 'HTTP'
+    http: 'HTTP',
   };
   const LANG_ALIASES: Record<string, string> = {
     '': 'plain',
@@ -218,7 +237,7 @@ export const DocsContentManager: React.FC = () => {
     shell: 'bash',
     py: 'python',
     gql: 'graphql',
-    curl: 'http'
+    curl: 'http',
   };
 
   // Normalize code fences without / unknown languages to canonical ones for the editor (does not mutate original saved value)
@@ -229,19 +248,26 @@ export const DocsContentManager: React.FC = () => {
     }
     const input = active.mdx || '';
     let changes = 0;
-    const normalized = input.replace(/```([^\n]*)\n([\s\S]*?)```/g, (full, langSpec, body) => {
-      const raw = (langSpec || '').trim();
-      const lower = raw.toLowerCase();
-      let canonical: string;
-      if (CANONICAL_LANG_LABELS[lower]) canonical = lower;
-      else if (LANG_ALIASES[lower] && CANONICAL_LANG_LABELS[LANG_ALIASES[lower]]) canonical = LANG_ALIASES[lower];
-      else if (raw === '') canonical = 'plain';
-      else if (/[a-z0-9_-]+/i.test(raw) === false) canonical = 'plain';
-      else if (!CANONICAL_LANG_LABELS[lower]) canonical = 'plain';
-      else canonical = lower;
-      if (canonical !== lower) changes++;
-      return '```' + canonical + '\n' + body + '```';
-    });
+    const normalized = input.replace(
+      /```([^\n]*)\n([\s\S]*?)```/g,
+      (full, langSpec, body) => {
+        const raw = (langSpec || '').trim();
+        const lower = raw.toLowerCase();
+        let canonical: string;
+        if (CANONICAL_LANG_LABELS[lower]) canonical = lower;
+        else if (
+          LANG_ALIASES[lower] &&
+          CANONICAL_LANG_LABELS[LANG_ALIASES[lower]]
+        )
+          canonical = LANG_ALIASES[lower];
+        else if (raw === '') canonical = 'plain';
+        else if (/[a-z0-9_-]+/i.test(raw) === false) canonical = 'plain';
+        else if (!CANONICAL_LANG_LABELS[lower]) canonical = 'plain';
+        else canonical = lower;
+        if (canonical !== lower) changes++;
+        return '```' + canonical + '\n' + body + '```';
+      }
+    );
     setNormalizationApplied(changes);
     return normalized;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -280,12 +306,16 @@ export const DocsContentManager: React.FC = () => {
     }
 
     return (
-      <div className="mdx-preview" style={{ width: '100%', lineHeight: 1.5, overflowX: 'hidden' }}>
+      <div
+        className="mdx-preview"
+        style={{ width: '100%', lineHeight: 1.5, overflowX: 'hidden' }}
+      >
         <style dangerouslySetInnerHTML={{ __html: scopedThemeCSS }} />
         <div
           className="doc-article"
           style={{
-            fontFamily: 'var(--font-family-sans, "Inter", system-ui, sans-serif)',
+            fontFamily:
+              'var(--font-family-sans, "Inter", system-ui, sans-serif)',
             color: 'var(--color-text-primary, #1f2937)',
             backgroundColor: 'var(--color-background, #ffffff)',
             padding: isFullscreen ? '2rem' : '1.5rem',
@@ -297,7 +327,7 @@ export const DocsContentManager: React.FC = () => {
             wordWrap: 'break-word',
             overflowWrap: 'break-word',
             width: '100%',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
           }}
         >
           <style
@@ -365,10 +395,16 @@ export const DocsContentManager: React.FC = () => {
               white-space: normal !important;
               word-break: break-word !important;
               overflow-wrap: anywhere !important;
+              position: relative !important;
+              background-image: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0.0),
+                rgba(0,0,0,0.03)
+              ) !important;
             }
             .mdx-preview .doc-article pre {
-              background-color: var(--color-background-code, #1e293b) !important;
-              color: var(--color-text-inverse, #ffffff) !important;
+              background-color: var(--color-code-bg, var(--color-background-code, #1e293b)) !important;
+              color: var(--color-code-text, var(--color-text-inverse, #ffffff)) !important;
               padding: var(--spacing-lg, 1.5rem) !important;
               border-radius: var(--border-radius-lg, 0.5rem) !important;
               overflow-x: auto !important;
@@ -376,7 +412,14 @@ export const DocsContentManager: React.FC = () => {
               font-size: var(--font-size-sm, 0.875rem) !important;
               margin: var(--spacing-lg, 1.5rem) 0 !important;
               max-width: 100% !important;
+              box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04), 0 2px 4px rgba(0,0,0,0.24) !important;
+              line-height: 1.55 !important;
             }
+            .mdx-preview .doc-article pre code { text-shadow: none !important; }
+            .mdx-preview .doc-article pre::-webkit-scrollbar { height: 10px; }
+            .mdx-preview .doc-article pre::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 6px; }
+            .mdx-preview .doc-article pre:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); }
+            .mdx-preview .doc-article pre::selection, .mdx-preview .doc-article code::selection { background: var(--color-primary, #3b82f6); color: var(--color-text-inverse,#fff); }
             .mdx-preview .doc-article pre code {
               background: none !important;
               padding: 0 !important;
@@ -396,7 +439,7 @@ export const DocsContentManager: React.FC = () => {
             .mdx-preview .doc-article *, .mdx-preview .doc-article *::before, .mdx-preview .doc-article *::after {
               min-width: 0 !important;
             }
-          `
+          `,
             }}
           />
           {compiledElement}
@@ -448,8 +491,8 @@ export const DocsContentManager: React.FC = () => {
               status
               latestRevision { id version state mdxRaw updatedAt publishedAt }
             }
-          }`
-        })
+          }`,
+        }),
       });
       const json = await res.json();
       if (json.errors) throw new Error(json.errors[0].message);
@@ -505,8 +548,14 @@ export const DocsContentManager: React.FC = () => {
             query: `mutation CreateDoc($input:CreateDocumentInput!){
               createDocument(input:$input){ id version state mdxRaw }
             }`,
-            variables: { input: { slug: active.document.slug, title: active.document.title, mdxRaw: normalized } }
-          })
+            variables: {
+              input: {
+                slug: active.document.slug,
+                title: active.document.title,
+                mdxRaw: normalized,
+              },
+            },
+          }),
         });
         const json = await res.json();
         if (json.errors) throw new Error(json.errors[0].message);
@@ -520,7 +569,7 @@ export const DocsContentManager: React.FC = () => {
               version: newDoc.latestRevision.version,
               state: newDoc.latestRevision.state,
               mdx: newDoc.latestRevision.mdxRaw || normalized,
-              dirty: false
+              dirty: false,
             });
           }
         }
@@ -532,13 +581,17 @@ export const DocsContentManager: React.FC = () => {
             query: `mutation UpdateRev($input:UpdateRevisionInput!){
               updateRevision(input:$input){ id version state }
             }`,
-            variables: { input: { revisionId: active.revisionId, mdxRaw: normalized } }
-          })
+            variables: {
+              input: { revisionId: active.revisionId, mdxRaw: normalized },
+            },
+          }),
         });
         const json = await res.json();
         if (json.errors) throw new Error(json.errors[0].message);
         await loadDocs();
-        setActive((prev) => (prev ? { ...prev, mdx: normalized, dirty: false } : prev));
+        setActive((prev) =>
+          prev ? { ...prev, mdx: normalized, dirty: false } : prev
+        );
       }
       setNormalizationPersistedAt(Date.now());
     } catch (e: any) {
@@ -552,7 +605,10 @@ export const DocsContentManager: React.FC = () => {
   const filteredDocs = useMemo(() => {
     const q = filter.trim().toLowerCase();
     if (!q) return docs;
-    return docs.filter((d) => d.slug.toLowerCase().includes(q) || d.title.toLowerCase().includes(q));
+    return docs.filter(
+      (d) =>
+        d.slug.toLowerCase().includes(q) || d.title.toLowerCase().includes(q)
+    );
   }, [docs, filter]);
 
   // Actions
@@ -567,8 +623,14 @@ export const DocsContentManager: React.FC = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             query: `mutation CreateDoc($input:CreateDocumentInput!){ createDocument(input:$input){ id version state mdxRaw } }`,
-            variables: { input: { slug: active.document.slug, title: active.document.title, mdxRaw: active.mdx } }
-          })
+            variables: {
+              input: {
+                slug: active.document.slug,
+                title: active.document.title,
+                mdxRaw: active.mdx,
+              },
+            },
+          }),
         });
         const json = await res.json();
         if (json.errors) throw new Error(json.errors[0].message);
@@ -582,7 +644,7 @@ export const DocsContentManager: React.FC = () => {
               version: newDoc.latestRevision.version,
               state: newDoc.latestRevision.state,
               mdx: newDoc.latestRevision.mdxRaw || active.mdx,
-              dirty: false
+              dirty: false,
             });
           }
         }
@@ -593,8 +655,10 @@ export const DocsContentManager: React.FC = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             query: `mutation UpdateRev($input:UpdateRevisionInput!){ updateRevision(input:$input){ id version state } }`,
-            variables: { input: { revisionId: active.revisionId, mdxRaw: active.mdx } }
-          })
+            variables: {
+              input: { revisionId: active.revisionId, mdxRaw: active.mdx },
+            },
+          }),
         });
         const json = await res.json();
         if (json.errors) throw new Error(json.errors[0].message);
@@ -622,13 +686,19 @@ export const DocsContentManager: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: `mutation UpdateRev($input:UpdateRevisionInput!){ updateRevision(input:$input){ id } }`,
-          variables: { input: { revisionId: active.revisionId, title: newTitle } }
-        })
+          variables: {
+            input: { revisionId: active.revisionId, title: newTitle },
+          },
+        }),
       });
       const json = await res.json();
       if (json.errors) throw new Error(json.errors[0].message);
       await loadDocs();
-      setActive((prev) => (prev ? { ...prev, document: { ...prev.document, title: newTitle } } : prev));
+      setActive((prev) =>
+        prev
+          ? { ...prev, document: { ...prev.document, title: newTitle } }
+          : prev
+      );
       setEditingTitle(false);
     } catch (e: any) {
       setError(e.message || 'Failed to rename title');
@@ -651,14 +721,20 @@ export const DocsContentManager: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: `mutation UpdateDoc($input:UpdateDocumentInput!){ updateDocument(input:$input){ id slug title } }`,
-          variables: { input: { documentId: active.document.id, slug: newSlug } }
-        })
+          variables: {
+            input: { documentId: active.document.id, slug: newSlug },
+          },
+        }),
       });
       const json = await res.json();
       if (json.errors) throw new Error(json.errors[0].message);
       const updated = json.data.updateDocument;
       await loadDocs();
-      setActive((prev) => (prev ? { ...prev, document: { ...prev.document, slug: updated.slug } } : prev));
+      setActive((prev) =>
+        prev
+          ? { ...prev, document: { ...prev.document, slug: updated.slug } }
+          : prev
+      );
       setEditingSlug(false);
     } catch (e: any) {
       setError(e.message || 'Failed to rename slug');
@@ -705,14 +781,17 @@ export const DocsContentManager: React.FC = () => {
     if (match && match.latestRevision) {
       const latest = match.latestRevision;
       const raw = latest.mdxRaw || '';
-      if (!active.dirty && (latest.id !== active.revisionId || raw !== active.mdx)) {
+      if (
+        !active.dirty &&
+        (latest.id !== active.revisionId || raw !== active.mdx)
+      ) {
         setActive({
           document: match,
           revisionId: latest.id,
           version: latest.version,
           state: latest.state,
           mdx: raw,
-          dirty: false
+          dirty: false,
         });
       }
     }
@@ -727,8 +806,8 @@ export const DocsContentManager: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: `mutation Pub($id:String!){ publishRevision(revisionId:$id){ revisionId chunksCreated } }`,
-          variables: { id: active.revisionId }
-        })
+          variables: { id: active.revisionId },
+        }),
       });
       const json = await res.json();
       if (json.errors) throw new Error(json.errors[0].message);
@@ -742,7 +821,7 @@ export const DocsContentManager: React.FC = () => {
             version: updated.latestRevision.version,
             state: updated.latestRevision.state,
             mdx: updated.latestRevision.mdxRaw || active.mdx,
-            dirty: false
+            dirty: false,
           });
         }
       }
@@ -761,8 +840,8 @@ export const DocsContentManager: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: `mutation CreateDraft($id:String!){ createDraft(documentId:$id){ id version state mdxRaw } }`,
-          variables: { id: doc.id }
-        })
+          variables: { id: doc.id },
+        }),
       });
       const json = await res.json();
       if (json.errors) throw new Error(json.errors[0].message);
@@ -773,7 +852,7 @@ export const DocsContentManager: React.FC = () => {
         version: rev.version,
         state: rev.state,
         mdx: rev.mdxRaw || '',
-        dirty: false
+        dirty: false,
       });
       await loadDocs();
     } catch (e: any) {
@@ -795,8 +874,8 @@ export const DocsContentManager: React.FC = () => {
         id: 'new',
         version: 1,
         state: 'DRAFT' as const,
-        mdxRaw: selectedTemplate.content(newDocTitle.trim(), newDocSlug.trim())
-      }
+        mdxRaw: selectedTemplate.content(newDocTitle.trim(), newDocSlug.trim()),
+      },
     };
 
     setActive({
@@ -805,7 +884,7 @@ export const DocsContentManager: React.FC = () => {
       version: 1,
       state: 'DRAFT',
       mdx: newDoc.latestRevision.mdxRaw,
-      dirty: true
+      dirty: true,
     });
 
     // Close modal and reset
@@ -824,8 +903,8 @@ export const DocsContentManager: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: `mutation Dup($id:String!,$slug:String!){ duplicateDocument(documentId:$id,newSlug:$slug){ id slug title } }`,
-          variables: { id: doc.id, slug: duplicateSlug.trim() }
-        })
+          variables: { id: doc.id, slug: duplicateSlug.trim() },
+        }),
       });
       const json = await res.json();
       if (json.errors) throw new Error(json.errors[0].message);
@@ -849,8 +928,8 @@ export const DocsContentManager: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: `mutation Arch($id:String!){ archiveDocument(documentId:$id) }`,
-          variables: { id: doc.id }
-        })
+          variables: { id: doc.id },
+        }),
       });
       const json = await res.json();
       if (json.errors) throw new Error(json.errors[0].message);
@@ -874,8 +953,8 @@ export const DocsContentManager: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: `mutation Restore($id:String!){ restoreDocument(documentId:$id) }`,
-          variables: { id: doc.id }
-        })
+          variables: { id: doc.id },
+        }),
       });
       const json = await res.json();
       if (json.errors) throw new Error(json.errors[0].message);
@@ -895,8 +974,8 @@ export const DocsContentManager: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: `mutation Del($id:String!){ deleteDocument(documentId:$id) }`,
-          variables: { id: doc.id }
-        })
+          variables: { id: doc.id },
+        }),
       });
       const json = await res.json();
       if (json.errors) throw new Error(json.errors[0].message);
@@ -936,7 +1015,9 @@ export const DocsContentManager: React.FC = () => {
         setPreviewError(null);
         // Lazy load evaluate API only once
         if (!mdxRuntimeRef.current) {
-          mdxRuntimeRef.current = await import(/* webpackChunkName: "mdx-compiler" */ '@mdx-js/mdx');
+          mdxRuntimeRef.current = await import(
+            /* webpackChunkName: "mdx-compiler" */ '@mdx-js/mdx'
+          );
         }
         const { evaluate } = mdxRuntimeRef.current;
         const runtime = await import('react/jsx-runtime');
@@ -952,14 +1033,18 @@ export const DocsContentManager: React.FC = () => {
           ...devRuntime, // supplies jsxDEV in development so evaluate stops complaining
           useDynamicImport: false,
           providerImportSource: '@mdx-js/react',
-          development: Boolean((devRuntime as any).jsxDEV)
+          development: Boolean((devRuntime as any).jsxDEV),
         });
         const MDXContent = evaluated.default; // function component
         // Build TOC
         const tocItems: { depth: number; value: string }[] = [];
         source.split(/\n/).forEach((line) => {
           const m = /^(#{1,6})\s+(.+)$/.exec(line.trim());
-          if (m) tocItems.push({ depth: m[1].length, value: m[2].replace(/`/g, '') });
+          if (m)
+            tocItems.push({
+              depth: m[1].length,
+              value: m[2].replace(/`/g, ''),
+            });
         });
         setToc(tocItems);
         setCompiledElement(
@@ -1005,22 +1090,42 @@ export const DocsContentManager: React.FC = () => {
           {error}
         </Alert>
       )}
-      <div style={{ display: 'flex', gap: '1rem', height: 'calc(100vh - 200px)', overflowX: 'hidden' }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: '1rem',
+          height: 'calc(100vh - 200px)',
+          overflowX: 'hidden',
+        }}
+      >
         {/* Left column: list */}
         <div style={{ width: 320, display: 'flex', flexDirection: 'column' }}>
-          <Card withBorder p="sm" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <Card
+            withBorder
+            p="sm"
+            style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+          >
             <Group position="apart" mb={4}>
               <Title order={4} style={{ marginBottom: 0 }}>
                 Documents
               </Title>
               <Group spacing={4}>
                 <Tooltip label="Create new document">
-                  <Button size="xs" variant="subtle" onClick={() => setCreateModalOpen(true)}>
+                  <Button
+                    size="xs"
+                    variant="subtle"
+                    onClick={() => setCreateModalOpen(true)}
+                  >
                     <IconPlus size={14} />
                   </Button>
                 </Tooltip>
                 <Tooltip label="Reload">
-                  <Button variant="subtle" size="xs" onClick={refreshDocs} compact>
+                  <Button
+                    variant="subtle"
+                    size="xs"
+                    onClick={refreshDocs}
+                    compact
+                  >
                     ↻
                   </Button>
                 </Tooltip>
@@ -1046,16 +1151,32 @@ export const DocsContentManager: React.FC = () => {
                   {filteredDocs.map((d) => {
                     const activeMatch = d.id === active?.document.id;
                     const badgeColor =
-                      d.status === 'ARCHIVED' ? 'gray' : d.latestRevision?.state === 'DRAFT' ? 'yellow' : 'blue';
+                      d.status === 'ARCHIVED'
+                        ? 'gray'
+                        : d.latestRevision?.state === 'DRAFT'
+                          ? 'yellow'
+                          : 'blue';
                     return (
                       <Card
                         key={d.id}
                         p="xs"
                         withBorder
-                        style={{ cursor: 'pointer', borderColor: activeMatch ? 'var(--mantine-color-blue-5)' : undefined }}
+                        style={{
+                          cursor: 'pointer',
+                          borderColor: activeMatch
+                            ? 'var(--mantine-color-blue-5)'
+                            : undefined,
+                        }}
                         onClick={() => {
                           if (!d.latestRevision) {
-                            setActive({ document: d, revisionId: '', version: 0, state: 'NONE', mdx: '', dirty: false });
+                            setActive({
+                              document: d,
+                              revisionId: '',
+                              version: 0,
+                              state: 'NONE',
+                              mdx: '',
+                              dirty: false,
+                            });
                           } else {
                             setActive({
                               document: d,
@@ -1063,17 +1184,28 @@ export const DocsContentManager: React.FC = () => {
                               version: d.latestRevision.version,
                               state: d.latestRevision.state,
                               mdx: d.latestRevision.mdxRaw || '',
-                              dirty: false
+                              dirty: false,
                             });
                           }
                         }}
                       >
                         <Group position="apart" spacing={4} mb={2}>
-                          <Text size="sm" weight={500} lineClamp={1} style={{ maxWidth: 160 }}>
+                          <Text
+                            size="sm"
+                            weight={500}
+                            lineClamp={1}
+                            style={{ maxWidth: 160 }}
+                          >
                             {d.slug}
                           </Text>
-                          <Badge color={badgeColor} variant={activeMatch ? 'filled' : 'light'} size="xs">
-                            {d.status === 'ARCHIVED' ? 'ARCHIVED' : d.latestRevision?.state || '—'}
+                          <Badge
+                            color={badgeColor}
+                            variant={activeMatch ? 'filled' : 'light'}
+                            size="xs"
+                          >
+                            {d.status === 'ARCHIVED'
+                              ? 'ARCHIVED'
+                              : d.latestRevision?.state || '—'}
                           </Badge>
                         </Group>
                         <Text size="xs" color="dimmed" lineClamp={1}>
@@ -1186,7 +1318,9 @@ export const DocsContentManager: React.FC = () => {
                       </Card>
                     );
                   })}
-                  {filteredDocs.length === 0 && <Text size="sm">No documents.</Text>}
+                  {filteredDocs.length === 0 && (
+                    <Text size="sm">No documents.</Text>
+                  )}
                 </Stack>
               </ScrollArea>
             )}
@@ -1194,11 +1328,27 @@ export const DocsContentManager: React.FC = () => {
         </div>
 
         {/* Right column: editor - full width */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <Card withBorder p="sm" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+          }}
+        >
+          <Card
+            withBorder
+            p="sm"
+            style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
+          >
             {active ? (
               <>
-                <Group position="apart" mb="sm" align="flex-start" style={{ flexWrap: 'wrap', rowGap: 8 }}>
+                <Group
+                  position="apart"
+                  mb="sm"
+                  align="flex-start"
+                  style={{ flexWrap: 'wrap', rowGap: 8 }}
+                >
                   <Stack spacing={2} style={{ flex: '1 1 auto', minWidth: 0 }}>
                     <Title order={4} style={{ marginBottom: 0 }}>
                       {editingTitle ? (
@@ -1212,11 +1362,20 @@ export const DocsContentManager: React.FC = () => {
                           }}
                           onBlur={saveTitleInline}
                           autoFocus
-                          style={{ maxWidth: 'min(720px, 100%)', width: '100%', display: 'inline-block' }}
+                          style={{
+                            maxWidth: 'min(720px, 100%)',
+                            width: '100%',
+                            display: 'inline-block',
+                          }}
                         />
                       ) : (
                         <span
-                          style={{ cursor: 'text', overflowWrap: 'anywhere', wordBreak: 'break-word', whiteSpace: 'normal' }}
+                          style={{
+                            cursor: 'text',
+                            overflowWrap: 'anywhere',
+                            wordBreak: 'break-word',
+                            whiteSpace: 'normal',
+                          }}
                           onClick={() => {
                             setTitleInput(active.document.title);
                             setEditingTitle(true);
@@ -1227,9 +1386,13 @@ export const DocsContentManager: React.FC = () => {
                         </span>
                       )}{' '}
                       {active.state === 'DRAFT' && (
-                        <Badge color={active.dirty ? 'yellow' : 'blue'}>{active.dirty ? 'Unsaved Draft' : 'Draft'}</Badge>
+                        <Badge color={active.dirty ? 'yellow' : 'blue'}>
+                          {active.dirty ? 'Unsaved Draft' : 'Draft'}
+                        </Badge>
                       )}
-                      {active.state === 'PUBLISHED' && <Badge color="green">Published v{active.version}</Badge>}
+                      {active.state === 'PUBLISHED' && (
+                        <Badge color="green">Published v{active.version}</Badge>
+                      )}
                     </Title>
                     <Text size="xs" color="dimmed">
                       slug:{' '}
@@ -1244,11 +1407,18 @@ export const DocsContentManager: React.FC = () => {
                           }}
                           onBlur={saveSlugInline}
                           autoFocus
-                          style={{ maxWidth: 'min(360px, 100%)', width: '100%', display: 'inline-block' }}
+                          style={{
+                            maxWidth: 'min(360px, 100%)',
+                            width: '100%',
+                            display: 'inline-block',
+                          }}
                         />
                       ) : (
                         <span
-                          style={{ cursor: 'text', textDecoration: 'underline dotted' }}
+                          style={{
+                            cursor: 'text',
+                            textDecoration: 'underline dotted',
+                          }}
                           onClick={() => {
                             setSlugInput(active.document.slug);
                             setEditingSlug(true);
@@ -1269,7 +1439,8 @@ export const DocsContentManager: React.FC = () => {
                         leftIcon={<IconWand size={14} />}
                         onClick={() => {
                           try {
-                            const sel = window.getSelection?.()?.toString?.() || '';
+                            const sel =
+                              window.getSelection?.()?.toString?.() || '';
                             setEditorSelection(sel);
                           } catch {}
                           setAiOpen(true);
@@ -1283,30 +1454,51 @@ export const DocsContentManager: React.FC = () => {
                         Renaming…
                       </Badge>
                     )}
-                    {normalizationApplied > 0 && !parseError && active.mdx !== editorMarkdown && (
-                      <Tooltip label="Persist normalized code fence languages (aliases → canonical)">
-                        <Button
-                          size="xs"
-                          variant="light"
-                          color="violet"
-                          onClick={persistNormalization}
-                          loading={persistingNormalization}
-                        >
-                          Persist Normalizations
-                        </Button>
-                      </Tooltip>
-                    )}
-                    <Tooltip label={sourceMode ? 'Switch to Rich mode' : 'Switch to Source mode'}>
-                      <Button size="xs" variant="light" onClick={() => setSourceMode((s) => !s)}>
+                    {normalizationApplied > 0 &&
+                      !parseError &&
+                      active.mdx !== editorMarkdown && (
+                        <Tooltip label="Persist normalized code fence languages (aliases → canonical)">
+                          <Button
+                            size="xs"
+                            variant="light"
+                            color="violet"
+                            onClick={persistNormalization}
+                            loading={persistingNormalization}
+                          >
+                            Persist Normalizations
+                          </Button>
+                        </Tooltip>
+                      )}
+                    <Tooltip
+                      label={
+                        sourceMode
+                          ? 'Switch to Rich mode'
+                          : 'Switch to Source mode'
+                      }
+                    >
+                      <Button
+                        size="xs"
+                        variant="light"
+                        onClick={() => setSourceMode((s) => !s)}
+                      >
                         {sourceMode ? 'Rich Mode' : 'Source Mode'}
                       </Button>
                     </Tooltip>
                     <Tooltip label="Save draft (Ctrl+S)">
-                      <Button size="xs" variant="outline" onClick={saveRevision} disabled={!active.dirty} loading={saving}>
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={saveRevision}
+                        disabled={!active.dirty}
+                        loading={saving}
+                      >
                         Save Draft
                       </Button>
                     </Tooltip>
-                    <Tooltip label="Publish revision (Ctrl+Enter)" disabled={active.state !== 'DRAFT'}>
+                    <Tooltip
+                      label="Publish revision (Ctrl+Enter)"
+                      disabled={active.state !== 'DRAFT'}
+                    >
                       <Button
                         size="xs"
                         color="green"
@@ -1321,13 +1513,19 @@ export const DocsContentManager: React.FC = () => {
                 </Group>
                 <Divider mb="sm" />
                 {parseError && (
-                  <Alert color="red" mb="sm" title="MDX Parse Error" variant="light">
+                  <Alert
+                    color="red"
+                    mb="sm"
+                    title="MDX Parse Error"
+                    variant="light"
+                  >
                     <Text size="xs" style={{ whiteSpace: 'pre-wrap' }}>
                       {parseError}
                     </Text>
                     <Text size="xs" mt={4}>
-                      You're in {sourceMode ? 'source' : 'rich'} mode. Fix the syntax above (common causes: unclosed code fence
-                      ``` or missing closing tag) then the error will disappear.
+                      You're in {sourceMode ? 'source' : 'rich'} mode. Fix the
+                      syntax above (common causes: unclosed code fence ``` or
+                      missing closing tag) then the error will disappear.
                     </Text>
                   </Alert>
                 )}
@@ -1341,7 +1539,7 @@ export const DocsContentManager: React.FC = () => {
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '1rem',
-                    minHeight: 0
+                    minHeight: 0,
                   }}
                 >
                   <style>{`
@@ -1380,7 +1578,7 @@ export const DocsContentManager: React.FC = () => {
                       minHeight: 0,
                       flexBasis: `calc(${paneRatio * 100}% - 4px)`,
                       flexGrow: 0,
-                      flexShrink: 0
+                      flexShrink: 0,
                     }}
                   >
                     <Text size="xs" color="dimmed" mb={4}>
@@ -1394,7 +1592,7 @@ export const DocsContentManager: React.FC = () => {
                         overflow: 'hidden',
                         minHeight: 300,
                         display: 'flex',
-                        flexDirection: 'column'
+                        flexDirection: 'column',
                       }}
                     >
                       {!clientReady && (
@@ -1422,7 +1620,7 @@ export const DocsContentManager: React.FC = () => {
                               fontSize: '14px',
                               position: 'relative',
                               display: 'flex',
-                              flexDirection: 'column'
+                              flexDirection: 'column',
                             }}
                           >
                             <style>{`
@@ -1483,14 +1681,31 @@ export const DocsContentManager: React.FC = () => {
                               }
                             `}</style>
                             <div
-                              style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}
+                              style={{
+                                flex: 1,
+                                minHeight: 0,
+                                position: 'relative',
+                                display: 'flex',
+                                flexDirection: 'column',
+                              }}
                             >
-                              <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }} className="mdx-editor-scroll-container">
+                              <div
+                                style={{
+                                  flex: 1,
+                                  minHeight: 0,
+                                  overflow: 'auto',
+                                }}
+                                className="mdx-editor-scroll-container"
+                              >
                                 <MDXEditor
                                   key={active.revisionId}
                                   markdown={editorMarkdown}
                                   onChange={(value) =>
-                                    setActive((prev) => (prev ? { ...prev, mdx: value, dirty: true } : prev))
+                                    setActive((prev) =>
+                                      prev
+                                        ? { ...prev, mdx: value, dirty: true }
+                                        : prev
+                                    )
                                   }
                                   plugins={[
                                     frontmatterPlugin(),
@@ -1503,11 +1718,18 @@ export const DocsContentManager: React.FC = () => {
                                     linkDialogPlugin(),
                                     imagePlugin(),
                                     tablePlugin(),
-                                    codeBlockPlugin({ defaultCodeBlockLanguage: 'plain' }),
-                                    codeMirrorPlugin({ codeBlockLanguages: CANONICAL_LANG_LABELS }),
+                                    codeBlockPlugin({
+                                      defaultCodeBlockLanguage: 'plain',
+                                    }),
+                                    codeMirrorPlugin({
+                                      codeBlockLanguages: CANONICAL_LANG_LABELS,
+                                    }),
                                     diffSourcePlugin({
-                                      viewMode: sourceMode || parseError ? 'source' : 'rich-text',
-                                      diffMarkdown: ''
+                                      viewMode:
+                                        sourceMode || parseError
+                                          ? 'source'
+                                          : 'rich-text',
+                                      diffMarkdown: '',
                                     }),
                                     toolbarPlugin({
                                       toolbarContents: () => (
@@ -1528,8 +1750,8 @@ export const DocsContentManager: React.FC = () => {
                                           <InsertThematicBreak />
                                           <InsertCodeBlock />
                                         </>
-                                      )
-                                    })
+                                      ),
+                                    }),
                                   ]}
                                   contentEditableClassName="mdx-editor-content"
                                   className="mdx-editor"
@@ -1538,8 +1760,10 @@ export const DocsContentManager: React.FC = () => {
                             </div>
                             {normalizationApplied > 0 && !parseError && (
                               <Text size="xs" color="dimmed" mt={4} pl={4}>
-                                Normalized {normalizationApplied} code fence{normalizationApplied === 1 ? '' : 's'} (language
-                                aliases / blanks → canonical). Save to persist.
+                                Normalized {normalizationApplied} code fence
+                                {normalizationApplied === 1 ? '' : 's'}{' '}
+                                (language aliases / blanks → canonical). Save to
+                                persist.
                               </Text>
                             )}
                             {normalizationPersistedAt && (
@@ -1560,17 +1784,23 @@ export const DocsContentManager: React.FC = () => {
                     aria-orientation="vertical"
                     onMouseDown={(e) => {
                       isResizingRef.current = true;
-                      (e.currentTarget as HTMLDivElement).classList.add('active');
+                      (e.currentTarget as HTMLDivElement).classList.add(
+                        'active'
+                      );
                       const onMove = (ev: MouseEvent) => {
-                        if (!isResizingRef.current || !containerRef.current) return;
-                        const rect = containerRef.current.getBoundingClientRect();
+                        if (!isResizingRef.current || !containerRef.current)
+                          return;
+                        const rect =
+                          containerRef.current.getBoundingClientRect();
                         let ratio = (ev.clientX - rect.left) / rect.width;
                         ratio = Math.max(0.2, Math.min(0.8, ratio));
                         setPaneRatio(ratio);
                       };
                       const onUp = () => {
                         isResizingRef.current = false;
-                        (e.currentTarget as HTMLDivElement).classList.remove('active');
+                        (e.currentTarget as HTMLDivElement).classList.remove(
+                          'active'
+                        );
                         window.removeEventListener('mousemove', onMove);
                         window.removeEventListener('mouseup', onUp);
                       };
@@ -1589,7 +1819,7 @@ export const DocsContentManager: React.FC = () => {
                       minHeight: 0,
                       flexBasis: `calc(${(1 - paneRatio) * 100}% - 4px)`,
                       flexGrow: 0,
-                      flexShrink: 0
+                      flexShrink: 0,
                     }}
                   >
                     <Group position="apart" mb={4} spacing={4} align="center">
@@ -1622,10 +1852,13 @@ export const DocsContentManager: React.FC = () => {
                         minHeight: 200,
                         maxHeight: '70vh',
                         display: 'flex',
-                        flexDirection: 'column'
+                        flexDirection: 'column',
                       }}
                     >
-                      <div key={active?.revisionId || active?.document.id} style={{ flex: 1, overflow: 'auto' }}>
+                      <div
+                        key={active?.revisionId || active?.document.id}
+                        style={{ flex: 1, overflow: 'auto' }}
+                      >
                         {renderPreview()}
                       </div>
                     </Card>
@@ -1634,13 +1867,21 @@ export const DocsContentManager: React.FC = () => {
                   {/* Table of Contents - spans full width on large screens */}
                   {toc.length > 0 && (
                     <div className="toc-section">
-                      <Card withBorder p="xs" style={{ maxHeight: 120, overflow: 'auto' }}>
+                      <Card
+                        withBorder
+                        p="xs"
+                        style={{ maxHeight: 120, overflow: 'auto' }}
+                      >
                         <Text size="xs" weight={500} mb={4}>
                           Headings
                         </Text>
                         <Stack spacing={2}>
                           {toc.map((h, i) => (
-                            <Text key={i} size="xs" style={{ paddingLeft: (h.depth - 1) * 8 }}>
+                            <Text
+                              key={i}
+                              size="xs"
+                              style={{ paddingLeft: (h.depth - 1) * 8 }}
+                            >
                               {h.value}
                             </Text>
                           ))}
@@ -1653,7 +1894,8 @@ export const DocsContentManager: React.FC = () => {
             ) : (
               <Stack align="center" justify="center" style={{ flex: 1 }}>
                 <Text size="sm" color="dimmed">
-                  Select a document from the list or create a new one to start editing.
+                  Select a document from the list or create a new one to start
+                  editing.
                 </Text>
               </Stack>
             )}
@@ -1677,10 +1919,17 @@ export const DocsContentManager: React.FC = () => {
           {!selectedTemplate ? (
             <>
               <Text size="sm" color="dimmed">
-                Choose a template to get started with pre-built content and structure:
+                Choose a template to get started with pre-built content and
+                structure:
               </Text>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                  gap: '1rem',
+                }}
+              >
                 {DOCUMENT_TEMPLATES.map((template) => (
                   <Card
                     key={template.id}
@@ -1689,11 +1938,13 @@ export const DocsContentManager: React.FC = () => {
                     style={{ cursor: 'pointer', transition: 'all 0.2s' }}
                     onClick={() => setSelectedTemplate(template)}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--mantine-color-blue-5)';
+                      e.currentTarget.style.borderColor =
+                        'var(--mantine-color-blue-5)';
                       e.currentTarget.style.transform = 'translateY(-2px)';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--mantine-color-gray-4)';
+                      e.currentTarget.style.borderColor =
+                        'var(--mantine-color-gray-4)';
                       e.currentTarget.style.transform = 'translateY(0)';
                     }}
                   >
@@ -1752,7 +2003,11 @@ export const DocsContentManager: React.FC = () => {
                       {selectedTemplate.description}
                     </Text>
                   </div>
-                  <Button variant="subtle" size="xs" onClick={() => setSelectedTemplate(null)}>
+                  <Button
+                    variant="subtle"
+                    size="xs"
+                    onClick={() => setSelectedTemplate(null)}
+                  >
                     Change Template
                   </Button>
                 </Group>
@@ -1776,10 +2031,16 @@ export const DocsContentManager: React.FC = () => {
               />
 
               <Group position="right" spacing="sm">
-                <Button variant="subtle" onClick={() => setSelectedTemplate(null)}>
+                <Button
+                  variant="subtle"
+                  onClick={() => setSelectedTemplate(null)}
+                >
                   Back
                 </Button>
-                <Button onClick={createNewDocument} disabled={!newDocSlug.trim() || !newDocTitle.trim()}>
+                <Button
+                  onClick={createNewDocument}
+                  disabled={!newDocSlug.trim() || !newDocTitle.trim()}
+                >
                   Create Document
                 </Button>
               </Group>
@@ -1844,10 +2105,13 @@ export const DocsContentManager: React.FC = () => {
         size="md"
       >
         <Stack spacing="md">
-          <Text size="sm">Are you sure you want to archive "{archiveDoc?.title}"?</Text>
+          <Text size="sm">
+            Are you sure you want to archive "{archiveDoc?.title}"?
+          </Text>
           <Text size="xs" color="dimmed">
-            This document will disappear from active lists but can be restored later. The slug "{archiveDoc?.slug}" will become
-            available for new documents.
+            This document will disappear from active lists but can be restored
+            later. The slug "{archiveDoc?.slug}" will become available for new
+            documents.
           </Text>
           <Group position="right" spacing="sm">
             <Button
@@ -1859,7 +2123,11 @@ export const DocsContentManager: React.FC = () => {
             >
               Cancel
             </Button>
-            <Button color="red" onClick={() => archiveDoc && archive(archiveDoc)} loading={archiving}>
+            <Button
+              color="red"
+              onClick={() => archiveDoc && archive(archiveDoc)}
+              loading={archiving}
+            >
               Archive Document
             </Button>
           </Group>
@@ -1879,8 +2147,9 @@ export const DocsContentManager: React.FC = () => {
         <Stack spacing="md">
           <Alert color="red" title="This action is permanent" variant="filled">
             <Text size="sm">
-              You are about to permanently delete "{deleteDoc?.title}". This will remove the document, all its revisions, and
-              any search index entries. This cannot be undone.
+              You are about to permanently delete "{deleteDoc?.title}". This
+              will remove the document, all its revisions, and any search index
+              entries. This cannot be undone.
             </Text>
           </Alert>
           <Group position="right" spacing="sm">
@@ -1893,7 +2162,11 @@ export const DocsContentManager: React.FC = () => {
             >
               Cancel
             </Button>
-            <Button color="red" onClick={() => deleteDoc && hardDelete(deleteDoc)} loading={deleting}>
+            <Button
+              color="red"
+              onClick={() => deleteDoc && hardDelete(deleteDoc)}
+              loading={deleting}
+            >
               Delete Permanently
             </Button>
           </Group>
@@ -1908,26 +2181,26 @@ export const DocsContentManager: React.FC = () => {
         size="calc(100vw - 3rem)"
         style={{
           maxWidth: 'none',
-          margin: '1.5rem'
+          margin: '1.5rem',
         }}
         styles={{
           modal: {
             height: 'calc(100vh - 8rem)',
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
           },
           body: {
             flex: 1,
             overflow: 'auto',
-            padding: 0
-          }
+            padding: 0,
+          },
         }}
       >
         <div
           style={{
             height: '100%',
             overflow: 'auto',
-            backgroundColor: 'var(--color-background, #ffffff)'
+            backgroundColor: 'var(--color-background, #ffffff)',
           }}
         >
           {renderPreview(true)}
@@ -1935,11 +2208,17 @@ export const DocsContentManager: React.FC = () => {
       </Modal>
 
       {/* AI Assist Modal */}
-      <Modal opened={aiOpen} onClose={() => setAiOpen(false)} title="AI Assist" size="xl">
+      <Modal
+        opened={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title="AI Assist"
+        size="xl"
+      >
         <Stack spacing="md">
           <Text size="sm" color="dimmed">
-            Describe what you’d like to generate or improve. Choose Append to add a new section, Replace to rewrite the page, or
-            Improve Selection to only modify highlighted text.
+            Describe what you’d like to generate or improve. Choose Append to
+            add a new section, Replace to rewrite the page, or Improve Selection
+            to only modify highlighted text.
           </Text>
           <TextInput
             label="Instruction"
@@ -1949,27 +2228,55 @@ export const DocsContentManager: React.FC = () => {
           />
           <Group spacing="sm" align="center">
             <Text size="sm">Mode:</Text>
-            <Button size="xs" variant={aiMode === 'APPEND' ? 'filled' : 'light'} onClick={() => setAiMode('APPEND')}>
+            <Button
+              size="xs"
+              variant={aiMode === 'APPEND' ? 'filled' : 'light'}
+              onClick={() => setAiMode('APPEND')}
+            >
               Append
             </Button>
-            <Button size="xs" variant={aiMode === 'REPLACE' ? 'filled' : 'light'} onClick={() => setAiMode('REPLACE')}>
+            <Button
+              size="xs"
+              variant={aiMode === 'REPLACE' ? 'filled' : 'light'}
+              onClick={() => setAiMode('REPLACE')}
+            >
               Replace
             </Button>
-            <Button size="xs" variant={aiMode === 'SECTION' ? 'filled' : 'light'} onClick={() => setAiMode('SECTION')}>
+            <Button
+              size="xs"
+              variant={aiMode === 'SECTION' ? 'filled' : 'light'}
+              onClick={() => setAiMode('SECTION')}
+            >
               Improve Selection
             </Button>
             <Divider orientation="vertical" />
             <Text size="sm">Style:</Text>
-            <Button size="xs" variant={aiStyle === 'CONCISE' ? 'filled' : 'light'} onClick={() => setAiStyle('CONCISE')}>
+            <Button
+              size="xs"
+              variant={aiStyle === 'CONCISE' ? 'filled' : 'light'}
+              onClick={() => setAiStyle('CONCISE')}
+            >
               Concise
             </Button>
-            <Button size="xs" variant={aiStyle === 'TUTORIAL' ? 'filled' : 'light'} onClick={() => setAiStyle('TUTORIAL')}>
+            <Button
+              size="xs"
+              variant={aiStyle === 'TUTORIAL' ? 'filled' : 'light'}
+              onClick={() => setAiStyle('TUTORIAL')}
+            >
               Tutorial
             </Button>
-            <Button size="xs" variant={aiStyle === 'REFERENCE' ? 'filled' : 'light'} onClick={() => setAiStyle('REFERENCE')}>
+            <Button
+              size="xs"
+              variant={aiStyle === 'REFERENCE' ? 'filled' : 'light'}
+              onClick={() => setAiStyle('REFERENCE')}
+            >
               Reference
             </Button>
-            <Button size="xs" variant={aiStyle === 'MARKETING' ? 'filled' : 'light'} onClick={() => setAiStyle('MARKETING')}>
+            <Button
+              size="xs"
+              variant={aiStyle === 'MARKETING' ? 'filled' : 'light'}
+              onClick={() => setAiStyle('MARKETING')}
+            >
               Marketing-lite
             </Button>
           </Group>
@@ -1980,7 +2287,11 @@ export const DocsContentManager: React.FC = () => {
             <Button
               size="xs"
               variant="subtle"
-              onClick={() => setAiInstruction('Draft a Quickstart with a minimal GraphQL query, curl, and environment setup.')}
+              onClick={() =>
+                setAiInstruction(
+                  'Draft a Quickstart with a minimal GraphQL query, curl, and environment setup.'
+                )
+              }
             >
               Quickstart
             </Button>
@@ -1998,21 +2309,32 @@ export const DocsContentManager: React.FC = () => {
             <Button
               size="xs"
               variant="subtle"
-              onClick={() => setAiInstruction('Create a Troubleshooting section with 5 common errors, causes, and fixes.')}
+              onClick={() =>
+                setAiInstruction(
+                  'Create a Troubleshooting section with 5 common errors, causes, and fixes.'
+                )
+              }
             >
               Troubleshooting
             </Button>
             <Button
               size="xs"
               variant="subtle"
-              onClick={() => setAiInstruction('Add a concise FAQ section answering 5 frequent questions.')}
+              onClick={() =>
+                setAiInstruction(
+                  'Add a concise FAQ section answering 5 frequent questions.'
+                )
+              }
             >
               FAQ
             </Button>
           </Group>
           {aiMode === 'SECTION' && (
             <Text size="xs" color="dimmed">
-              Selection: {editorSelection ? `${editorSelection.length} characters selected` : 'No selection detected'}
+              Selection:{' '}
+              {editorSelection
+                ? `${editorSelection.length} characters selected`
+                : 'No selection detected'}
             </Text>
           )}
           <Group position="right" spacing="sm">
@@ -2023,7 +2345,10 @@ export const DocsContentManager: React.FC = () => {
                 setAiError(null);
                 setAiPreview('');
                 try {
-                  const currentMdx = aiMode === 'SECTION' && editorSelection ? editorSelection : active.mdx;
+                  const currentMdx =
+                    aiMode === 'SECTION' && editorSelection
+                      ? editorSelection
+                      : active.mdx;
                   const res = await authenticatedFetch('/graphql', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -2035,11 +2360,11 @@ export const DocsContentManager: React.FC = () => {
                           mode: aiMode,
                           style: aiStyle,
                           title: active.document.title,
-                          currentMdx
+                          currentMdx,
                           // sdl omitted here; can be added if needed from server
-                        }
-                      }
-                    })
+                        },
+                      },
+                    }),
                   });
                   const json = await res.json();
                   if (json.errors) throw new Error(json.errors[0].message);
@@ -2099,14 +2424,21 @@ export const DocsContentManager: React.FC = () => {
                     if (aiMode === 'REPLACE') {
                       next = aiPreview;
                     } else if (aiMode === 'SECTION' && editorSelection) {
-                      const safeSel = editorSelection.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                      const safeSel = editorSelection.replace(
+                        /[.*+?^${}()|[\]\\]/g,
+                        '\\$&'
+                      );
                       const re = new RegExp(safeSel);
                       next = active.mdx.replace(re, aiPreview);
                     } else {
                       const tailMatch = active.mdx.match(/##\s+([^\n]+)\s*$/);
                       const headMatch = aiPreview.match(/^##\s+([^\n]+)/);
                       let append = aiPreview;
-                      if (tailMatch && headMatch && tailMatch[1].trim() === headMatch[1].trim()) {
+                      if (
+                        tailMatch &&
+                        headMatch &&
+                        tailMatch[1].trim() === headMatch[1].trim()
+                      ) {
                         append = aiPreview.replace(/^##\s+[^\n]+\n?/, '');
                       }
                       next = active.mdx + sep + append + '\n';
@@ -2117,7 +2449,11 @@ export const DocsContentManager: React.FC = () => {
                   }}
                   color="green"
                 >
-                  {aiMode === 'REPLACE' ? 'Replace Content' : aiMode === 'SECTION' ? 'Replace Selection' : 'Insert at End'}
+                  {aiMode === 'REPLACE'
+                    ? 'Replace Content'
+                    : aiMode === 'SECTION'
+                      ? 'Replace Selection'
+                      : 'Insert at End'}
                 </Button>
               </Group>
             </Card>

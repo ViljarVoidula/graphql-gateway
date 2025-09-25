@@ -20,7 +20,7 @@ This directory contains load / stress / soak test scripts for the GraphQL Gatewa
 | Variable      | Default                                                                | Description                                           |
 | ------------- | ---------------------------------------------------------------------- | ----------------------------------------------------- |
 | `GATEWAY_URL` | `http://localhost:4000/graphql`                                        | GraphQL endpoint under test                           |
-| `API_KEY`     | `app_9d2f70402d05d591d23ae72b6f06751d939c9ca72524e7e4cbd24b80a9ea876f` | API key header value for authentication (`X-API-Key`) |
+| `API_KEY`     | `app_05d9e4ba39567f83511aa08bcd1a0525cd074105e23dd73c94877dafa967d061` | API key header value for authentication (`X-API-Key`) |
 | `DURATION`    | test-specific                                                          | Override with e.g. `30s` or `10m` for some scripts    |
 | `VU`          | test-specific                                                          | Override default VUs for a script                     |
 | `RAMP_MAX_VU` | 500                                                                    | Max VUs for ramp script                               |

@@ -2,7 +2,9 @@ import { check, sleep } from 'k6';
 import http from 'k6/http';
 
 export const GATEWAY_URL = __ENV.GATEWAY_URL || 'http://localhost:4000/graphql';
-export const API_KEY = __ENV.API_KEY || 'app_9d2f70402d05d591d23ae72b6f06751d939c9ca72524e7e4cbd24b80a9ea876f';
+export const API_KEY =
+  __ENV.API_KEY ||
+  'app_05d9e4ba39567f83511aa08bcd1a0525cd074105e23dd73c94877dafa967d061';
 
 export function headers(extra = {}) {
   const h = { 'Content-Type': 'application/json', ...extra };
@@ -11,7 +13,10 @@ export function headers(extra = {}) {
 }
 
 export function gql(body, opts = {}) {
-  const res = http.post(GATEWAY_URL, JSON.stringify(body), { headers: headers(opts.headers), tags: opts.tags });
+  const res = http.post(GATEWAY_URL, JSON.stringify(body), {
+    headers: headers(opts.headers),
+    tags: opts.tags,
+  });
   const ok = check(res, {
     'status 200': (r) => r.status === 200,
     'no graphql errors': (r) => {
@@ -21,7 +26,7 @@ export function gql(body, opts = {}) {
       } catch (_) {
         return false;
       }
-    }
+    },
   });
   if (!ok && opts.logErrors) {
     console.error('GraphQL error', res.status, res.body);

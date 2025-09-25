@@ -17,7 +17,7 @@ import {
   Text,
   TextInput,
   Title,
-  Tooltip
+  Tooltip,
 } from '@mantine/core';
 import { showNotification } from '@mantine/notifications';
 import {
@@ -35,11 +35,16 @@ import {
   IconTypography,
   IconUpload,
   IconWand,
-  IconX
+  IconX,
 } from '@tabler/icons-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../../utils/auth';
-import { DEFAULT_THEME_TOKENS, THEME_PRESETS, type ThemePreset, type ThemeToken } from './theme-defaults';
+import {
+  DEFAULT_THEME_TOKENS,
+  THEME_PRESETS,
+  type ThemePreset,
+  type ThemeToken,
+} from './theme-defaults';
 
 interface TokenRow extends ThemeToken {
   original?: string;
@@ -74,7 +79,9 @@ export const DocsThemeEditor: React.FC = () => {
   const MAX_ASSET_BYTES = Math.floor(4.8 * 1024 * 1024); // 4.8 MB limit
   // Branding (whitelabel) state
   const [brandName, setBrandName] = useState<string>('Gateway Docs');
-  const [heroTitle, setHeroTitle] = useState<string>('Welcome to the Documentation Portal');
+  const [heroTitle, setHeroTitle] = useState<string>(
+    'Welcome to the Documentation Portal'
+  );
   const [heroSubtitle, setHeroSubtitle] = useState<string>(
     'Explore our comprehensive guides and API documentation. Stay updated with the latest!'
   );
@@ -100,8 +107,12 @@ export const DocsThemeEditor: React.FC = () => {
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
-  const [suggestions, setSuggestions] = useState<Array<{ name: string; value: string; confidence?: number }>>([]);
-  const [selectedSuggest, setSelectedSuggest] = useState<Record<string, boolean>>({});
+  const [suggestions, setSuggestions] = useState<
+    Array<{ name: string; value: string; confidence?: number }>
+  >([]);
+  const [selectedSuggest, setSelectedSuggest] = useState<
+    Record<string, boolean>
+  >({});
   const [importNote, setImportNote] = useState<string | null>(null);
   const [importUsedLLM, setImportUsedLLM] = useState<boolean>(false);
   const [importPalette, setImportPalette] = useState<string[] | null>(null);
@@ -119,14 +130,16 @@ export const DocsThemeEditor: React.FC = () => {
   const [brandIconDragOver, setBrandIconDragOver] = useState(false);
 
   // Helper function to merge defaults with loaded tokens
-  const mergeWithDefaults = (loadedTokens: { name: string; value: string }[]): TokenRow[] => {
+  const mergeWithDefaults = (
+    loadedTokens: { name: string; value: string }[]
+  ): TokenRow[] => {
     const loadedMap = new Map(loadedTokens.map((t) => [t.name, t.value]));
 
     return DEFAULT_THEME_TOKENS.map((defaultToken) => ({
       ...defaultToken,
       value: loadedMap.get(defaultToken.name) || defaultToken.value,
       original: loadedMap.get(defaultToken.name) || defaultToken.value,
-      dirty: false
+      dirty: false,
     }));
   };
 
@@ -135,7 +148,7 @@ export const DocsThemeEditor: React.FC = () => {
     return DEFAULT_THEME_TOKENS.map((token) => ({
       ...token,
       original: token.value,
-      dirty: false
+      dirty: false,
     }));
   };
 
@@ -148,7 +161,7 @@ export const DocsThemeEditor: React.FC = () => {
           return {
             ...token,
             value: presetValue,
-            dirty: true
+            dirty: true,
           };
         }
         return token;
@@ -180,8 +193,8 @@ export const DocsThemeEditor: React.FC = () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               query: `mutation SetTheme($n:String!,$v:String!){ setThemeToken(name:$n,value:$v) }`,
-              variables: { n: token.name, v: token.value }
-            })
+              variables: { n: token.name, v: token.value },
+            }),
           });
           const json = await res.json();
           if (json.errors) throw new Error(json.errors[0].message);
@@ -199,7 +212,7 @@ export const DocsThemeEditor: React.FC = () => {
               ...token,
               value: presetValue,
               original: presetValue,
-              dirty: false
+              dirty: false,
             };
           }
           return token;
@@ -213,7 +226,9 @@ export const DocsThemeEditor: React.FC = () => {
       window.dispatchEvent(new CustomEvent('themeUpdated'));
 
       // Show success message
-      console.log(`✅ Theme preset "${preset.name}" saved and applied to public documentation at /docs`);
+      console.log(
+        `✅ Theme preset "${preset.name}" saved and applied to public documentation at /docs`
+      );
     } catch (error: any) {
       setError(`Failed to save preset: ${error.message}`);
     } finally {
@@ -233,7 +248,8 @@ export const DocsThemeEditor: React.FC = () => {
         // Mark as saving
         setTokens((prev) =>
           prev.map((t, i) =>
-            tokens.findIndex((tk) => tk.name === t.name) === tokens.findIndex((tk) => tk.name === token.name)
+            tokens.findIndex((tk) => tk.name === t.name) ===
+            tokens.findIndex((tk) => tk.name === token.name)
               ? { ...t, saving: true }
               : t
           )
@@ -244,12 +260,13 @@ export const DocsThemeEditor: React.FC = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             query: `mutation SetTheme($n:String!,$v:String!){ setThemeToken(name:$n,value:$v) }`,
-            variables: { n: token.name, v: token.value }
-          })
+            variables: { n: token.name, v: token.value },
+          }),
         });
 
         const json = await res.json();
-        if (json.errors) throw new Error(`${token.name}: ${json.errors[0].message}`);
+        if (json.errors)
+          throw new Error(`${token.name}: ${json.errors[0].message}`);
 
         return token;
       });
@@ -258,14 +275,26 @@ export const DocsThemeEditor: React.FC = () => {
 
       // Mark all as saved
       setTokens((prev) =>
-        prev.map((t) => (t.dirty ? { ...t, dirty: false, saving: false, original: t.value, error: null } : t))
+        prev.map((t) =>
+          t.dirty
+            ? {
+                ...t,
+                dirty: false,
+                saving: false,
+                original: t.value,
+                error: null,
+              }
+            : t
+        )
       );
 
       // Notify docs UI to refresh theme CSS
       window.dispatchEvent(new CustomEvent('themeUpdated'));
 
       // Show success message
-      console.log('✅ Themes saved successfully and applied to public documentation at /docs');
+      console.log(
+        '✅ Themes saved successfully and applied to public documentation at /docs'
+      );
     } catch (error: any) {
       setError(`Failed to save tokens: ${error.message}`);
       // Reset saving states on error
@@ -291,19 +320,21 @@ export const DocsThemeEditor: React.FC = () => {
       let res = await authenticatedFetch('/graphql', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: detailedQuery })
+        body: JSON.stringify({ query: detailedQuery }),
       });
       let json = await res.json();
       if (json.errors) {
         const msg: string = json.errors.map((e: any) => e.message).join('\n');
-        const missingField = /Cannot query field "themeTokensDetailed"/.test(msg);
+        const missingField = /Cannot query field "themeTokensDetailed"/.test(
+          msg
+        );
         if (missingField) {
           // Fallback path: query legacy fields and parse CSS file for values
           const legacyQuery = `query LegacyThemeTokens { themeTokens }`;
           res = await authenticatedFetch('/graphql', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: legacyQuery })
+            body: JSON.stringify({ query: legacyQuery }),
           });
           json = await res.json();
           if (json.errors) throw new Error(json.errors[0].message);
@@ -342,7 +373,8 @@ export const DocsThemeEditor: React.FC = () => {
           throw new Error(msg);
         }
       } else {
-        const detailed: { name: string; value: string }[] = json.data.themeTokensDetailed;
+        const detailed: { name: string; value: string }[] =
+          json.data.themeTokensDetailed;
 
         // Use helper function to merge with defaults
         if (!hasInitialized && detailed.length === 0) {
@@ -380,7 +412,9 @@ export const DocsThemeEditor: React.FC = () => {
         const res = await authenticatedFetch('/graphql', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: `query { docsBranding { brandName heroTitle heroSubtitle } }` })
+          body: JSON.stringify({
+            query: `query { docsBranding { brandName heroTitle heroSubtitle } }`,
+          }),
         });
         const json = await res.json();
         const b = json?.data?.docsBranding;
@@ -388,7 +422,11 @@ export const DocsThemeEditor: React.FC = () => {
           setBrandName(b.brandName || brandName);
           setHeroTitle(b.heroTitle || heroTitle);
           setHeroSubtitle(b.heroSubtitle || heroSubtitle);
-          setBrandingInitial({ brandName: b.brandName, heroTitle: b.heroTitle, heroSubtitle: b.heroSubtitle });
+          setBrandingInitial({
+            brandName: b.brandName,
+            heroTitle: b.heroTitle,
+            heroSubtitle: b.heroSubtitle,
+          });
         }
       } catch (e) {
         // ignore in this view if fails; user might not have rights
@@ -405,8 +443,8 @@ export const DocsThemeEditor: React.FC = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            query: `query { docsBrandingAssets { heroImageUrl faviconUrl brandIconUrl } }`
-          })
+            query: `query { docsBrandingAssets { heroImageUrl faviconUrl brandIconUrl } }`,
+          }),
         });
         const json = await res.json();
         const assets = json?.data?.docsBrandingAssets;
@@ -430,7 +468,9 @@ export const DocsThemeEditor: React.FC = () => {
   // No separate dropdown; navigate inside the iframe using docs app sidebar/links
 
   async function saveToken(idx: number) {
-    setTokens((prev) => prev.map((t, i) => (i === idx ? { ...t, saving: true, error: null } : t)));
+    setTokens((prev) =>
+      prev.map((t, i) => (i === idx ? { ...t, saving: true, error: null } : t))
+    );
     const row = tokens[idx];
     try {
       const res = await authenticatedFetch('/graphql', {
@@ -438,15 +478,25 @@ export const DocsThemeEditor: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: `mutation SetTheme($n:String!,$v:String!){ setThemeToken(name:$n,value:$v) }`,
-          variables: { n: row.name, v: row.value }
-        })
+          variables: { n: row.name, v: row.value },
+        }),
       });
       const json = await res.json();
       if (json.errors) throw new Error(json.errors[0].message);
-      setTokens((prev) => prev.map((t, i) => (i === idx ? { ...t, dirty: false, saving: false, original: t.value } : t)));
+      setTokens((prev) =>
+        prev.map((t, i) =>
+          i === idx
+            ? { ...t, dirty: false, saving: false, original: t.value }
+            : t
+        )
+      );
       applyOverrides();
     } catch (e: any) {
-      setTokens((prev) => prev.map((t, i) => (i === idx ? { ...t, saving: false, error: e.message } : t)));
+      setTokens((prev) =>
+        prev.map((t, i) =>
+          i === idx ? { ...t, saving: false, error: e.message } : t
+        )
+      );
     }
   }
 
@@ -458,7 +508,7 @@ export const DocsThemeEditor: React.FC = () => {
       category: 'colors', // Default category
       description: 'Custom token',
       dirty: true,
-      original: ''
+      original: '',
     };
     setTokens((prev) => [...prev, newToken]);
     setNewName('');
@@ -477,16 +527,28 @@ export const DocsThemeEditor: React.FC = () => {
     const adjustCss = `/* Theme Editor preview adjustments */
       /* Hide floating debug toggle button inside preview to avoid overlap */
       .docs-shell > button { display: none !important; }
+      /* Ensure imported theme tokens take precedence over defaults */
+      * { --applied-via-theme-editor: true; }
     `;
 
     const hash = computeHash(tokens);
     // If style tag already present with same hash, skip; otherwise (new doc load) continue
     let styleTag = doc.getElementById('override-vars');
     if (hash === lastAppliedHash && styleTag) return;
+
+    // Force refresh the docs theme CSS link to pick up any saved changes
+    const themeLink = doc.querySelector(
+      'link[href*="/docs-theme.css"]'
+    ) as HTMLLinkElement;
+    if (themeLink) {
+      const newHref = `/docs-theme.css?preview=1&t=${Date.now()}`;
+      themeLink.href = newHref;
+    }
+
     // Remove existing override styles if any
     if (styleTag) styleTag.remove();
 
-    // Create new style tag with current tokens
+    // Create new style tag with current tokens (higher specificity)
     styleTag = doc.createElement('style');
     styleTag.id = 'override-vars';
     styleTag.textContent = css;
@@ -499,6 +561,9 @@ export const DocsThemeEditor: React.FC = () => {
     adjustTag.id = 'theme-preview-adjustments';
     adjustTag.textContent = adjustCss;
     doc.head.appendChild(adjustTag);
+
+    // Mark iframe document as having a custom theme so dark-mode fallback CSS does not override it
+    doc.documentElement.setAttribute('data-docs-theme-loaded', 'true');
 
     setLastAppliedHash(hash);
 
@@ -542,13 +607,17 @@ export const DocsThemeEditor: React.FC = () => {
   }, [tokens]);
 
   // --- Import Theme Logic ---
-  function paletteAutoMap(palette?: string[] | null, existingNames?: Set<string>) {
+  function paletteAutoMap(
+    palette?: string[] | null,
+    existingNames?: Set<string>
+  ) {
     const result: Array<{ name: string; value: string }> = [];
     if (!palette || !palette.length) return result;
     const addIfMissing = (name: string, idx: number) => {
       if (existingNames && existingNames.has(name)) return;
       const val = palette[idx] ?? palette[0];
-      if (typeof val === 'string' && val.trim()) result.push({ name, value: val.trim() });
+      if (typeof val === 'string' && val.trim())
+        result.push({ name, value: val.trim() });
     };
     // Heuristic mapping
     addIfMissing('color-primary', 0);
@@ -564,13 +633,17 @@ export const DocsThemeEditor: React.FC = () => {
 
   function applyImportResult(data: any) {
     setSuggestions(data.tokens || []);
-    setSelectedSuggest(Object.fromEntries((data.tokens || []).map((t: any) => [t.name, true])));
+    setSelectedSuggest(
+      Object.fromEntries((data.tokens || []).map((t: any) => [t.name, true]))
+    );
     setImportNote(data.note || null);
     setImportUsedLLM(!!data.usedLLM);
     setImportPalette(data.palette || null);
 
     // Build combined list: explicit suggestions + palette-based fallbacks for missing key tokens
-    const explicit: Array<{ name: string; value: string }> = (data.tokens || []).filter((t: any) => t && t.name && t.value);
+    const explicit: Array<{ name: string; value: string }> = (
+      data.tokens || []
+    ).filter((t: any) => t && t.name && t.value);
     const nameSet = new Set(explicit.map((t) => t.name));
     const paletteMapped = paletteAutoMap(data.palette || null, nameSet);
     const combined = [...explicit, ...paletteMapped];
@@ -594,8 +667,8 @@ export const DocsThemeEditor: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: `mutation($url:String!){ aiImportThemeFromUrl(url:$url){ usedLLM note palette tokens{ name value confidence } } }`,
-          variables: { url: importUrl }
-        })
+          variables: { url: importUrl },
+        }),
       });
       const json = await res.json();
       if (json.errors) throw new Error(json.errors[0].message);
@@ -618,8 +691,11 @@ export const DocsThemeEditor: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: `mutation($imageUrl:String,$imageBase64:String){ aiImportThemeFromImage(imageUrl:$imageUrl,imageBase64:$imageBase64){ usedLLM note palette tokens{ name value confidence } } }`,
-          variables: { imageUrl: importImageUrl || null, imageBase64: imageBase64 || null }
-        })
+          variables: {
+            imageUrl: importImageUrl || null,
+            imageBase64: imageBase64 || null,
+          },
+        }),
       });
       const json = await res.json();
       if (json.errors) throw new Error(json.errors[0].message);
@@ -677,7 +753,12 @@ export const DocsThemeEditor: React.FC = () => {
     let hash = '#/home';
     try {
       const w = iframe.contentWindow;
-      if (w && w.location && typeof w.location.hash === 'string' && w.location.hash) {
+      if (
+        w &&
+        w.location &&
+        typeof w.location.hash === 'string' &&
+        w.location.hash
+      ) {
         hash = w.location.hash;
       }
     } catch {}
@@ -691,7 +772,10 @@ export const DocsThemeEditor: React.FC = () => {
   };
 
   // Helper to handle file uploads for hero, favicon, and brand icon
-  const handleFileUpload = async (file: File, type: 'hero' | 'favicon' | 'brandIcon') => {
+  const handleFileUpload = async (
+    file: File,
+    type: 'hero' | 'favicon' | 'brandIcon'
+  ) => {
     if (file.size > MAX_ASSET_BYTES) {
       setBrandingError(
         `${type === 'hero' ? 'Hero image' : type === 'favicon' ? 'Favicon' : 'Brand icon'} is too large (${(
@@ -705,9 +789,24 @@ export const DocsThemeEditor: React.FC = () => {
 
     // Validate file type
     const heroTypes = ['image/png', 'image/jpeg', 'image/webp'];
-    const faviconTypes = ['image/x-icon', 'image/vnd.microsoft.icon', 'image/png', 'image/svg+xml'];
-    const brandIconTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
-    const allowedTypes = type === 'hero' ? heroTypes : type === 'favicon' ? faviconTypes : brandIconTypes;
+    const faviconTypes = [
+      'image/x-icon',
+      'image/vnd.microsoft.icon',
+      'image/png',
+      'image/svg+xml',
+    ];
+    const brandIconTypes = [
+      'image/png',
+      'image/jpeg',
+      'image/webp',
+      'image/svg+xml',
+    ];
+    const allowedTypes =
+      type === 'hero'
+        ? heroTypes
+        : type === 'favicon'
+          ? faviconTypes
+          : brandIconTypes;
 
     if (!allowedTypes.includes(file.type)) {
       setBrandingError(
@@ -741,7 +840,8 @@ export const DocsThemeEditor: React.FC = () => {
     const arrayBuffer = await file.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
     let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    for (let i = 0; i < bytes.length; i++)
+      binary += String.fromCharCode(bytes[i]);
     const base64 = btoa(binary);
 
     if (type === 'hero') {
@@ -753,7 +853,12 @@ export const DocsThemeEditor: React.FC = () => {
     }
 
     try {
-      const mutation = type === 'hero' ? 'setDocsHeroImage' : type === 'favicon' ? 'setDocsFavicon' : 'setBrandIcon';
+      const mutation =
+        type === 'hero'
+          ? 'setDocsHeroImage'
+          : type === 'favicon'
+            ? 'setDocsFavicon'
+            : 'setBrandIcon';
       const res = await authenticatedFetch('/graphql', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -761,18 +866,25 @@ export const DocsThemeEditor: React.FC = () => {
           query: `mutation($b:String!,$ct:String!){ ${mutation}(base64:$b,contentType:$ct) }`,
           variables: {
             b: base64,
-            ct: file.type || (type === 'hero' ? 'image/png' : type === 'favicon' ? 'image/x-icon' : 'image/png')
-          }
-        })
+            ct:
+              file.type ||
+              (type === 'hero'
+                ? 'image/png'
+                : type === 'favicon'
+                  ? 'image/x-icon'
+                  : 'image/png'),
+          },
+        }),
       });
       const json = await res.json();
-      if (json.errors) throw new Error(json.errors[0]?.message || 'Upload failed');
+      if (json.errors)
+        throw new Error(json.errors[0]?.message || 'Upload failed');
 
       // Show success notification
       showNotification({
         title: 'Upload successful',
         message: `${type === 'hero' ? 'Hero image' : type === 'favicon' ? 'Favicon' : 'Brand icon'} uploaded successfully`,
-        color: 'green'
+        color: 'green',
       });
 
       // Trigger brand icon refresh if it's a brand icon upload
@@ -783,7 +895,8 @@ export const DocsThemeEditor: React.FC = () => {
       reloadPreview();
     } catch (err: any) {
       setBrandingError(
-        err?.message || `Failed to upload ${type === 'hero' ? 'hero image' : type === 'favicon' ? 'favicon' : 'brand icon'}`
+        err?.message ||
+          `Failed to upload ${type === 'hero' ? 'hero image' : type === 'favicon' ? 'favicon' : 'brand icon'}`
       );
     } finally {
       if (type === 'hero') {
@@ -806,8 +919,9 @@ export const DocsThemeEditor: React.FC = () => {
         </Badge>
       </Group>
       <Text size="sm" color="dimmed">
-        Customize the visual design of your documentation portal with professional theme tokens and presets. Changes are
-        automatically applied to the public documentation at <code>/docs</code>.
+        Customize the visual design of your documentation portal with
+        professional theme tokens and presets. Changes are automatically applied
+        to the public documentation at <code>/docs</code>.
       </Text>
 
       <Group align="flex-start" spacing="lg" grow noWrap>
@@ -829,9 +943,21 @@ export const DocsThemeEditor: React.FC = () => {
               </Alert>
             )}
             <Stack spacing="xs">
-              <TextInput label="Brand Name" value={brandName} onChange={(e) => setBrandName(e.target.value)} />
-              <TextInput label="Hero Title" value={heroTitle} onChange={(e) => setHeroTitle(e.target.value)} />
-              <TextInput label="Hero Subtitle" value={heroSubtitle} onChange={(e) => setHeroSubtitle(e.target.value)} />
+              <TextInput
+                label="Brand Name"
+                value={brandName}
+                onChange={(e) => setBrandName(e.target.value)}
+              />
+              <TextInput
+                label="Hero Title"
+                value={heroTitle}
+                onChange={(e) => setHeroTitle(e.target.value)}
+              />
+              <TextInput
+                label="Hero Subtitle"
+                value={heroSubtitle}
+                onChange={(e) => setHeroSubtitle(e.target.value)}
+              />
               <Divider my="xs" label="Brand Images" labelPosition="center" />
               <Stack spacing={6}>
                 <Text size="sm" weight={500}>
@@ -843,11 +969,19 @@ export const DocsThemeEditor: React.FC = () => {
                   style={{
                     borderStyle: 'dashed',
                     borderWidth: 2,
-                    borderColor: heroDragOver ? '#339af0' : heroPreview ? '#51cf66' : '#ced4da',
-                    backgroundColor: heroDragOver ? '#e7f5ff' : heroPreview ? '#f3f9f3' : '#f8f9fa',
+                    borderColor: heroDragOver
+                      ? '#339af0'
+                      : heroPreview
+                        ? '#51cf66'
+                        : '#ced4da',
+                    backgroundColor: heroDragOver
+                      ? '#e7f5ff'
+                      : heroPreview
+                        ? '#f3f9f3'
+                        : '#f8f9fa',
                     cursor: heroUploading ? 'not-allowed' : 'pointer',
                     transition: 'all 0.2s ease',
-                    position: 'relative'
+                    position: 'relative',
                   }}
                   onDragOver={(e) => {
                     e.preventDefault();
@@ -885,7 +1019,15 @@ export const DocsThemeEditor: React.FC = () => {
                     </Group>
                   ) : heroPreview ? (
                     <Stack spacing="xs" align="center">
-                      <img src={heroPreview} alt="Hero preview" style={{ maxWidth: '100%', maxHeight: 100, borderRadius: 4 }} />
+                      <img
+                        src={heroPreview}
+                        alt="Hero preview"
+                        style={{
+                          maxWidth: '100%',
+                          maxHeight: 100,
+                          borderRadius: 4,
+                        }}
+                      />
                       <Group spacing="xs">
                         <Text size="xs" color="green" weight={500}>
                           Hero image ready
@@ -905,15 +1047,21 @@ export const DocsThemeEditor: React.FC = () => {
                     </Stack>
                   ) : (
                     <Stack align="center" spacing="xs">
-                      <IconUpload size={32} color={heroDragOver ? '#339af0' : '#868e96'} />
+                      <IconUpload
+                        size={32}
+                        color={heroDragOver ? '#339af0' : '#868e96'}
+                      />
                       <Text color="dimmed" align="center" size="sm">
-                        {heroDragOver ? 'Drop hero image here' : 'Drag & drop or click to upload'}
+                        {heroDragOver
+                          ? 'Drop hero image here'
+                          : 'Drag & drop or click to upload'}
                       </Text>
                     </Stack>
                   )}
                 </Paper>
                 <Text size="xs" color="dimmed">
-                  Max 4.8 MB. Accepted: PNG, JPEG, WEBP. Recommended ~1600×400 for a wide banner.
+                  Max 4.8 MB. Accepted: PNG, JPEG, WEBP. Recommended ~1600×400
+                  for a wide banner.
                 </Text>
               </Stack>
               <Stack spacing={6}>
@@ -926,11 +1074,19 @@ export const DocsThemeEditor: React.FC = () => {
                   style={{
                     borderStyle: 'dashed',
                     borderWidth: 2,
-                    borderColor: brandIconDragOver ? '#339af0' : brandIconPreview ? '#51cf66' : '#ced4da',
-                    backgroundColor: brandIconDragOver ? '#e7f5ff' : brandIconPreview ? '#f3f9f3' : '#f8f9fa',
+                    borderColor: brandIconDragOver
+                      ? '#339af0'
+                      : brandIconPreview
+                        ? '#51cf66'
+                        : '#ced4da',
+                    backgroundColor: brandIconDragOver
+                      ? '#e7f5ff'
+                      : brandIconPreview
+                        ? '#f3f9f3'
+                        : '#f8f9fa',
                     cursor: brandIconUploading ? 'not-allowed' : 'pointer',
                     transition: 'all 0.2s ease',
-                    position: 'relative'
+                    position: 'relative',
                   }}
                   onDragOver={(e) => {
                     e.preventDefault();
@@ -951,7 +1107,8 @@ export const DocsThemeEditor: React.FC = () => {
                     if (brandIconUploading) return;
                     const input = document.createElement('input');
                     input.type = 'file';
-                    input.accept = 'image/png,image/jpeg,image/webp,image/svg+xml';
+                    input.accept =
+                      'image/png,image/jpeg,image/webp,image/svg+xml';
                     input.onchange = async (e) => {
                       const file = (e.target as HTMLInputElement).files?.[0];
                       if (file) await handleFileUpload(file, 'brandIcon');
@@ -968,7 +1125,11 @@ export const DocsThemeEditor: React.FC = () => {
                     </Group>
                   ) : brandIconPreview ? (
                     <Stack spacing="xs" align="center">
-                      <img src={brandIconPreview} alt="Brand icon preview" style={{ width: 48, height: 48, borderRadius: 4 }} />
+                      <img
+                        src={brandIconPreview}
+                        alt="Brand icon preview"
+                        style={{ width: 48, height: 48, borderRadius: 4 }}
+                      />
                       <Group spacing="xs">
                         <Text size="xs" color="green" weight={500}>
                           Brand icon ready
@@ -988,15 +1149,21 @@ export const DocsThemeEditor: React.FC = () => {
                     </Stack>
                   ) : (
                     <Stack align="center" spacing="xs">
-                      <IconUpload size={32} color={brandIconDragOver ? '#339af0' : '#868e96'} />
+                      <IconUpload
+                        size={32}
+                        color={brandIconDragOver ? '#339af0' : '#868e96'}
+                      />
                       <Text color="dimmed" align="center" size="sm">
-                        {brandIconDragOver ? 'Drop brand icon here' : 'Drag & drop or click to upload'}
+                        {brandIconDragOver
+                          ? 'Drop brand icon here'
+                          : 'Drag & drop or click to upload'}
                       </Text>
                     </Stack>
                   )}
                 </Paper>
                 <Text size="xs" color="dimmed">
-                  Max 4.8 MB. Accepted: PNG, JPEG, WEBP, SVG. Recommended square (e.g., 64×64 or 128×128). Displays in admin UI.
+                  Max 4.8 MB. Accepted: PNG, JPEG, WEBP, SVG. Recommended square
+                  (e.g., 64×64 or 128×128). Displays in admin UI.
                 </Text>
               </Stack>
               <Stack spacing={6}>
@@ -1009,11 +1176,19 @@ export const DocsThemeEditor: React.FC = () => {
                   style={{
                     borderStyle: 'dashed',
                     borderWidth: 2,
-                    borderColor: faviconDragOver ? '#339af0' : faviconPreview ? '#51cf66' : '#ced4da',
-                    backgroundColor: faviconDragOver ? '#e7f5ff' : faviconPreview ? '#f3f9f3' : '#f8f9fa',
+                    borderColor: faviconDragOver
+                      ? '#339af0'
+                      : faviconPreview
+                        ? '#51cf66'
+                        : '#ced4da',
+                    backgroundColor: faviconDragOver
+                      ? '#e7f5ff'
+                      : faviconPreview
+                        ? '#f3f9f3'
+                        : '#f8f9fa',
                     cursor: faviconUploading ? 'not-allowed' : 'pointer',
                     transition: 'all 0.2s ease',
-                    position: 'relative'
+                    position: 'relative',
                   }}
                   onDragOver={(e) => {
                     e.preventDefault();
@@ -1051,7 +1226,11 @@ export const DocsThemeEditor: React.FC = () => {
                     </Group>
                   ) : faviconPreview ? (
                     <Stack spacing="xs" align="center">
-                      <img src={faviconPreview} alt="Favicon preview" style={{ width: 48, height: 48, borderRadius: 4 }} />
+                      <img
+                        src={faviconPreview}
+                        alt="Favicon preview"
+                        style={{ width: 48, height: 48, borderRadius: 4 }}
+                      />
                       <Group spacing="xs">
                         <Text size="xs" color="green" weight={500}>
                           Favicon ready
@@ -1071,15 +1250,21 @@ export const DocsThemeEditor: React.FC = () => {
                     </Stack>
                   ) : (
                     <Stack align="center" spacing="xs">
-                      <IconUpload size={32} color={faviconDragOver ? '#339af0' : '#868e96'} />
+                      <IconUpload
+                        size={32}
+                        color={faviconDragOver ? '#339af0' : '#868e96'}
+                      />
                       <Text color="dimmed" align="center" size="sm">
-                        {faviconDragOver ? 'Drop favicon here' : 'Drag & drop or click to upload'}
+                        {faviconDragOver
+                          ? 'Drop favicon here'
+                          : 'Drag & drop or click to upload'}
                       </Text>
                     </Stack>
                   )}
                 </Paper>
                 <Text size="xs" color="dimmed">
-                  Max 4.8 MB. Accepted: ICO, PNG, SVG. Recommended square (e.g., 32×32 or 64×64). Browser tab icon.
+                  Max 4.8 MB. Accepted: ICO, PNG, SVG. Recommended square (e.g.,
+                  32×32 or 64×64). Browser tab icon.
                 </Text>
               </Stack>
               <Group spacing="xs">
@@ -1102,11 +1287,14 @@ export const DocsThemeEditor: React.FC = () => {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                           query: `mutation Set($brandName:String,$heroTitle:String,$heroSubtitle:String){ setDocsBranding(brandName:$brandName,heroTitle:$heroTitle,heroSubtitle:$heroSubtitle){ brandName heroTitle heroSubtitle } }`,
-                          variables: { brandName, heroTitle, heroSubtitle }
-                        })
+                          variables: { brandName, heroTitle, heroSubtitle },
+                        }),
                       });
                       const json = await res.json();
-                      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to save');
+                      if (json.errors)
+                        throw new Error(
+                          json.errors[0]?.message || 'Failed to save'
+                        );
                       const b = json.data.setDocsBranding;
                       setBrandingInitial(b);
                       // Reload preview to reflect new branding
@@ -1140,8 +1328,9 @@ export const DocsThemeEditor: React.FC = () => {
               </Group>
               <Alert color="blue" variant="light">
                 <Text size="xs">
-                  Brand name updates the sidebar heading in the public docs. Hero text controls the large heading and subtitle
-                  on the docs homepage.
+                  Brand name updates the sidebar heading in the public docs.
+                  Hero text controls the large heading and subtitle on the docs
+                  homepage.
                 </Text>
               </Alert>
             </Stack>
@@ -1168,7 +1357,11 @@ export const DocsThemeEditor: React.FC = () => {
                   value={importUrl}
                   onChange={(e) => setImportUrl(e.target.value)}
                 />
-                <Button onClick={importFromUrl} loading={importLoading} disabled={!importUrl}>
+                <Button
+                  onClick={importFromUrl}
+                  loading={importLoading}
+                  disabled={!importUrl}
+                >
                   Import from URL
                 </Button>
               </Group>
@@ -1180,7 +1373,11 @@ export const DocsThemeEditor: React.FC = () => {
                   onChange={(e) => setImportImageUrl(e.target.value)}
                 />
                 <input type="file" accept="image/*" onChange={onFileChange} />
-                <Button onClick={importFromImage} loading={importLoading} disabled={!importImageUrl && !imageBase64}>
+                <Button
+                  onClick={importFromImage}
+                  loading={importLoading}
+                  disabled={!importImageUrl && !imageBase64}
+                >
                   Import from Image
                 </Button>
               </Group>
@@ -1198,7 +1395,13 @@ export const DocsThemeEditor: React.FC = () => {
                     <div
                       key={idx}
                       title={c}
-                      style={{ width: 18, height: 18, borderRadius: 3, background: c, border: '1px solid #ddd' }}
+                      style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: 3,
+                        background: c,
+                        border: '1px solid #ddd',
+                      }}
                     />
                   ))}
                 </Group>
@@ -1219,17 +1422,35 @@ export const DocsThemeEditor: React.FC = () => {
                     <Button
                       size="xs"
                       variant="light"
-                      onClick={() => setSelectedSuggest(Object.fromEntries(suggestions.map((s) => [s.name, true])))}
+                      onClick={() =>
+                        setSelectedSuggest(
+                          Object.fromEntries(
+                            suggestions.map((s) => [s.name, true])
+                          )
+                        )
+                      }
                     >
                       Select All
                     </Button>
-                    <Button size="xs" variant="light" onClick={() => setSelectedSuggest({})}>
+                    <Button
+                      size="xs"
+                      variant="light"
+                      onClick={() => setSelectedSuggest({})}
+                    >
                       Clear
                     </Button>
-                    <Button size="xs" color="green" onClick={applySelectedSuggestions}>
+                    <Button
+                      size="xs"
+                      color="green"
+                      onClick={applySelectedSuggestions}
+                    >
                       Apply Selected
                     </Button>
-                    <Button size="xs" variant="outline" onClick={clearSuggestions}>
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      onClick={clearSuggestions}
+                    >
                       Dismiss
                     </Button>
                   </Group>
@@ -1239,17 +1460,36 @@ export const DocsThemeEditor: React.FC = () => {
                     {suggestions.map((s) => {
                       const isColor = /^#|^(rgb|hsl)a?\(/i.test(s.value);
                       return (
-                        <Group key={s.name} position="apart" align="center" noWrap>
-                          <Group spacing={8} align="center" style={{ minWidth: 0, flex: 1 }}>
+                        <Group
+                          key={s.name}
+                          position="apart"
+                          align="center"
+                          noWrap
+                        >
+                          <Group
+                            spacing={8}
+                            align="center"
+                            style={{ minWidth: 0, flex: 1 }}
+                          >
                             <input
                               type="checkbox"
                               checked={!!selectedSuggest[s.name]}
-                              onChange={(e) => setSelectedSuggest((prev) => ({ ...prev, [s.name]: e.target.checked }))}
+                              onChange={(e) =>
+                                setSelectedSuggest((prev) => ({
+                                  ...prev,
+                                  [s.name]: e.target.checked,
+                                }))
+                              }
                               style={{ marginRight: 6 }}
                             />
                             <Text
                               size="sm"
-                              style={{ width: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                              style={{
+                                width: 220,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
                             >
                               {s.name}
                             </Text>
@@ -1261,7 +1501,7 @@ export const DocsThemeEditor: React.FC = () => {
                                   height: 16,
                                   borderRadius: 3,
                                   background: s.value,
-                                  border: '1px solid #ddd'
+                                  border: '1px solid #ddd',
                                 }}
                               />
                             )}
@@ -1271,7 +1511,13 @@ export const DocsThemeEditor: React.FC = () => {
                           </Group>
                           {typeof s.confidence === 'number' && (
                             <Badge
-                              color={s.confidence >= 80 ? 'green' : s.confidence >= 50 ? 'yellow' : 'gray'}
+                              color={
+                                s.confidence >= 80
+                                  ? 'green'
+                                  : s.confidence >= 50
+                                    ? 'yellow'
+                                    : 'gray'
+                              }
                               variant="light"
                             >
                               {s.confidence}%
@@ -1302,13 +1548,19 @@ export const DocsThemeEditor: React.FC = () => {
               </Button>
             </Group>
             <Text size="xs" color="dimmed">
-              Apply professionally designed themes instantly or save them as your active documentation theme.
+              Apply professionally designed themes instantly or save them as
+              your active documentation theme.
             </Text>
           </Card>
 
           {/* Batch Actions */}
           {tokens.some((t) => t.dirty) && (
-            <Card withBorder shadow="sm" p="md" style={{ backgroundColor: '#fef3c7' }}>
+            <Card
+              withBorder
+              shadow="sm"
+              p="md"
+              style={{ backgroundColor: '#fef3c7' }}
+            >
               <Group position="apart">
                 <Group spacing="xs">
                   <IconDownload size={20} />
@@ -1317,7 +1569,8 @@ export const DocsThemeEditor: React.FC = () => {
                       Unsaved Changes
                     </Text>
                     <Text size="xs" color="dimmed">
-                      {tokens.filter((t) => t.dirty).length} tokens have been modified
+                      {tokens.filter((t) => t.dirty).length} tokens have been
+                      modified
                     </Text>
                   </div>
                 </Group>
@@ -1330,7 +1583,7 @@ export const DocsThemeEditor: React.FC = () => {
                         prev.map((t) => ({
                           ...t,
                           value: t.original || t.value,
-                          dirty: false
+                          dirty: false,
                         }))
                       );
                       applyOverrides();
@@ -1338,7 +1591,12 @@ export const DocsThemeEditor: React.FC = () => {
                   >
                     Reset All
                   </Button>
-                  <Button size="sm" onClick={saveAllTokens} loading={loading} leftIcon={<IconDownload size={14} />}>
+                  <Button
+                    size="sm"
+                    onClick={saveAllTokens}
+                    loading={loading}
+                    leftIcon={<IconDownload size={14} />}
+                  >
                     Save All Changes
                   </Button>
                 </Group>
@@ -1381,18 +1639,28 @@ export const DocsThemeEditor: React.FC = () => {
 
           {!loading && !error && (
             <Card withBorder shadow="sm" p={0}>
-              <Tabs value={activeTab} onTabChange={(value) => setActiveTab(value || 'colors')} orientation="horizontal">
+              <Tabs
+                value={activeTab}
+                onTabChange={(value) => setActiveTab(value || 'colors')}
+                orientation="horizontal"
+              >
                 <Tabs.List p="md" style={{ borderBottom: '1px solid #eee' }}>
                   <Tabs.Tab value="colors" icon={<IconColorSwatch size={16} />}>
                     Colors
                   </Tabs.Tab>
-                  <Tabs.Tab value="typography" icon={<IconTypography size={16} />}>
+                  <Tabs.Tab
+                    value="typography"
+                    icon={<IconTypography size={16} />}
+                  >
                     Typography
                   </Tabs.Tab>
                   <Tabs.Tab value="spacing" icon={<IconRuler size={16} />}>
                     Spacing
                   </Tabs.Tab>
-                  <Tabs.Tab value="borders" icon={<IconBorderRadius size={16} />}>
+                  <Tabs.Tab
+                    value="borders"
+                    icon={<IconBorderRadius size={16} />}
+                  >
                     Borders
                   </Tabs.Tab>
                   <Tabs.Tab value="shadows" icon={<IconShadow size={16} />}>
@@ -1403,17 +1671,32 @@ export const DocsThemeEditor: React.FC = () => {
                   </Tabs.Tab>
                 </Tabs.List>
 
-                {(['colors', 'typography', 'spacing', 'borders', 'shadows', 'layout'] as const).map((category) => (
+                {(
+                  [
+                    'colors',
+                    'typography',
+                    'spacing',
+                    'borders',
+                    'shadows',
+                    'layout',
+                  ] as const
+                ).map((category) => (
                   <Tabs.Panel key={category} value={category} p="md">
                     <ScrollArea style={{ maxHeight: '50vh' }}>
                       <Stack spacing="sm">
                         {tokens
                           .filter((t) => t.category === category)
                           .map((t, i) => {
-                            const globalIndex = tokens.findIndex((token) => token.name === t.name);
+                            const globalIndex = tokens.findIndex(
+                              (token) => token.name === t.name
+                            );
                             return (
                               <Card key={t.name} withBorder p="sm" radius="md">
-                                <Group position="apart" align="flex-start" noWrap>
+                                <Group
+                                  position="apart"
+                                  align="flex-start"
+                                  noWrap
+                                >
                                   <Stack spacing={4} style={{ flex: 1 }}>
                                     <Group spacing="xs">
                                       {getCategoryIcon(t.category)}
@@ -1430,13 +1713,20 @@ export const DocsThemeEditor: React.FC = () => {
                                       {t.description}
                                     </Text>
                                     <Group spacing="xs" align="flex-end" grow>
-                                      {t.category === 'colors' && t.value.startsWith('#') ? (
+                                      {t.category === 'colors' &&
+                                      t.value.startsWith('#') ? (
                                         <ColorInput
                                           value={t.value}
                                           onChange={(value) =>
                                             setTokens((prev) =>
                                               prev.map((row, idx) =>
-                                                idx === globalIndex ? { ...row, value, dirty: true } : row
+                                                idx === globalIndex
+                                                  ? {
+                                                      ...row,
+                                                      value,
+                                                      dirty: true,
+                                                    }
+                                                  : row
                                               )
                                             )
                                           }
@@ -1449,7 +1739,13 @@ export const DocsThemeEditor: React.FC = () => {
                                           onChange={(e) =>
                                             setTokens((prev) =>
                                               prev.map((row, idx) =>
-                                                idx === globalIndex ? { ...row, value: e.target.value, dirty: true } : row
+                                                idx === globalIndex
+                                                  ? {
+                                                      ...row,
+                                                      value: e.target.value,
+                                                      dirty: true,
+                                                    }
+                                                  : row
                                               )
                                             )
                                           }
@@ -1463,12 +1759,17 @@ export const DocsThemeEditor: React.FC = () => {
                                             color="green"
                                             loading={t.saving}
                                             disabled={!t.dirty || t.saving}
-                                            onClick={() => saveToken(globalIndex)}
+                                            onClick={() =>
+                                              saveToken(globalIndex)
+                                            }
                                           >
                                             <IconCheck size={14} />
                                           </ActionIcon>
                                         </Tooltip>
-                                        <Tooltip label="Revert changes" disabled={!t.dirty}>
+                                        <Tooltip
+                                          label="Revert changes"
+                                          disabled={!t.dirty}
+                                        >
                                           <ActionIcon
                                             color="gray"
                                             disabled={!t.dirty}
@@ -1476,7 +1777,12 @@ export const DocsThemeEditor: React.FC = () => {
                                               setTokens((prev) =>
                                                 prev.map((row, idx) =>
                                                   idx === globalIndex
-                                                    ? { ...row, value: row.original || '', dirty: false }
+                                                    ? {
+                                                        ...row,
+                                                        value:
+                                                          row.original || '',
+                                                        dirty: false,
+                                                      }
                                                     : row
                                                 )
                                               )
@@ -1488,7 +1794,11 @@ export const DocsThemeEditor: React.FC = () => {
                                       </Group>
                                     </Group>
                                     {t.error && (
-                                      <Alert color="red" title="Save failed" p="xs">
+                                      <Alert
+                                        color="red"
+                                        title="Save failed"
+                                        p="xs"
+                                      >
                                         <Text size="xs">{t.error}</Text>
                                       </Alert>
                                     )}
@@ -1511,9 +1821,20 @@ export const DocsThemeEditor: React.FC = () => {
           withBorder
           shadow="sm"
           p={0}
-          style={{ flex: 2, height: '78vh', minHeight: 480, position: 'relative', display: 'flex', flexDirection: 'column' }}
+          style={{
+            flex: 2,
+            height: '78vh',
+            minHeight: 480,
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
         >
-          <Group p="sm" position="apart" style={{ borderBottom: '1px solid #eee' }}>
+          <Group
+            p="sm"
+            position="apart"
+            style={{ borderBottom: '1px solid #eee' }}
+          >
             <Group spacing="xs">
               <IconEye size={16} />
               <Text weight={500}>Live Preview</Text>
@@ -1522,16 +1843,28 @@ export const DocsThemeEditor: React.FC = () => {
               </Badge>
             </Group>
             <Group spacing="xs">
-              <CopyButton value={tokens.map((t) => `--${t.name}:${t.value};`).join('\n')}>
+              <CopyButton
+                value={tokens.map((t) => `--${t.name}:${t.value};`).join('\n')}
+              >
                 {({ copied, copy }) => (
                   <Tooltip label={copied ? 'Copied!' : 'Copy CSS variables'}>
-                    <Button size="xs" variant="light" onClick={copy} leftIcon={<IconCopy size={14} />}>
+                    <Button
+                      size="xs"
+                      variant="light"
+                      onClick={copy}
+                      leftIcon={<IconCopy size={14} />}
+                    >
                       {copied ? 'Copied' : 'Copy CSS'}
                     </Button>
                   </Tooltip>
                 )}
               </CopyButton>
-              <Button size="xs" variant="outline" onClick={reloadPreview} leftIcon={<IconRefresh size={14} />}>
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={reloadPreview}
+                leftIcon={<IconRefresh size={14} />}
+              >
                 Reload
               </Button>
             </Group>
@@ -1541,7 +1874,12 @@ export const DocsThemeEditor: React.FC = () => {
             <iframe
               ref={iframeRef}
               title="Docs Theme Preview"
-              style={{ display: 'block', width: '100%', height: '100%', border: '0' }}
+              style={{
+                display: 'block',
+                width: '100%',
+                height: '100%',
+                border: '0',
+              }}
               sandbox="allow-scripts allow-same-origin"
               src={`/docs?t=init#/${'home'}`}
               onLoad={() => {
@@ -1575,8 +1913,8 @@ export const DocsThemeEditor: React.FC = () => {
       >
         <Stack>
           <Text size="sm" color="dimmed">
-            Choose from professionally designed theme presets. You can preview them first or save them directly as your active
-            documentation theme.
+            Choose from professionally designed theme presets. You can preview
+            them first or save them directly as your active documentation theme.
           </Text>
           <Stack spacing="md">
             {THEME_PRESETS.map((preset) => (
@@ -1596,7 +1934,7 @@ export const DocsThemeEditor: React.FC = () => {
                             height: 24,
                             backgroundColor: value,
                             borderRadius: 4,
-                            border: '1px solid #ddd'
+                            border: '1px solid #ddd',
                           }}
                           title={`${name}: ${value}`}
                         />
@@ -1604,7 +1942,11 @@ export const DocsThemeEditor: React.FC = () => {
                     </Group>
                   </Stack>
                   <Group spacing="xs">
-                    <Button size="sm" variant="light" onClick={() => applyPreset(preset)}>
+                    <Button
+                      size="sm"
+                      variant="light"
+                      onClick={() => applyPreset(preset)}
+                    >
                       Preview
                     </Button>
                     <Button
@@ -1624,9 +1966,11 @@ export const DocsThemeEditor: React.FC = () => {
           <Divider />
           <Group position="center">
             <Text size="xs" color="dimmed" align="center">
-              💡 <strong>Preview</strong> applies changes temporarily for testing.
+              💡 <strong>Preview</strong> applies changes temporarily for
+              testing.
               <br />
-              <strong>Save as Active</strong> immediately saves the theme to your public documentation.
+              <strong>Save as Active</strong> immediately saves the theme to
+              your public documentation.
             </Text>
           </Group>
         </Stack>

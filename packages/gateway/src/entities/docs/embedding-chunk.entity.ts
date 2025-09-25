@@ -1,5 +1,12 @@
 import { Field, Float, ID, ObjectType } from 'type-graphql';
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @ObjectType()
 class DocEmbeddingMeta {
@@ -28,7 +35,7 @@ export class DocEmbeddingChunk {
   anchor?: string | null;
 
   @Field({ nullable: true })
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text', nullable: true, name: 'content_text' })
   contentText?: string | null;
 
   @Field(() => DocEmbeddingMeta, { nullable: true })
@@ -44,11 +51,16 @@ export class DocEmbeddingChunk {
   source!: string; // DOC | SCHEMA | FAQ
 
   @Field({ nullable: true })
-  @Column({ type: 'varchar', length: 128, nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 128,
+    nullable: true,
+    name: 'content_hash',
+  })
   contentHash?: string | null;
 
   @Field({ nullable: true })
-  @Column({ type: 'int', nullable: true })
+  @Column({ type: 'int', nullable: true, name: 'token_count' })
   tokenCount?: number | null;
 
   @Field(() => [Float], { nullable: true })

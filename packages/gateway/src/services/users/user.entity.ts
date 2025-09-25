@@ -8,7 +8,7 @@ import {
   Entity,
   OneToMany,
   PrimaryGeneratedColumn,
-  UpdateDateColumn
+  UpdateDateColumn,
 } from 'typeorm';
 import { Service } from '../../entities/service.entity';
 
@@ -79,7 +79,7 @@ export class User {
   @BeforeInsert()
   async hashPasswordOnInsert() {
     if (this.password) {
-      const saltRounds = 12;
+      const saltRounds = process.env.NODE_ENV === 'test' ? 4 : 12;
       this.password = await bcrypt.hash(this.password, saltRounds);
     }
   }
@@ -88,7 +88,7 @@ export class User {
   async hashPasswordOnUpdate() {
     // Only hash if password was explicitly changed via setPassword method
     if (this.password && this.passwordChanged) {
-      const saltRounds = 12;
+      const saltRounds = process.env.NODE_ENV === 'test' ? 4 : 12;
       this.password = await bcrypt.hash(this.password, saltRounds);
       this.passwordChanged = false;
     }

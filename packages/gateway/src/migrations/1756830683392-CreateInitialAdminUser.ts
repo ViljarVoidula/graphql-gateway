@@ -6,6 +6,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 
 function loadEnvFromFiles() {
   try {
+    if (process.env.NODE_ENV === 'test') return; // don't load .env files during tests
     const root = path.resolve(__dirname, '..', '..');
     const envLocal = path.join(root, '.env.local');
     const env = path.join(root, '.env');
@@ -40,7 +41,10 @@ export class CreateInitialAdminUser1756830683392 implements MigrationInterface {
     }
 
     // Check if admin user already exists
-    const existingAdmin = await queryRunner.query(`SELECT id FROM "user" WHERE email = $1 LIMIT 1`, [adminEmail]);
+    const existingAdmin = await queryRunner.query(
+      `SELECT id FROM "user" WHERE email = $1 LIMIT 1`,
+      [adminEmail]
+    );
     if (existingAdmin.length > 0) {
       console.log('Admin user already exists, skipping creation');
       return;
@@ -83,7 +87,9 @@ export class CreateInitialAdminUser1756830683392 implements MigrationInterface {
       return;
     }
     // Remove the admin user
-    await queryRunner.query(`DELETE FROM "user" WHERE email = $1`, [adminEmail]);
+    await queryRunner.query(`DELETE FROM "user" WHERE email = $1`, [
+      adminEmail,
+    ]);
 
     console.log(`🗑️  Removed admin user: ${adminEmail}`);
   }

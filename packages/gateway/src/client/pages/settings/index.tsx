@@ -11,16 +11,24 @@ import {
   Stack,
   Switch,
   Text,
-  Title
+  Title,
 } from '@mantine/core';
-import { IconClock, IconDatabase, IconInfoCircle, IconRobot, IconSettings, IconShield } from '@tabler/icons-react';
+import {
+  IconClock,
+  IconDatabase,
+  IconInfoCircle,
+  IconRobot,
+  IconSettings,
+  IconShield,
+} from '@tabler/icons-react';
 import React, { useEffect, useState } from 'react';
+import { DocumentGenerationProgress } from '../../components/DocumentGenerationProgress';
 import {
   authenticatedFetch,
   getTokenTimeToExpiry,
   isAutoRefreshEnabled,
   refreshAuthToken,
-  setAutoRefreshEnabled
+  setAutoRefreshEnabled,
 } from '../../utils/auth';
 
 export const SessionSettings: React.FC = () => {
@@ -34,8 +42,12 @@ export const SessionSettings: React.FC = () => {
   const [auditSaving, setAuditSaving] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
   // Public documentation mode
-  const [docsMode, setDocsMode] = useState<'DISABLED' | 'PREVIEW' | 'ENABLED' | null>(null);
-  const [docsModeInitial, setDocsModeInitial] = useState<'DISABLED' | 'PREVIEW' | 'ENABLED' | null>(null);
+  const [docsMode, setDocsMode] = useState<
+    'DISABLED' | 'PREVIEW' | 'ENABLED' | null
+  >(null);
+  const [docsModeInitial, setDocsModeInitial] = useState<
+    'DISABLED' | 'PREVIEW' | 'ENABLED' | null
+  >(null);
   const [docsModeSaving, setDocsModeSaving] = useState(false);
   const [docsModeError, setDocsModeError] = useState<string | null>(null);
   // AI docs generation config
@@ -50,23 +62,39 @@ export const SessionSettings: React.FC = () => {
   const [genBusy, setGenBusy] = useState<boolean>(false);
   const [genMsg, setGenMsg] = useState<string | null>(null);
   // Enforce downstream auth
-  const [enforceDownstream, setEnforceDownstream] = useState<boolean | null>(null);
-  const [enforceDownstreamInitial, setEnforceDownstreamInitial] = useState<boolean | null>(null);
+  const [enforceDownstream, setEnforceDownstream] = useState<boolean | null>(
+    null
+  );
+  const [enforceDownstreamInitial, setEnforceDownstreamInitial] = useState<
+    boolean | null
+  >(null);
   const [enforceSaving, setEnforceSaving] = useState<boolean>(false);
   const [enforceError, setEnforceError] = useState<string | null>(null);
   // GraphQL Voyager
-  const [graphqlVoyagerEnabled, setGraphqlVoyagerEnabled] = useState<boolean | null>(null);
-  const [graphqlVoyagerInitial, setGraphqlVoyagerInitial] = useState<boolean | null>(null);
+  const [graphqlVoyagerEnabled, setGraphqlVoyagerEnabled] = useState<
+    boolean | null
+  >(null);
+  const [graphqlVoyagerInitial, setGraphqlVoyagerInitial] = useState<
+    boolean | null
+  >(null);
   const [voyagerSaving, setVoyagerSaving] = useState<boolean>(false);
   const [voyagerError, setVoyagerError] = useState<string | null>(null);
   // GraphQL Playground
-  const [graphqlPlaygroundEnabled, setGraphqlPlaygroundEnabled] = useState<boolean | null>(null);
-  const [graphqlPlaygroundInitial, setGraphqlPlaygroundInitial] = useState<boolean | null>(null);
+  const [graphqlPlaygroundEnabled, setGraphqlPlaygroundEnabled] = useState<
+    boolean | null
+  >(null);
+  const [graphqlPlaygroundInitial, setGraphqlPlaygroundInitial] = useState<
+    boolean | null
+  >(null);
   const [playgroundSaving, setPlaygroundSaving] = useState<boolean>(false);
   const [playgroundError, setPlaygroundError] = useState<string | null>(null);
   // Latency Tracking
-  const [latencyTrackingEnabled, setLatencyTrackingEnabled] = useState<boolean | null>(null);
-  const [latencyTrackingInitial, setLatencyTrackingInitial] = useState<boolean | null>(null);
+  const [latencyTrackingEnabled, setLatencyTrackingEnabled] = useState<
+    boolean | null
+  >(null);
+  const [latencyTrackingInitial, setLatencyTrackingInitial] = useState<
+    boolean | null
+  >(null);
   const [latencySaving, setLatencySaving] = useState<boolean>(false);
   const [latencyError, setLatencyError] = useState<string | null>(null);
   // Response Cache
@@ -74,19 +102,31 @@ export const SessionSettings: React.FC = () => {
   const [rcError, setRcError] = useState<string | null>(null);
   const [rcSaving, setRcSaving] = useState<boolean>(false);
   const [rcEnabled, setRcEnabled] = useState<boolean | null>(null);
-  const [rcEnabledInitial, setRcEnabledInitial] = useState<boolean | null>(null);
+  const [rcEnabledInitial, setRcEnabledInitial] = useState<boolean | null>(
+    null
+  );
   const [rcTtlMs, setRcTtlMs] = useState<number | null>(null);
   const [rcTtlInitial, setRcTtlInitial] = useState<number | null>(null);
   const [rcIncludeExt, setRcIncludeExt] = useState<boolean | null>(null);
-  const [rcIncludeExtInitial, setRcIncludeExtInitial] = useState<boolean | null>(null);
+  const [rcIncludeExtInitial, setRcIncludeExtInitial] = useState<
+    boolean | null
+  >(null);
   const [rcScope, setRcScope] = useState<'global' | 'per-session' | null>(null);
-  const [rcScopeInitial, setRcScopeInitial] = useState<'global' | 'per-session' | null>(null);
+  const [rcScopeInitial, setRcScopeInitial] = useState<
+    'global' | 'per-session' | null
+  >(null);
   const [rcClearing, setRcClearing] = useState<boolean>(false);
   const [rcClearMsg, setRcClearMsg] = useState<string | null>(null);
   const [rcTtlPerType, setRcTtlPerType] = useState<Record<string, number>>({});
-  const [rcTtlPerTypeInitial, setRcTtlPerTypeInitial] = useState<Record<string, number>>({});
-  const [rcTtlPerCoord, setRcTtlPerCoord] = useState<Record<string, number>>({});
-  const [rcTtlPerCoordInitial, setRcTtlPerCoordInitial] = useState<Record<string, number>>({});
+  const [rcTtlPerTypeInitial, setRcTtlPerTypeInitial] = useState<
+    Record<string, number>
+  >({});
+  const [rcTtlPerCoord, setRcTtlPerCoord] = useState<Record<string, number>>(
+    {}
+  );
+  const [rcTtlPerCoordInitial, setRcTtlPerCoordInitial] = useState<
+    Record<string, number>
+  >({});
   const [rcTtlErr, setRcTtlErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -106,32 +146,54 @@ export const SessionSettings: React.FC = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            query: `query Settings { settings { auditLogRetentionDays publicDocumentationMode enforceDownstreamAuth graphqlVoyagerEnabled graphqlPlaygroundEnabled latencyTrackingEnabled responseCacheEnabled responseCacheTtlMs responseCacheIncludeExtensions responseCacheScope responseCacheTtlPerType responseCacheTtlPerSchemaCoordinate } }`
-          })
+            query: `query Settings { settings { auditLogRetentionDays publicDocumentationMode enforceDownstreamAuth graphqlVoyagerEnabled graphqlPlaygroundEnabled latencyTrackingEnabled responseCacheEnabled responseCacheTtlMs responseCacheIncludeExtensions responseCacheScope responseCacheTtlPerType responseCacheTtlPerSchemaCoordinate } }`,
+          }),
         });
         const data = await res.json();
         if (data?.data?.settings) {
           setAuditRetention(data.data.settings.auditLogRetentionDays);
           setAuditInitial(data.data.settings.auditLogRetentionDays);
           if (data.data.settings.publicDocumentationMode) {
-            setDocsMode(data.data.settings.publicDocumentationMode as 'DISABLED' | 'PREVIEW' | 'ENABLED');
-            setDocsModeInitial(data.data.settings.publicDocumentationMode as 'DISABLED' | 'PREVIEW' | 'ENABLED');
+            setDocsMode(
+              data.data.settings.publicDocumentationMode as
+                | 'DISABLED'
+                | 'PREVIEW'
+                | 'ENABLED'
+            );
+            setDocsModeInitial(
+              data.data.settings.publicDocumentationMode as
+                | 'DISABLED'
+                | 'PREVIEW'
+                | 'ENABLED'
+            );
           }
           if (typeof data.data.settings.enforceDownstreamAuth === 'boolean') {
             setEnforceDownstream(data.data.settings.enforceDownstreamAuth);
-            setEnforceDownstreamInitial(data.data.settings.enforceDownstreamAuth);
+            setEnforceDownstreamInitial(
+              data.data.settings.enforceDownstreamAuth
+            );
           }
           if (typeof data.data.settings.graphqlVoyagerEnabled === 'boolean') {
             setGraphqlVoyagerEnabled(data.data.settings.graphqlVoyagerEnabled);
             setGraphqlVoyagerInitial(data.data.settings.graphqlVoyagerEnabled);
           }
-          if (typeof data.data.settings.graphqlPlaygroundEnabled === 'boolean') {
-            setGraphqlPlaygroundEnabled(data.data.settings.graphqlPlaygroundEnabled);
-            setGraphqlPlaygroundInitial(data.data.settings.graphqlPlaygroundEnabled);
+          if (
+            typeof data.data.settings.graphqlPlaygroundEnabled === 'boolean'
+          ) {
+            setGraphqlPlaygroundEnabled(
+              data.data.settings.graphqlPlaygroundEnabled
+            );
+            setGraphqlPlaygroundInitial(
+              data.data.settings.graphqlPlaygroundEnabled
+            );
           }
           if (typeof data.data.settings.latencyTrackingEnabled === 'boolean') {
-            setLatencyTrackingEnabled(data.data.settings.latencyTrackingEnabled);
-            setLatencyTrackingInitial(data.data.settings.latencyTrackingEnabled);
+            setLatencyTrackingEnabled(
+              data.data.settings.latencyTrackingEnabled
+            );
+            setLatencyTrackingInitial(
+              data.data.settings.latencyTrackingEnabled
+            );
           }
           // Response cache
           if (typeof data.data.settings.responseCacheEnabled === 'boolean') {
@@ -142,25 +204,41 @@ export const SessionSettings: React.FC = () => {
             setRcTtlMs(data.data.settings.responseCacheTtlMs);
             setRcTtlInitial(data.data.settings.responseCacheTtlMs);
           }
-          if (typeof data.data.settings.responseCacheIncludeExtensions === 'boolean') {
+          if (
+            typeof data.data.settings.responseCacheIncludeExtensions ===
+            'boolean'
+          ) {
             setRcIncludeExt(data.data.settings.responseCacheIncludeExtensions);
-            setRcIncludeExtInitial(data.data.settings.responseCacheIncludeExtensions);
+            setRcIncludeExtInitial(
+              data.data.settings.responseCacheIncludeExtensions
+            );
           }
           if (typeof data.data.settings.responseCacheScope === 'string') {
-            const scope = (data.data.settings.responseCacheScope as 'global' | 'per-session') || 'global';
+            const scope =
+              (data.data.settings.responseCacheScope as
+                | 'global'
+                | 'per-session') || 'global';
             setRcScope(scope);
             setRcScopeInitial(scope);
           }
-          if (data.data.settings.responseCacheTtlPerType && typeof data.data.settings.responseCacheTtlPerType === 'object') {
+          if (
+            data.data.settings.responseCacheTtlPerType &&
+            typeof data.data.settings.responseCacheTtlPerType === 'object'
+          ) {
             setRcTtlPerType(data.data.settings.responseCacheTtlPerType);
             setRcTtlPerTypeInitial(data.data.settings.responseCacheTtlPerType);
           }
           if (
             data.data.settings.responseCacheTtlPerSchemaCoordinate &&
-            typeof data.data.settings.responseCacheTtlPerSchemaCoordinate === 'object'
+            typeof data.data.settings.responseCacheTtlPerSchemaCoordinate ===
+              'object'
           ) {
-            setRcTtlPerCoord(data.data.settings.responseCacheTtlPerSchemaCoordinate);
-            setRcTtlPerCoordInitial(data.data.settings.responseCacheTtlPerSchemaCoordinate);
+            setRcTtlPerCoord(
+              data.data.settings.responseCacheTtlPerSchemaCoordinate
+            );
+            setRcTtlPerCoordInitial(
+              data.data.settings.responseCacheTtlPerSchemaCoordinate
+            );
           }
         }
       } catch (e: any) {
@@ -177,13 +255,15 @@ export const SessionSettings: React.FC = () => {
         const res = await authenticatedFetch('/graphql', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: `query { aiDocsConfig { provider baseUrl model apiKeySet } }` })
+          body: JSON.stringify({
+            query: `query { aiDocsConfig { provider baseUrl model apiKeySet } }`,
+          }),
         });
         const json = await res.json();
         if (json?.data?.aiDocsConfig) {
           setAiProvider('OPENAI');
           setAiBaseUrl(json.data.aiDocsConfig.baseUrl || '');
-          setAiModel(json.data.aiDocsConfig.model || 'gpt5-mini');
+          setAiModel(json.data.aiDocsConfig.model || 'gpt-5-mini');
           setAiKeySet(!!json.data.aiDocsConfig.apiKeySet);
         }
       } catch (e) {
@@ -232,7 +312,11 @@ export const SessionSettings: React.FC = () => {
               <Loader size="sm" /> <Text size="sm">Loading settings...</Text>
             </Group>
           ) : rcError ? (
-            <Alert color="red" title="Failed to load" icon={<IconInfoCircle size={16} />}>
+            <Alert
+              color="red"
+              title="Failed to load"
+              icon={<IconInfoCircle size={16} />}
+            >
               {rcError}
             </Alert>
           ) : (
@@ -243,7 +327,8 @@ export const SessionSettings: React.FC = () => {
                     Enable Response Cache
                   </Text>
                   <Text size="xs" color="dimmed">
-                    Cache GraphQL responses in Redis to speed up repeated queries
+                    Cache GraphQL responses in Redis to speed up repeated
+                    queries
                   </Text>
                 </div>
                 <Switch
@@ -260,7 +345,13 @@ export const SessionSettings: React.FC = () => {
                 min={0}
                 max={86_400_000}
                 value={rcTtlMs === null ? undefined : rcTtlMs}
-                onChange={(val) => setRcTtlMs(typeof val === 'number' ? Math.max(0, Math.min(86_400_000, val)) : rcTtlMs)}
+                onChange={(val) =>
+                  setRcTtlMs(
+                    typeof val === 'number'
+                      ? Math.max(0, Math.min(86_400_000, val))
+                      : rcTtlMs
+                  )
+                }
               />
 
               <Group position="apart">
@@ -287,16 +378,25 @@ export const SessionSettings: React.FC = () => {
                 onChange={(v) => setRcScope((v as any) || rcScope)}
                 data={[
                   { value: 'global', label: 'Global' },
-                  { value: 'per-session', label: 'Per-session' }
+                  { value: 'per-session', label: 'Per-session' },
                 ]}
               />
 
               <Stack spacing={4}>
                 <Text size="sm">TTL per Type (JSON)</Text>
                 <textarea
-                  style={{ width: '100%', minHeight: 120, padding: 8, fontFamily: 'monospace' }}
+                  style={{
+                    width: '100%',
+                    minHeight: 120,
+                    padding: 8,
+                    fontFamily: 'monospace',
+                  }}
                   placeholder={'{\n  "User": 500,\n  "Post": 1000\n}'}
-                  value={Object.keys(rcTtlPerType || {}).length ? JSON.stringify(rcTtlPerType, null, 2) : ''}
+                  value={
+                    Object.keys(rcTtlPerType || {}).length
+                      ? JSON.stringify(rcTtlPerType, null, 2)
+                      : ''
+                  }
                   onChange={(e) => {
                     setRcTtlErr(null);
                     try {
@@ -317,9 +417,20 @@ export const SessionSettings: React.FC = () => {
               <Stack spacing={4}>
                 <Text size="sm">TTL per Schema Coordinate (JSON)</Text>
                 <textarea
-                  style={{ width: '100%', minHeight: 120, padding: 8, fontFamily: 'monospace' }}
-                  placeholder={'{\n  "Query.lazy": 10000,\n  "User.friends": 5000\n}'}
-                  value={Object.keys(rcTtlPerCoord || {}).length ? JSON.stringify(rcTtlPerCoord, null, 2) : ''}
+                  style={{
+                    width: '100%',
+                    minHeight: 120,
+                    padding: 8,
+                    fontFamily: 'monospace',
+                  }}
+                  placeholder={
+                    '{\n  "Query.lazy": 10000,\n  "User.friends": 5000\n}'
+                  }
+                  value={
+                    Object.keys(rcTtlPerCoord || {}).length
+                      ? JSON.stringify(rcTtlPerCoord, null, 2)
+                      : ''
+                  }
                   onChange={(e) => {
                     setRcTtlErr(null);
                     try {
@@ -348,8 +459,10 @@ export const SessionSettings: React.FC = () => {
                       rcTtlMs === rcTtlInitial &&
                       rcIncludeExt === rcIncludeExtInitial &&
                       rcScope === rcScopeInitial &&
-                      JSON.stringify(rcTtlPerType) === JSON.stringify(rcTtlPerTypeInitial) &&
-                      JSON.stringify(rcTtlPerCoord) === JSON.stringify(rcTtlPerCoordInitial))
+                      JSON.stringify(rcTtlPerType) ===
+                        JSON.stringify(rcTtlPerTypeInitial) &&
+                      JSON.stringify(rcTtlPerCoord) ===
+                        JSON.stringify(rcTtlPerCoordInitial))
                   }
                   onClick={async () => {
                     setRcSaving(true);
@@ -357,15 +470,18 @@ export const SessionSettings: React.FC = () => {
                     try {
                       // Save only changed values via separate mutations
                       const ops: Promise<any>[] = [];
-                      if (rcEnabled !== rcEnabledInitial && rcEnabled !== null) {
+                      if (
+                        rcEnabled !== rcEnabledInitial &&
+                        rcEnabled !== null
+                      ) {
                         ops.push(
                           authenticatedFetch('/graphql', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                               query: `mutation Set($enabled:Boolean!){ setResponseCacheEnabled(enabled:$enabled) }`,
-                              variables: { enabled: rcEnabled }
-                            })
+                              variables: { enabled: rcEnabled },
+                            }),
                           }).then((r) => r.json())
                         );
                       }
@@ -376,20 +492,23 @@ export const SessionSettings: React.FC = () => {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                               query: `mutation Set($ttlMs:Int!){ setResponseCacheTtlMs(ttlMs:$ttlMs) }`,
-                              variables: { ttlMs: rcTtlMs }
-                            })
+                              variables: { ttlMs: rcTtlMs },
+                            }),
                           }).then((r) => r.json())
                         );
                       }
-                      if (rcIncludeExt !== rcIncludeExtInitial && rcIncludeExt !== null) {
+                      if (
+                        rcIncludeExt !== rcIncludeExtInitial &&
+                        rcIncludeExt !== null
+                      ) {
                         ops.push(
                           authenticatedFetch('/graphql', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                               query: `mutation Set($enabled:Boolean!){ setResponseCacheIncludeExtensions(enabled:$enabled) }`,
-                              variables: { enabled: rcIncludeExt }
-                            })
+                              variables: { enabled: rcIncludeExt },
+                            }),
                           }).then((r) => r.json())
                         );
                       }
@@ -400,38 +519,47 @@ export const SessionSettings: React.FC = () => {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                               query: `mutation Set($scope:String!){ setResponseCacheScope(scope:$scope) }`,
-                              variables: { scope: rcScope }
-                            })
+                              variables: { scope: rcScope },
+                            }),
                           }).then((r) => r.json())
                         );
                       }
-                      if (JSON.stringify(rcTtlPerType) !== JSON.stringify(rcTtlPerTypeInitial)) {
+                      if (
+                        JSON.stringify(rcTtlPerType) !==
+                        JSON.stringify(rcTtlPerTypeInitial)
+                      ) {
                         ops.push(
                           authenticatedFetch('/graphql', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                               query: `mutation Set($map: JSON!){ setResponseCacheTtlPerType(map:$map) }`,
-                              variables: { map: rcTtlPerType }
-                            })
+                              variables: { map: rcTtlPerType },
+                            }),
                           }).then((r) => r.json())
                         );
                       }
-                      if (JSON.stringify(rcTtlPerCoord) !== JSON.stringify(rcTtlPerCoordInitial)) {
+                      if (
+                        JSON.stringify(rcTtlPerCoord) !==
+                        JSON.stringify(rcTtlPerCoordInitial)
+                      ) {
                         ops.push(
                           authenticatedFetch('/graphql', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                               query: `mutation Set($map: JSON!){ setResponseCacheTtlPerSchemaCoordinate(map:$map) }`,
-                              variables: { map: rcTtlPerCoord }
-                            })
+                              variables: { map: rcTtlPerCoord },
+                            }),
                           }).then((r) => r.json())
                         );
                       }
                       const results = await Promise.all(ops);
                       const err = results.find((j) => j?.errors?.length);
-                      if (err) throw new Error(err.errors[0]?.message || 'Failed to save');
+                      if (err)
+                        throw new Error(
+                          err.errors[0]?.message || 'Failed to save'
+                        );
 
                       // Update initials
                       setRcEnabledInitial(rcEnabled);
@@ -453,8 +581,10 @@ export const SessionSettings: React.FC = () => {
                   rcTtlMs !== rcTtlInitial ||
                   rcIncludeExt !== rcIncludeExtInitial ||
                   rcScope !== rcScopeInitial ||
-                  JSON.stringify(rcTtlPerType) !== JSON.stringify(rcTtlPerTypeInitial) ||
-                  JSON.stringify(rcTtlPerCoord) !== JSON.stringify(rcTtlPerCoordInitial)) && (
+                  JSON.stringify(rcTtlPerType) !==
+                    JSON.stringify(rcTtlPerTypeInitial) ||
+                  JSON.stringify(rcTtlPerCoord) !==
+                    JSON.stringify(rcTtlPerCoordInitial)) && (
                   <Button
                     variant="subtle"
                     size="xs"
@@ -482,10 +612,15 @@ export const SessionSettings: React.FC = () => {
                       const res = await authenticatedFetch('/graphql', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ query: `mutation { clearResponseCache }` })
+                        body: JSON.stringify({
+                          query: `mutation { clearResponseCache }`,
+                        }),
                       });
                       const json = await res.json();
-                      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to clear');
+                      if (json.errors)
+                        throw new Error(
+                          json.errors[0]?.message || 'Failed to clear'
+                        );
                       setRcClearMsg('Cache cleared');
                     } catch (e: any) {
                       setRcClearMsg(e?.message || 'Failed to clear');
@@ -509,10 +644,16 @@ export const SessionSettings: React.FC = () => {
                   {rcTtlErr}{' '}
                 </Alert>
               )}
-              <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+              <Alert
+                icon={<IconInfoCircle size={16} />}
+                color="blue"
+                variant="light"
+              >
                 <Text size="xs">
-                  Response cache reduces load and latency by caching operation results in Redis. Changes apply within seconds
-                  without restart. Use per-session scope when results depend on user identity or permissions.
+                  Response cache reduces load and latency by caching operation
+                  results in Redis. Changes apply within seconds without
+                  restart. Use per-session scope when results depend on user
+                  identity or permissions.
                 </Text>
               </Alert>
             </>
@@ -533,17 +674,24 @@ export const SessionSettings: React.FC = () => {
             </div>
             <Switch
               checked={autoRefreshEnabled}
-              onChange={(event) => handleAutoRefreshToggle(event.currentTarget.checked)}
+              onChange={(event) =>
+                handleAutoRefreshToggle(event.currentTarget.checked)
+              }
               size="lg"
               onLabel="ON"
               offLabel="OFF"
             />
           </Group>
 
-          <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+          <Alert
+            icon={<IconInfoCircle size={16} />}
+            color="blue"
+            variant="light"
+          >
             <Text size="sm">
-              When enabled, your session will be automatically refreshed 2 minutes before expiry. This keeps you logged in for
-              up to 7 days without interruption.
+              When enabled, your session will be automatically refreshed 2
+              minutes before expiry. This keeps you logged in for up to 7 days
+              without interruption.
             </Text>
           </Alert>
 
@@ -551,7 +699,8 @@ export const SessionSettings: React.FC = () => {
             <Group spacing="xs">
               <IconShield size={16} color="green" />
               <Text size="sm" color="green">
-                Auto-refresh is active - your session will be maintained automatically
+                Auto-refresh is active - your session will be maintained
+                automatically
               </Text>
             </Group>
           )}
@@ -560,7 +709,8 @@ export const SessionSettings: React.FC = () => {
             <Group spacing="xs">
               <IconClock size={16} color="orange" />
               <Text size="sm" color="orange">
-                Manual mode - you'll need to refresh your session manually or re-login when it expires
+                Manual mode - you'll need to refresh your session manually or
+                re-login when it expires
               </Text>
             </Group>
           )}
@@ -577,12 +727,17 @@ export const SessionSettings: React.FC = () => {
           </Group>
           {aiLoading ? (
             <Group>
-              <Loader size="sm" /> <Text size="sm">Loading AI configuration...</Text>
+              <Loader size="sm" />{' '}
+              <Text size="sm">Loading AI configuration...</Text>
             </Group>
           ) : (
             <>
               {aiError && (
-                <Alert color="red" title="Error" icon={<IconInfoCircle size={16} />}>
+                <Alert
+                  color="red"
+                  title="Error"
+                  icon={<IconInfoCircle size={16} />}
+                >
                   {aiError}
                 </Alert>
               )}
@@ -603,8 +758,12 @@ export const SessionSettings: React.FC = () => {
                 <input
                   value={aiModel}
                   onChange={(e) => setAiModel(e.target.value)}
-                  placeholder="gpt5-mini"
-                  style={{ padding: 8, border: '1px solid #e5e7eb', borderRadius: 6 }}
+                  placeholder="gpt-5-mini"
+                  style={{
+                    padding: 8,
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 6,
+                  }}
                 />
               </Stack>
               <Stack spacing={4}>
@@ -613,7 +772,11 @@ export const SessionSettings: React.FC = () => {
                   value={aiBaseUrl}
                   onChange={(e) => setAiBaseUrl(e.target.value)}
                   placeholder="https://api.openai.com/v1"
-                  style={{ padding: 8, border: '1px solid #e5e7eb', borderRadius: 6 }}
+                  style={{
+                    padding: 8,
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 6,
+                  }}
                 />
               </Stack>
               <Stack spacing={4}>
@@ -630,7 +793,11 @@ export const SessionSettings: React.FC = () => {
                   onChange={(e) => setAiApiKey(e.target.value)}
                   placeholder={aiKeySet ? '•••••••••••••••••••••' : 'sk-...'}
                   type="password"
-                  style={{ padding: 8, border: '1px solid #e5e7eb', borderRadius: 6 }}
+                  style={{
+                    padding: 8,
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 6,
+                  }}
                 />
               </Stack>
               <Group spacing="sm">
@@ -651,13 +818,16 @@ export const SessionSettings: React.FC = () => {
                               provider: 'OPENAI',
                               baseUrl: aiBaseUrl || null,
                               model: aiModel || null,
-                              apiKey: aiApiKey || null
-                            }
-                          }
-                        })
+                              apiKey: aiApiKey || null,
+                            },
+                          },
+                        }),
                       });
                       const json = await res.json();
-                      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to save');
+                      if (json.errors)
+                        throw new Error(
+                          json.errors[0]?.message || 'Failed to save'
+                        );
                       setAiApiKey('');
                       setAiKeySet(true);
                     } catch (e: any) {
@@ -673,6 +843,7 @@ export const SessionSettings: React.FC = () => {
                   variant="light"
                   size="xs"
                   loading={genBusy}
+                  disabled={genBusy}
                   onClick={async () => {
                     setGenBusy(true);
                     setGenMsg(null);
@@ -681,11 +852,14 @@ export const SessionSettings: React.FC = () => {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                          query: `mutation { generateDocsFromSDL(options: { publish: true }) { created updated } }`
-                        })
+                          query: `mutation { generateDocsFromSDL(options: { publish: true }) { created updated } }`,
+                        }),
                       });
                       const json = await res.json();
-                      if (json.errors) throw new Error(json.errors[0]?.message || 'Generation failed');
+                      if (json.errors)
+                        throw new Error(
+                          json.errors[0]?.message || 'Generation failed'
+                        );
                       setGenMsg(
                         `Generated: ${json.data.generateDocsFromSDL.created} created, ${json.data.generateDocsFromSDL.updated} updated`
                       );
@@ -699,15 +873,34 @@ export const SessionSettings: React.FC = () => {
                   Seed docs from services
                 </Button>
               </Group>
-              {genMsg && (
+
+              {/* Real-time progress updates during generation */}
+              <DocumentGenerationProgress
+                isGenerating={genBusy}
+                onComplete={(result) => {
+                  setGenMsg(
+                    `Generated: ${result.totalDocuments} documents for ${result.totalServices} services`
+                  );
+                }}
+                onError={(error) => {
+                  setGenMsg(error);
+                }}
+              />
+
+              {genMsg && !genBusy && (
                 <Alert color="blue" icon={<IconInfoCircle size={16} />}>
                   {genMsg}
                 </Alert>
               )}
-              <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+              <Alert
+                icon={<IconInfoCircle size={16} />}
+                color="blue"
+                variant="light"
+              >
                 <Text size="xs">
-                  Seeding reads each registered service SDL and creates an overview page. Add an API key to enable future
-                  LLM-powered enrichment.
+                  Seeding reads each registered service SDL and creates an
+                  overview page. Add an API key to enable future LLM-powered
+                  enrichment.
                 </Text>
               </Alert>
             </>
@@ -728,7 +921,11 @@ export const SessionSettings: React.FC = () => {
               <Loader size="sm" /> <Text size="sm">Loading setting...</Text>
             </Group>
           ) : enforceError ? (
-            <Alert color="red" title="Failed to load" icon={<IconInfoCircle size={16} />}>
+            <Alert
+              color="red"
+              title="Failed to load"
+              icon={<IconInfoCircle size={16} />}
+            >
               {enforceError}
             </Alert>
           ) : (
@@ -739,13 +936,16 @@ export const SessionSettings: React.FC = () => {
                     Require authentication for downstream service calls
                   </Text>
                   <Text size="xs" color="dimmed">
-                    When enabled, all gateway requests to downstream services require either an Application API key or a user
+                    When enabled, all gateway requests to downstream services
+                    require either an Application API key or a user
                     session/token.
                   </Text>
                 </div>
                 <Switch
                   checked={!!enforceDownstream}
-                  onChange={(e) => setEnforceDownstream(e.currentTarget.checked)}
+                  onChange={(e) =>
+                    setEnforceDownstream(e.currentTarget.checked)
+                  }
                   onLabel="ON"
                   offLabel="OFF"
                 />
@@ -754,7 +954,11 @@ export const SessionSettings: React.FC = () => {
                 <Button
                   size="xs"
                   loading={enforceSaving}
-                  disabled={enforceSaving || enforceDownstream === null || enforceDownstream === enforceDownstreamInitial}
+                  disabled={
+                    enforceSaving ||
+                    enforceDownstream === null ||
+                    enforceDownstream === enforceDownstreamInitial
+                  }
                   onClick={async () => {
                     if (enforceDownstream === null) return;
                     setEnforceSaving(true);
@@ -765,11 +969,14 @@ export const SessionSettings: React.FC = () => {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                           query: `mutation Set($enabled:Boolean!){ setEnforceDownstreamAuth(enabled:$enabled) }`,
-                          variables: { enabled: enforceDownstream }
-                        })
+                          variables: { enabled: enforceDownstream },
+                        }),
                       });
                       const json = await res.json();
-                      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to save');
+                      if (json.errors)
+                        throw new Error(
+                          json.errors[0]?.message || 'Failed to save'
+                        );
                       setEnforceDownstreamInitial(enforceDownstream);
                     } catch (e: any) {
                       setEnforceError(e?.message || 'Failed to save');
@@ -780,16 +987,19 @@ export const SessionSettings: React.FC = () => {
                 >
                   Save
                 </Button>
-                {enforceDownstreamInitial !== null && enforceDownstream !== enforceDownstreamInitial && (
-                  <Button
-                    variant="subtle"
-                    size="xs"
-                    disabled={enforceSaving}
-                    onClick={() => setEnforceDownstream(enforceDownstreamInitial!)}
-                  >
-                    Reset
-                  </Button>
-                )}
+                {enforceDownstreamInitial !== null &&
+                  enforceDownstream !== enforceDownstreamInitial && (
+                    <Button
+                      variant="subtle"
+                      size="xs"
+                      disabled={enforceSaving}
+                      onClick={() =>
+                        setEnforceDownstream(enforceDownstreamInitial!)
+                      }
+                    >
+                      Reset
+                    </Button>
+                  )}
               </Group>
             </>
           )}
@@ -809,7 +1019,11 @@ export const SessionSettings: React.FC = () => {
               <Loader size="sm" /> <Text size="sm">Loading setting...</Text>
             </Group>
           ) : voyagerError ? (
-            <Alert color="red" title="Failed to load" icon={<IconInfoCircle size={16} />}>
+            <Alert
+              color="red"
+              title="Failed to load"
+              icon={<IconInfoCircle size={16} />}
+            >
               {voyagerError}
             </Alert>
           ) : (
@@ -820,12 +1034,15 @@ export const SessionSettings: React.FC = () => {
                     Enable GraphQL Voyager
                   </Text>
                   <Text size="xs" color="dimmed">
-                    When enabled, provides an interactive GraphQL schema visualization at /voyager endpoint.
+                    When enabled, provides an interactive GraphQL schema
+                    visualization at /voyager endpoint.
                   </Text>
                 </div>
                 <Switch
                   checked={!!graphqlVoyagerEnabled}
-                  onChange={(e) => setGraphqlVoyagerEnabled(e.currentTarget.checked)}
+                  onChange={(e) =>
+                    setGraphqlVoyagerEnabled(e.currentTarget.checked)
+                  }
                   onLabel="ON"
                   offLabel="OFF"
                 />
@@ -834,7 +1051,11 @@ export const SessionSettings: React.FC = () => {
                 <Button
                   size="xs"
                   loading={voyagerSaving}
-                  disabled={voyagerSaving || graphqlVoyagerEnabled === null || graphqlVoyagerEnabled === graphqlVoyagerInitial}
+                  disabled={
+                    voyagerSaving ||
+                    graphqlVoyagerEnabled === null ||
+                    graphqlVoyagerEnabled === graphqlVoyagerInitial
+                  }
                   onClick={async () => {
                     if (graphqlVoyagerEnabled === null) return;
                     setVoyagerSaving(true);
@@ -845,11 +1066,14 @@ export const SessionSettings: React.FC = () => {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                           query: `mutation Set($enabled:Boolean!){ setGraphQLVoyagerEnabled(enabled:$enabled) }`,
-                          variables: { enabled: graphqlVoyagerEnabled }
-                        })
+                          variables: { enabled: graphqlVoyagerEnabled },
+                        }),
                       });
                       const json = await res.json();
-                      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to save');
+                      if (json.errors)
+                        throw new Error(
+                          json.errors[0]?.message || 'Failed to save'
+                        );
                       setGraphqlVoyagerInitial(graphqlVoyagerEnabled);
                     } catch (e: any) {
                       setVoyagerError(e?.message || 'Failed to save');
@@ -860,21 +1084,29 @@ export const SessionSettings: React.FC = () => {
                 >
                   Save
                 </Button>
-                {graphqlVoyagerInitial !== null && graphqlVoyagerEnabled !== graphqlVoyagerInitial && (
-                  <Button
-                    variant="subtle"
-                    size="xs"
-                    disabled={voyagerSaving}
-                    onClick={() => setGraphqlVoyagerEnabled(graphqlVoyagerInitial!)}
-                  >
-                    Reset
-                  </Button>
-                )}
+                {graphqlVoyagerInitial !== null &&
+                  graphqlVoyagerEnabled !== graphqlVoyagerInitial && (
+                    <Button
+                      variant="subtle"
+                      size="xs"
+                      disabled={voyagerSaving}
+                      onClick={() =>
+                        setGraphqlVoyagerEnabled(graphqlVoyagerInitial!)
+                      }
+                    >
+                      Reset
+                    </Button>
+                  )}
               </Group>
-              <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+              <Alert
+                icon={<IconInfoCircle size={16} />}
+                color="blue"
+                variant="light"
+              >
                 <Text size="xs">
-                  GraphQL Voyager provides an interactive visualization of your GraphQL schema, showing relationships between
-                  types. Access it at <code>/voyager</code> when enabled.
+                  GraphQL Voyager provides an interactive visualization of your
+                  GraphQL schema, showing relationships between types. Access it
+                  at <code>/voyager</code> when enabled.
                 </Text>
               </Alert>
             </>
@@ -892,7 +1124,11 @@ export const SessionSettings: React.FC = () => {
               <Loader size="sm" /> <Text size="sm">Loading setting...</Text>
             </Group>
           ) : playgroundError ? (
-            <Alert color="red" title="Failed to load" icon={<IconInfoCircle size={16} />}>
+            <Alert
+              color="red"
+              title="Failed to load"
+              icon={<IconInfoCircle size={16} />}
+            >
               {playgroundError}
             </Alert>
           ) : (
@@ -903,12 +1139,15 @@ export const SessionSettings: React.FC = () => {
                     Enable GraphQL Playground
                   </Text>
                   <Text size="xs" color="dimmed">
-                    When enabled, provides an interactive GraphQL query interface at /playground endpoint.
+                    When enabled, provides an interactive GraphQL query
+                    interface at /playground endpoint.
                   </Text>
                 </div>
                 <Switch
                   checked={!!graphqlPlaygroundEnabled}
-                  onChange={(e) => setGraphqlPlaygroundEnabled(e.currentTarget.checked)}
+                  onChange={(e) =>
+                    setGraphqlPlaygroundEnabled(e.currentTarget.checked)
+                  }
                   onLabel="ON"
                   offLabel="OFF"
                 />
@@ -932,11 +1171,14 @@ export const SessionSettings: React.FC = () => {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                           query: `mutation Set($enabled:Boolean!){ setGraphQLPlaygroundEnabled(enabled:$enabled) }`,
-                          variables: { enabled: graphqlPlaygroundEnabled }
-                        })
+                          variables: { enabled: graphqlPlaygroundEnabled },
+                        }),
                       });
                       const json = await res.json();
-                      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to save');
+                      if (json.errors)
+                        throw new Error(
+                          json.errors[0]?.message || 'Failed to save'
+                        );
                       setGraphqlPlaygroundInitial(graphqlPlaygroundEnabled);
                     } catch (e: any) {
                       setPlaygroundError(e?.message || 'Failed to save');
@@ -947,20 +1189,28 @@ export const SessionSettings: React.FC = () => {
                 >
                   Save
                 </Button>
-                {graphqlPlaygroundInitial !== null && graphqlPlaygroundEnabled !== graphqlPlaygroundInitial && (
-                  <Button
-                    variant="subtle"
-                    size="xs"
-                    disabled={playgroundSaving}
-                    onClick={() => setGraphqlPlaygroundEnabled(graphqlPlaygroundInitial!)}
-                  >
-                    Reset
-                  </Button>
-                )}
+                {graphqlPlaygroundInitial !== null &&
+                  graphqlPlaygroundEnabled !== graphqlPlaygroundInitial && (
+                    <Button
+                      variant="subtle"
+                      size="xs"
+                      disabled={playgroundSaving}
+                      onClick={() =>
+                        setGraphqlPlaygroundEnabled(graphqlPlaygroundInitial!)
+                      }
+                    >
+                      Reset
+                    </Button>
+                  )}
               </Group>
-              <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+              <Alert
+                icon={<IconInfoCircle size={16} />}
+                color="blue"
+                variant="light"
+              >
                 <Text size="xs">
-                  GraphQL Playground provides an interactive query interface for testing GraphQL operations. Access it at{' '}
+                  GraphQL Playground provides an interactive query interface for
+                  testing GraphQL operations. Access it at{' '}
                   <code>/playground</code> when enabled.
                 </Text>
               </Alert>
@@ -982,7 +1232,11 @@ export const SessionSettings: React.FC = () => {
               <Loader size="sm" /> <Text size="sm">Loading setting...</Text>
             </Group>
           ) : latencyError ? (
-            <Alert color="red" title="Failed to load" icon={<IconInfoCircle size={16} />}>
+            <Alert
+              color="red"
+              title="Failed to load"
+              icon={<IconInfoCircle size={16} />}
+            >
               {latencyError}
             </Alert>
           ) : (
@@ -993,13 +1247,16 @@ export const SessionSettings: React.FC = () => {
                     Enable Request Latency Tracking
                   </Text>
                   <Text size="xs" color="dimmed">
-                    When enabled, collects performance metrics for all GraphQL operations. This data is used for monitoring,
-                    analytics, and performance optimization.
+                    When enabled, collects performance metrics for all GraphQL
+                    operations. This data is used for monitoring, analytics, and
+                    performance optimization.
                   </Text>
                 </div>
                 <Switch
                   checked={!!latencyTrackingEnabled}
-                  onChange={(e) => setLatencyTrackingEnabled(e.currentTarget.checked)}
+                  onChange={(e) =>
+                    setLatencyTrackingEnabled(e.currentTarget.checked)
+                  }
                   onLabel="ON"
                   offLabel="OFF"
                 />
@@ -1009,7 +1266,9 @@ export const SessionSettings: React.FC = () => {
                   size="xs"
                   loading={latencySaving}
                   disabled={
-                    latencySaving || latencyTrackingEnabled === null || latencyTrackingEnabled === latencyTrackingInitial
+                    latencySaving ||
+                    latencyTrackingEnabled === null ||
+                    latencyTrackingEnabled === latencyTrackingInitial
                   }
                   onClick={async () => {
                     if (latencyTrackingEnabled === null) return;
@@ -1021,11 +1280,14 @@ export const SessionSettings: React.FC = () => {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                           query: `mutation Set($enabled:Boolean!){ setLatencyTrackingEnabled(enabled:$enabled) }`,
-                          variables: { enabled: latencyTrackingEnabled }
-                        })
+                          variables: { enabled: latencyTrackingEnabled },
+                        }),
                       });
                       const json = await res.json();
-                      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to save');
+                      if (json.errors)
+                        throw new Error(
+                          json.errors[0]?.message || 'Failed to save'
+                        );
                       setLatencyTrackingInitial(latencyTrackingEnabled);
                     } catch (e: any) {
                       setLatencyError(e?.message || 'Failed to save');
@@ -1036,22 +1298,30 @@ export const SessionSettings: React.FC = () => {
                 >
                   Save
                 </Button>
-                {latencyTrackingInitial !== null && latencyTrackingEnabled !== latencyTrackingInitial && (
-                  <Button
-                    variant="subtle"
-                    size="xs"
-                    disabled={latencySaving}
-                    onClick={() => setLatencyTrackingEnabled(latencyTrackingInitial!)}
-                  >
-                    Reset
-                  </Button>
-                )}
+                {latencyTrackingInitial !== null &&
+                  latencyTrackingEnabled !== latencyTrackingInitial && (
+                    <Button
+                      variant="subtle"
+                      size="xs"
+                      disabled={latencySaving}
+                      onClick={() =>
+                        setLatencyTrackingEnabled(latencyTrackingInitial!)
+                      }
+                    >
+                      Reset
+                    </Button>
+                  )}
               </Group>
-              <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+              <Alert
+                icon={<IconInfoCircle size={16} />}
+                color="blue"
+                variant="light"
+              >
                 <Text size="xs">
-                  Latency tracking collects response times, error rates, and operation metrics. Data retention follows the same
-                  schedule as audit logs ({auditRetention || 90} days). Disabling this will stop new data collection but
-                  preserve existing data.
+                  Latency tracking collects response times, error rates, and
+                  operation metrics. Data retention follows the same schedule as
+                  audit logs ({auditRetention || 90} days). Disabling this will
+                  stop new data collection but preserve existing data.
                 </Text>
               </Alert>
             </>
@@ -1067,14 +1337,24 @@ export const SessionSettings: React.FC = () => {
 
           <Group position="apart">
             <Text size="sm">Time until expiry:</Text>
-            <Badge color={timeToExpiry && timeToExpiry > 10 ? 'green' : timeToExpiry && timeToExpiry > 5 ? 'yellow' : 'red'}>
+            <Badge
+              color={
+                timeToExpiry && timeToExpiry > 10
+                  ? 'green'
+                  : timeToExpiry && timeToExpiry > 5
+                    ? 'yellow'
+                    : 'red'
+              }
+            >
               {timeToExpiry ? `${timeToExpiry} minutes` : 'Unknown'}
             </Badge>
           </Group>
 
           <Group position="apart">
             <Text size="sm">Auto-refresh status:</Text>
-            <Badge color={autoRefreshEnabled ? 'green' : 'gray'}>{autoRefreshEnabled ? 'Enabled' : 'Disabled'}</Badge>
+            <Badge color={autoRefreshEnabled ? 'green' : 'gray'}>
+              {autoRefreshEnabled ? 'Enabled' : 'Disabled'}
+            </Badge>
           </Group>
 
           <Divider />
@@ -1106,10 +1386,15 @@ export const SessionSettings: React.FC = () => {
           </Group>
           {auditLoading ? (
             <Group>
-              <Loader size="sm" /> <Text size="sm">Loading current retention...</Text>
+              <Loader size="sm" />{' '}
+              <Text size="sm">Loading current retention...</Text>
             </Group>
           ) : auditError ? (
-            <Alert color="red" title="Failed to load" icon={<IconInfoCircle size={16} />}>
+            <Alert
+              color="red"
+              title="Failed to load"
+              icon={<IconInfoCircle size={16} />}
+            >
               {' '}
               {auditError}{' '}
             </Alert>
@@ -1121,12 +1406,20 @@ export const SessionSettings: React.FC = () => {
                 min={1}
                 max={1825}
                 value={auditRetention === null ? undefined : auditRetention}
-                onChange={(val) => setAuditRetention(typeof val === 'number' ? val : auditRetention)}
+                onChange={(val) =>
+                  setAuditRetention(
+                    typeof val === 'number' ? val : auditRetention
+                  )
+                }
               />
               <Group spacing="sm">
                 <Button
                   size="xs"
-                  disabled={auditSaving || auditRetention === null || auditRetention === auditInitial}
+                  disabled={
+                    auditSaving ||
+                    auditRetention === null ||
+                    auditRetention === auditInitial
+                  }
                   loading={auditSaving}
                   onClick={async () => {
                     if (auditRetention === null) return;
@@ -1138,12 +1431,14 @@ export const SessionSettings: React.FC = () => {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                           query: `mutation UpdateRetention($days: Int!) { updateAuditLogRetentionDays(days: $days) }`,
-                          variables: { days: auditRetention }
-                        })
+                          variables: { days: auditRetention },
+                        }),
                       });
                       const json = await res.json();
                       if (json.errors) {
-                        throw new Error(json.errors[0]?.message || 'Update failed');
+                        throw new Error(
+                          json.errors[0]?.message || 'Update failed'
+                        );
                       }
                       setAuditInitial(auditRetention);
                     } catch (e: any) {
@@ -1156,15 +1451,25 @@ export const SessionSettings: React.FC = () => {
                   Save
                 </Button>
                 {auditInitial !== null && auditRetention !== auditInitial && (
-                  <Button variant="subtle" size="xs" disabled={auditSaving} onClick={() => setAuditRetention(auditInitial)}>
+                  <Button
+                    variant="subtle"
+                    size="xs"
+                    disabled={auditSaving}
+                    onClick={() => setAuditRetention(auditInitial)}
+                  >
                     Reset
                   </Button>
                 )}
               </Group>
-              <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+              <Alert
+                icon={<IconInfoCircle size={16} />}
+                color="blue"
+                variant="light"
+              >
                 <Text size="xs">
-                  Increasing retention increases storage usage. The cleanup job runs periodically based on configured cleanup
-                  interval; changes apply to newly written logs immediately.
+                  Increasing retention increases storage usage. The cleanup job
+                  runs periodically based on configured cleanup interval;
+                  changes apply to newly written logs immediately.
                 </Text>
               </Alert>
             </>
@@ -1182,10 +1487,15 @@ export const SessionSettings: React.FC = () => {
           </Group>
           {auditLoading ? (
             <Group>
-              <Loader size="sm" /> <Text size="sm">Loading current mode...</Text>
+              <Loader size="sm" />{' '}
+              <Text size="sm">Loading current mode...</Text>
             </Group>
           ) : docsModeError ? (
-            <Alert color="red" title="Failed to load" icon={<IconInfoCircle size={16} />}>
+            <Alert
+              color="red"
+              title="Failed to load"
+              icon={<IconInfoCircle size={16} />}
+            >
               {docsModeError}
             </Alert>
           ) : (
@@ -1196,16 +1506,26 @@ export const SessionSettings: React.FC = () => {
                 value={docsMode ?? undefined}
                 onChange={(val) => setDocsMode((val as any) || docsMode)}
                 data={[
-                  { value: 'DISABLED', label: 'Disabled (hidden from all users)' },
-                  { value: 'PREVIEW', label: 'Preview (only authenticated users)' },
-                  { value: 'ENABLED', label: 'Enabled (publicly accessible)' }
+                  {
+                    value: 'DISABLED',
+                    label: 'Disabled (hidden from all users)',
+                  },
+                  {
+                    value: 'PREVIEW',
+                    label: 'Preview (only authenticated users)',
+                  },
+                  { value: 'ENABLED', label: 'Enabled (publicly accessible)' },
                 ]}
               />
               <Group spacing="sm">
                 <Button
                   size="xs"
                   loading={docsModeSaving}
-                  disabled={docsModeSaving || docsMode === null || docsMode === docsModeInitial}
+                  disabled={
+                    docsModeSaving ||
+                    docsMode === null ||
+                    docsMode === docsModeInitial
+                  }
                   onClick={async () => {
                     if (docsMode === null) return;
                     setDocsModeSaving(true);
@@ -1216,11 +1536,14 @@ export const SessionSettings: React.FC = () => {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                           query: `mutation SetDocsMode($mode: PublicDocumentationMode!) { setPublicDocumentationMode(mode: $mode) }`,
-                          variables: { mode: docsMode }
-                        })
+                          variables: { mode: docsMode },
+                        }),
                       });
                       const json = await res.json();
-                      if (json.errors) throw new Error(json.errors[0]?.message || 'Update failed');
+                      if (json.errors)
+                        throw new Error(
+                          json.errors[0]?.message || 'Update failed'
+                        );
                       setDocsModeInitial(docsMode);
                     } catch (e: any) {
                       setDocsModeError(e?.message || 'Failed to update mode');
@@ -1232,15 +1555,26 @@ export const SessionSettings: React.FC = () => {
                   Save
                 </Button>
                 {docsModeInitial !== null && docsMode !== docsModeInitial && (
-                  <Button variant="subtle" size="xs" disabled={docsModeSaving} onClick={() => setDocsMode(docsModeInitial)}>
+                  <Button
+                    variant="subtle"
+                    size="xs"
+                    disabled={docsModeSaving}
+                    onClick={() => setDocsMode(docsModeInitial)}
+                  >
                     Reset
                   </Button>
                 )}
               </Group>
-              <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+              <Alert
+                icon={<IconInfoCircle size={16} />}
+                color="blue"
+                variant="light"
+              >
                 <Text size="xs">
-                  <strong>DISABLED:</strong> No documentation pages are served. <strong>PREVIEW:</strong> Accessible only to
-                  authenticated users. <strong>ENABLED:</strong> Publicly accessible without authentication.
+                  <strong>DISABLED:</strong> No documentation pages are served.{' '}
+                  <strong>PREVIEW:</strong> Accessible only to authenticated
+                  users. <strong>ENABLED:</strong> Publicly accessible without
+                  authentication.
                 </Text>
               </Alert>
             </>
@@ -1262,17 +1596,25 @@ export const SessionSettings: React.FC = () => {
               • <strong>Refresh Tokens:</strong> Valid for 7 days
             </Text>
             <Text size="sm">
-              • <strong>Auto-refresh:</strong> Triggers 2 minutes before token expiry
+              • <strong>Auto-refresh:</strong> Triggers 2 minutes before token
+              expiry
             </Text>
             <Text size="sm">
-              • <strong>Maximum Session:</strong> Up to 7 days with auto-refresh enabled
+              • <strong>Maximum Session:</strong> Up to 7 days with auto-refresh
+              enabled
             </Text>
           </Stack>
 
-          <Alert icon={<IconInfoCircle size={16} />} color="yellow" variant="light">
+          <Alert
+            icon={<IconInfoCircle size={16} />}
+            color="yellow"
+            variant="light"
+          >
             <Text size="sm">
-              <strong>Security Note:</strong> Short-lived access tokens (15 minutes) provide better security while automatic
-              refresh ensures convenience. You can disable auto-refresh if you prefer manual control over your session duration.
+              <strong>Security Note:</strong> Short-lived access tokens (15
+              minutes) provide better security while automatic refresh ensures
+              convenience. You can disable auto-refresh if you prefer manual
+              control over your session duration.
             </Text>
           </Alert>
         </Stack>

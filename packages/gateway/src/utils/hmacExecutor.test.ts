@@ -3,7 +3,11 @@ import assert from 'node:assert';
 import { afterEach, beforeEach, describe, it, mock } from 'node:test';
 import { HMACUtils } from '../security/hmac';
 import { keyManager } from '../security/keyManager';
-import { buildHMACExecutor, createHMACValidationMiddleware, generateServiceKey } from './hmacExecutor';
+import {
+  buildHMACExecutor,
+  createHMACValidationMiddleware,
+  generateServiceKey,
+} from './hmacExecutor';
 
 // Mock Date.now() to have predictable timestamps
 const MOCK_TIMESTAMP = 1672531200000; // 2023-01-01T00:00:00.000Z
@@ -16,21 +20,21 @@ const mockActiveKey = {
   serviceUrl: 'http://service.com/graphql',
   status: 'active' as const,
   createdAt: new Date(MOCK_TIMESTAMP - 10000),
-  expiresAt: null
+  expiresAt: null,
 };
 
 const mockInactiveKey = {
   ...mockActiveKey,
   keyId: 'inactive-key',
   secretKey: 'inactive-secret',
-  status: 'inactive' as const
+  status: 'inactive' as const,
 };
 
 const mockExpiredKey = {
   ...mockActiveKey,
   keyId: 'expired-key',
   secretKey: 'expired-secret',
-  expiresAt: new Date(MOCK_TIMESTAMP - 1)
+  expiresAt: new Date(MOCK_TIMESTAMP - 1),
 };
 
 mock.method(keyManager, 'getActiveKey', (endpoint: string) => {
@@ -53,13 +57,13 @@ mock.method(keyManager, 'generateKey', (serviceUrl: string) => ({
   serviceUrl,
   status: 'active' as const,
   createdAt: new Date(),
-  expiresAt: null
+  expiresAt: null,
 }));
 
 const mockHmacHeaders = {
   'x-hmac-signature': 'signed-signature',
   'x-hmac-timestamp': String(MOCK_TIMESTAMP),
-  'x-hmac-key-id': 'test-key-id'
+  'x-hmac-key-id': 'test-key-id',
 };
 
 mock.method(HMACUtils, 'createHeaders', () => mockHmacHeaders);
@@ -69,7 +73,7 @@ mock.method(HMACUtils, 'parseHeaders', (headers: Record<string, any>) => {
     return {
       signature: headers['x-hmac-signature'],
       timestamp: headers['x-hmac-timestamp'],
-      keyId: headers['x-hmac-key-id']
+      keyId: headers['x-hmac-key-id'],
     };
   }
   return null;
@@ -104,7 +108,7 @@ describe('hmacExecutor', () => {
         return {
           signature: headers['x-hmac-signature'],
           timestamp: String(headers['x-hmac-timestamp']),
-          keyId: headers['x-hmac-key-id']
+          keyId: headers['x-hmac-key-id'],
         };
       }
       return null;
@@ -116,43 +120,69 @@ describe('hmacExecutor', () => {
   });
 
   describe('buildHMACExecutor', () => {
-    let originalFetch: typeof global.fetch;
     let mockFetch: any;
+    let capturedHeaders: Record<string, any> | null;
 
     beforeEach(() => {
       mockFetch = mock.fn(async () => new Response('{}', { status: 200 }));
-      originalFetch = global.fetch;
-      global.fetch = mockFetch;
+      capturedHeaders = null;
     });
 
     afterEach(() => {
-      global.fetch = originalFetch;
+      // nothing
     });
 
     it('should add HMAC headers to requests when enabled', async () => {
-      const executor = buildHMACExecutor({ endpoint: 'http://service.com/graphql' });
-      const request = { document: parse('query { hello }'), variables: {}, extensions: {} };
+      const executor = buildHMACExecutor({
+        endpoint: 'http://service.com/graphql',
+        fetchImpl: mockFetch,
+        onHeaders: (h) => (capturedHeaders = h),
+      });
+      const request = {
+        document: parse('query { hello }'),
+        variables: {},
+        extensions: {},
+      };
 
       await executor(request);
 
-      const fetchOptions = mockFetch.mock.calls[0].arguments[1];
-      assert.strictEqual(fetchOptions.headers['x-hmac-signature'], 'signed-signature');
-      assert.strictEqual(fetchOptions.headers['x-hmac-key-id'], 'test-key-id');
-      assert.strictEqual(fetchOptions.headers['x-hmac-timestamp'], String(MOCK_TIMESTAMP));
+      assert.ok(capturedHeaders, 'headers should be captured');
+      assert.strictEqual(
+        capturedHeaders!['x-hmac-signature'],
+        'signed-signature'
+      );
+      assert.strictEqual(capturedHeaders!['x-hmac-key-id'], 'test-key-id');
+      assert.strictEqual(
+        capturedHeaders!['x-hmac-timestamp'],
+        String(MOCK_TIMESTAMP)
+      );
     });
 
     it('should not add HMAC headers if disabled', async () => {
-      const executor = buildHMACExecutor({ endpoint: 'http://service.com/graphql', enableHMAC: false });
-      const request = { document: parse('query { hello }'), variables: {}, extensions: {} };
+      const executor = buildHMACExecutor({
+        endpoint: 'http://service.com/graphql',
+        enableHMAC: false,
+        fetchImpl: mockFetch,
+        onHeaders: (h) => (capturedHeaders = h),
+      });
+      const request = {
+        document: parse('query { hello }'),
+        variables: {},
+        extensions: {},
+      };
 
       await executor(request);
 
-      const fetchOptions = mockFetch.mock.calls[0].arguments[1];
-      assert.strictEqual(fetchOptions.headers['x-hmac-signature'], undefined);
+      assert.ok(capturedHeaders, 'headers should be captured');
+      assert.strictEqual(capturedHeaders!['x-hmac-signature'], undefined);
     });
 
     it('should passthrough specified headers from context', async () => {
-      const executor = buildHMACExecutor({ endpoint: 'http://service.com/graphql' });
+      const executor = buildHMACExecutor({
+        endpoint: 'http://service.com/graphql',
+        fetchImpl: mockFetch,
+        onHeaders: (h) => (capturedHeaders = h),
+      });
       const request = {
         document: parse('query { hello }'),
         variables: {},
@@ -164,20 +194,21 @@ describe('hmacExecutor', () => {
               cookie: 'session=123',
               'x-request-id': 'req-id',
               'x-correlation-id': 'corr-id',
-              traceparent: 'trace-p'
-            }
-          }
-        }
+              traceparent: 'trace-p',
+            },
+          },
+        },
       };
 
       await executor(request);
 
-      const fetchOptions = mockFetch.mock.calls[0].arguments[1];
-      assert.strictEqual(fetchOptions.headers['Authorization'], 'Bearer token');
-      assert.strictEqual(fetchOptions.headers['Cookie'], 'session=123');
-      assert.strictEqual(fetchOptions.headers['x-request-id'], 'req-id');
-      assert.strictEqual(fetchOptions.headers['x-correlation-id'], 'corr-id');
-      assert.strictEqual(fetchOptions.headers['traceparent'], 'trace-p');
+      assert.ok(capturedHeaders, 'headers should be captured');
+      // Node fetch normalizes header keys to lowercase
+      assert.strictEqual(capturedHeaders!['authorization'], 'Bearer token');
+      assert.strictEqual(capturedHeaders!['cookie'], 'session=123');
+      assert.strictEqual(capturedHeaders!['x-request-id'], 'req-id');
+      assert.strictEqual(capturedHeaders!['x-correlation-id'], 'corr-id');
+      assert.strictEqual(capturedHeaders!['traceparent'], 'trace-p');
     });
 
     it('should handle HMAC creation errors gracefully', async () => {
@@ -189,21 +220,43 @@ describe('hmacExecutor', () => {
         },
         { times: 1 }
       );
-      const executor = buildHMACExecutor({ endpoint: 'http://service.com/graphql' });
-      const request = { document: parse('query { hello }'), variables: {}, extensions: {} };
+      const executor = buildHMACExecutor({
+        endpoint: 'http://service.com/graphql',
+        fetchImpl: mockFetch,
+        onHeaders: (h) => (capturedHeaders = h),
+      });
+      const request = {
+        document: parse('query { hello }'),
+        variables: {},
+        extensions: {},
+      };
 
       await executor(request);
 
-      const fetchOptions = mockFetch.mock.calls[0].arguments[1];
-      assert.strictEqual(fetchOptions.headers['x-hmac-signature'], undefined, 'Should not add HMAC headers on error');
+      assert.ok(capturedHeaders, 'headers should be captured');
+      assert.strictEqual(
+        capturedHeaders!['x-hmac-signature'],
+        undefined,
+        'Should not add HMAC headers on error'
+      );
     });
 
     it('should always send x-msgpack-enabled when service useMsgPack is true (independent of client header)', async () => {
-      const executor = buildHMACExecutor({ endpoint: 'http://service.com/graphql', useMsgPack: true });
-      const request = { document: parse('query { test }'), variables: {}, extensions: {}, context: { req: { headers: {} } } };
+      const executor = buildHMACExecutor({
+        endpoint: 'http://service.com/graphql',
+        useMsgPack: true,
+        fetchImpl: mockFetch,
+        onHeaders: (h) => (capturedHeaders = h),
+      });
+      const request = {
+        document: parse('query { test }'),
+        variables: {},
+        extensions: {},
+        context: { req: { headers: {} } },
+      };
       await executor(request);
-      const fetchOptions = mockFetch.mock.calls[0].arguments[1];
-      assert.strictEqual(fetchOptions.headers['x-msgpack-enabled'], '1');
+      assert.ok(capturedHeaders, 'headers should be captured');
+      assert.strictEqual(capturedHeaders!['x-msgpack-enabled'], '1');
     });
   });
 
@@ -215,11 +268,11 @@ describe('hmacExecutor', () => {
         method: 'POST',
         originalUrl: '/graphql',
         headers: { ...mockHmacHeaders },
-        body: { query: '{ hello }' }
+        body: { query: '{ hello }' },
       };
       res = {
         status: mock.fn(() => res),
-        json: mock.fn()
+        json: mock.fn(),
       };
       next = mock.fn();
     });
@@ -228,8 +281,16 @@ describe('hmacExecutor', () => {
       const middleware = createHMACValidationMiddleware();
       await middleware(req, res, next);
 
-      assert.strictEqual(next.mock.callCount(), 1, 'next() should be called once');
-      assert.strictEqual(res.status.mock.callCount(), 0, 'res.status() should not be called');
+      assert.strictEqual(
+        next.mock.callCount(),
+        1,
+        'next() should be called once'
+      );
+      assert.strictEqual(
+        res.status.mock.callCount(),
+        0,
+        'res.status() should not be called'
+      );
       assert.strictEqual(req.hmacValidated, true);
       assert.deepStrictEqual(req.serviceKey, mockActiveKey);
     });
@@ -243,7 +304,7 @@ describe('hmacExecutor', () => {
       assert.strictEqual(res.status.mock.calls[0].arguments[0], 401);
       assert.deepStrictEqual(res.json.mock.calls[0].arguments[0], {
         error: 'Invalid HMAC signature',
-        code: 'HMAC_INVALID_SIGNATURE'
+        code: 'HMAC_INVALID_SIGNATURE',
       });
     });
 
@@ -256,7 +317,7 @@ describe('hmacExecutor', () => {
       assert.strictEqual(res.status.mock.calls[0].arguments[0], 401);
       assert.deepStrictEqual(res.json.mock.calls[0].arguments[0], {
         error: 'Missing HMAC headers',
-        code: 'HMAC_MISSING'
+        code: 'HMAC_MISSING',
       });
     });
 
@@ -279,7 +340,7 @@ describe('hmacExecutor', () => {
       assert.strictEqual(res.status.mock.calls[0].arguments[0], 401);
       assert.deepStrictEqual(res.json.mock.calls[0].arguments[0], {
         error: 'Invalid HMAC key ID',
-        code: 'HMAC_INVALID_KEY'
+        code: 'HMAC_INVALID_KEY',
       });
     });
 
@@ -292,7 +353,7 @@ describe('hmacExecutor', () => {
       assert.strictEqual(res.status.mock.calls[0].arguments[0], 401);
       assert.deepStrictEqual(res.json.mock.calls[0].arguments[0], {
         error: 'HMAC key is not active',
-        code: 'HMAC_KEY_INACTIVE'
+        code: 'HMAC_KEY_INACTIVE',
       });
     });
 
@@ -305,7 +366,7 @@ describe('hmacExecutor', () => {
       assert.strictEqual(res.status.mock.calls[0].arguments[0], 401);
       assert.deepStrictEqual(res.json.mock.calls[0].arguments[0], {
         error: 'HMAC key has expired',
-        code: 'HMAC_KEY_EXPIRED'
+        code: 'HMAC_KEY_EXPIRED',
       });
     });
 
@@ -325,7 +386,7 @@ describe('hmacExecutor', () => {
       assert.strictEqual(res.status.mock.calls[0].arguments[0], 500);
       assert.deepStrictEqual(res.json.mock.calls[0].arguments[0], {
         error: 'HMAC validation failed',
-        code: 'HMAC_VALIDATION_ERROR'
+        code: 'HMAC_VALIDATION_ERROR',
       });
     });
   });
@@ -342,7 +403,7 @@ describe('hmacExecutor', () => {
         serviceUrl,
         status: 'active' as const,
         createdAt: new Date(),
-        expiresAt: null
+        expiresAt: null,
       };
       mock.method(keyManager, 'generateKey', () => generatedKey);
 
@@ -350,7 +411,9 @@ describe('hmacExecutor', () => {
 
       assert.strictEqual(result.keyId, generatedKey.keyId);
       assert.strictEqual(result.secretKey, generatedKey.secretKey);
-      assert.ok(result.instructions.includes(`X-HMAC-Key-ID: ${generatedKey.keyId}`));
+      assert.ok(
+        result.instructions.includes(`X-HMAC-Key-ID: ${generatedKey.keyId}`)
+      );
     });
   });
 });

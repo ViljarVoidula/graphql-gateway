@@ -1,11 +1,11 @@
 // Ensure metadata is available for decorators before importing resolvers/entities
-import { directiveTypeDefs } from '@graphql-authz/core';
-import { authZDirective, authZGraphQLDirective } from '@graphql-authz/directive';
-import { mergeResolvers, mergeTypeDefs } from '@graphql-tools/merge';
+import {
+  authZDirective,
+  authZGraphQLDirective,
+} from '@graphql-authz/directive';
 import { GraphQLSchema } from 'graphql';
-import { createSchema } from 'graphql-yoga';
 import 'reflect-metadata';
-import { buildTypeDefsAndResolversSync } from 'type-graphql';
+import { buildSchemaSync } from 'type-graphql';
 import { Container } from 'typedi';
 import { SchemaLoader } from '../SchemaLoader';
 import { authZRules } from '../auth/authz-rules';
@@ -42,10 +42,11 @@ import { DocsAuthoringResolver } from './docs/docs.resolver';
 import { LatencyHealthResolver } from './latency/latency-health.resolver';
 import { RequestLatencyResolver } from './latency/request-latency.resolver';
 import { DocsSearchResolver } from './search/search.resolver';
+import { GatewayMessageChannelResolver } from './subscriptions/gateway-message-channel.resolver';
+import { PublishToGatewayChannelResolver } from './subscriptions/publish-to-gateway.resolver';
 import { ThemeResolver } from './theme/theme.resolver';
 
 const directive = authZGraphQLDirective(authZRules);
-const authZDirectiveTypeDefs = directiveTypeDefs(directive);
 const { authZDirectiveTransformer } = authZDirective();
 
 // Memoization cache for schema creation
@@ -64,12 +65,24 @@ export function makeEndpointsSchema(loader: SchemaLoader): GraphQLSchema {
   Container.set('ServiceRepository', dataSource.getRepository(Service));
   Container.set('ServiceKeyRepository', dataSource.getRepository(ServiceKey));
   Container.set('AuditLogRepository', dataSource.getRepository(AuditLog));
-  Container.set('SchemaChangeRepository', dataSource.getRepository(SchemaChange));
-  Container.set('ApplicationUsageRepository', dataSource.getRepository(ApplicationUsage));
+  Container.set(
+    'SchemaChangeRepository',
+    dataSource.getRepository(SchemaChange)
+  );
+  Container.set(
+    'ApplicationUsageRepository',
+    dataSource.getRepository(ApplicationUsage)
+  );
   Container.set('ApiKeyUsageRepository', dataSource.getRepository(ApiKeyUsage));
-  Container.set('RequestLatencyRepository', dataSource.getRepository(RequestLatency));
+  Container.set(
+    'RequestLatencyRepository',
+    dataSource.getRepository(RequestLatency)
+  );
 
-  const { resolvers: coreResolvers, typeDefs: coreTypefs } = buildTypeDefsAndResolversSync({
+  // Register PubSub if available in context - this will be set by gateway
+  // Note: The actual pubSub instance will be injected from gateway context
+
+  const schema = buildSchemaSync({
     resolvers: [
       UserResolver,
       ApplicationResolver,
@@ -90,46 +103,46 @@ export function makeEndpointsSchema(loader: SchemaLoader): GraphQLSchema {
       ChatResolver,
       AssetResolver,
       LatencyHealthResolver,
-      RequestLatencyResolver
+      RequestLatencyResolver,
+      GatewayMessageChannelResolver,
+      PublishToGatewayChannelResolver,
     ],
     container: Container,
-    orphanedTypes: [Application, ApiKey, Session, AuditLog, ApplicationUsage, ApiKeyUsage, RequestLatency]
+    orphanedTypes: [
+      Application,
+      ApiKey,
+      Session,
+      AuditLog,
+      ApplicationUsage,
+      ApiKeyUsage,
+      RequestLatency,
+    ],
+    pubSub: Container.get('PubSub'),
   });
 
-  let schema = authZDirectiveTransformer(
-    createSchema({
-      typeDefs: mergeTypeDefs([coreTypefs, authZDirectiveTypeDefs]),
-      resolvers: mergeResolvers([coreResolvers])
-    })
-  );
+  const transformedSchema = authZDirectiveTransformer(schema);
 
   // Debug: log root fields to verify availability in stitched schema
   try {
-    const queryFields = Object.keys(schema.getQueryType()?.getFields?.() || {});
-    const mutationFields = Object.keys(schema.getMutationType()?.getFields?.() || {});
+    const queryFields = Object.keys(
+      transformedSchema.getQueryType()?.getFields?.() || {}
+    );
+    const mutationFields = Object.keys(
+      transformedSchema.getMutationType()?.getFields?.() || {}
+    );
+    const subscriptionFields = Object.keys(
+      transformedSchema.getSubscriptionType()?.getFields?.() || {}
+    );
     log.debug('Core schema fields', {
       operation: 'makeEndpointsSchema',
       metadata: {
         query: queryFields,
-        mutation: mutationFields
-      }
+        mutation: mutationFields,
+        subscription: subscriptionFields,
+      },
     });
   } catch {}
 
-  // Self-heal: if expected new fields (e.g., auditLogSummary) missing and cache disabled, rebuild once
-  try {
-    const qf = Object.keys(schema.getQueryType()?.getFields?.() || {});
-    if (!qf.includes('auditLogSummary') && !disableCache) {
-      log.warn('Expected auditLogSummary not found; forcing schema rebuild');
-      schema = authZDirectiveTransformer(
-        createSchema({
-          typeDefs: mergeTypeDefs([coreTypefs, authZDirectiveTypeDefs]),
-          resolvers: mergeResolvers([coreResolvers])
-        })
-      );
-    }
-  } catch {}
-
-  if (!disableCache) schemaCache.set(loader, schema);
-  return schema;
+  if (!disableCache) schemaCache.set(loader, transformedSchema);
+  return transformedSchema;
 }

@@ -1,26 +1,34 @@
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert';
 import { createYoga } from 'graphql-yoga';
+import assert from 'node:assert';
+import { after, before, beforeEach, describe, it } from 'node:test';
 import { buildSchema } from 'type-graphql';
 import { Container } from 'typedi';
-import { describeWithDatabase, TestDatabaseManager } from '../test-utils';
 import { UserResolver } from '../../services/users/user.resolver';
-import { dataSource } from '../../db/datasource';
+import { TestDatabaseManager } from '../test-utils';
 
-describeWithDatabase('User Integration Flow', () => {
+describe('User Integration Flow', () => {
   let yoga: any;
 
+  before(async () => {
+    await TestDatabaseManager.setupDatabase();
+  });
+
+  after(async () => {
+    await TestDatabaseManager.teardownDatabase();
+  });
+
   beforeEach(async () => {
+    await TestDatabaseManager.clearDatabase();
     // Build GraphQL schema with UserResolver
     const schema = await buildSchema({
       resolvers: [UserResolver],
       container: Container,
-      authChecker: () => true // Disable auth for tests
+      authChecker: () => true, // Disable auth for tests
     });
 
     yoga = createYoga({
       schema,
-      logging: false // Disable logging in tests
+      logging: false, // Disable logging in tests
     });
   });
 
@@ -40,8 +48,8 @@ describeWithDatabase('User Integration Flow', () => {
     const createUserVariables = {
       data: {
         email: 'integration@example.com',
-        password: 'password123'
-      }
+        password: 'password123',
+      },
     };
 
     const createUserResponse = await yoga.fetch('http://localhost/graphql', {
@@ -49,16 +57,24 @@ describeWithDatabase('User Integration Flow', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query: createUserMutation,
-        variables: createUserVariables
-      })
+        variables: createUserVariables,
+      }),
     });
 
     const createUserResult = await createUserResponse.json();
 
-    assert.ok(!createUserResult.errors, `GraphQL errors: ${JSON.stringify(createUserResult.errors)}`);
+    assert.ok(
+      !createUserResult.errors,
+      `GraphQL errors: ${JSON.stringify(createUserResult.errors)}`
+    );
     assert.ok(createUserResult.data.createUser);
-    assert.strictEqual(createUserResult.data.createUser.email, 'integration@example.com');
-    assert.deepStrictEqual(createUserResult.data.createUser.permissions, ['user']);
+    assert.strictEqual(
+      createUserResult.data.createUser.email,
+      'integration@example.com'
+    );
+    assert.deepStrictEqual(createUserResult.data.createUser.permissions, [
+      'user',
+    ]);
 
     // Test login with created credentials
     const loginMutation = `
@@ -83,8 +99,8 @@ describeWithDatabase('User Integration Flow', () => {
     const loginVariables = {
       data: {
         email: 'integration@example.com',
-        password: 'password123'
-      }
+        password: 'password123',
+      },
     };
 
     const loginResponse = await yoga.fetch('http://localhost/graphql', {
@@ -92,15 +108,21 @@ describeWithDatabase('User Integration Flow', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query: loginMutation,
-        variables: loginVariables
-      })
+        variables: loginVariables,
+      }),
     });
 
     const loginResult = await loginResponse.json();
 
-    assert.ok(!loginResult.errors, `GraphQL errors: ${JSON.stringify(loginResult.errors)}`);
+    assert.ok(
+      !loginResult.errors,
+      `GraphQL errors: ${JSON.stringify(loginResult.errors)}`
+    );
     assert.ok(loginResult.data.login.user);
-    assert.strictEqual(loginResult.data.login.user.email, 'integration@example.com');
+    assert.strictEqual(
+      loginResult.data.login.user.email,
+      'integration@example.com'
+    );
     assert.ok(loginResult.data.login.tokens);
     assert.ok(loginResult.data.login.tokens.accessToken);
     assert.ok(loginResult.data.login.tokens.refreshToken);
@@ -122,16 +144,22 @@ describeWithDatabase('User Integration Flow', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        query: usersQuery
-      })
+        query: usersQuery,
+      }),
     });
 
     const usersResult = await usersResponse.json();
 
-    assert.ok(!usersResult.errors, `GraphQL errors: ${JSON.stringify(usersResult.errors)}`);
+    assert.ok(
+      !usersResult.errors,
+      `GraphQL errors: ${JSON.stringify(usersResult.errors)}`
+    );
     assert.ok(usersResult.data.users);
     assert.strictEqual(usersResult.data.users.length, 1);
-    assert.strictEqual(usersResult.data.users[0].email, 'integration@example.com');
+    assert.strictEqual(
+      usersResult.data.users[0].email,
+      'integration@example.com'
+    );
   });
 
   it('should handle validation errors properly', async () => {
@@ -148,8 +176,8 @@ describeWithDatabase('User Integration Flow', () => {
     const userData = {
       data: {
         email: 'duplicate@example.com',
-        password: 'password123'
-      }
+        password: 'password123',
+      },
     };
 
     // Create first user
@@ -158,8 +186,8 @@ describeWithDatabase('User Integration Flow', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query: createUserMutation,
-        variables: userData
-      })
+        variables: userData,
+      }),
     });
 
     // Try to create duplicate user
@@ -168,14 +196,18 @@ describeWithDatabase('User Integration Flow', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query: createUserMutation,
-        variables: userData
-      })
+        variables: userData,
+      }),
     });
 
     const duplicateResult = await duplicateResponse.json();
 
     assert.ok(duplicateResult.errors);
-    assert.ok(duplicateResult.errors[0].message.includes('User with this email already exists'));
+    assert.ok(
+      duplicateResult.errors[0].message.includes(
+        'User with this email already exists'
+      )
+    );
   });
 
   it('should handle authentication errors', async () => {
@@ -197,8 +229,8 @@ describeWithDatabase('User Integration Flow', () => {
     const invalidLoginData = {
       data: {
         email: 'nonexistent@example.com',
-        password: 'wrongpassword'
-      }
+        password: 'wrongpassword',
+      },
     };
 
     const loginResponse = await yoga.fetch('http://localhost/graphql', {
@@ -206,13 +238,15 @@ describeWithDatabase('User Integration Flow', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query: loginMutation,
-        variables: invalidLoginData
-      })
+        variables: invalidLoginData,
+      }),
     });
 
     const loginResult = await loginResponse.json();
 
     assert.ok(loginResult.errors);
-    assert.ok(loginResult.errors[0].message.includes('Invalid email or password'));
+    assert.ok(
+      loginResult.errors[0].message.includes('Invalid email or password')
+    );
   });
 });

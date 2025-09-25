@@ -1,6 +1,6 @@
-import { describe, mock, it, beforeEach, afterEach } from 'node:test';
-import assert from 'node:assert';
 import { GraphQLSchema, buildSchema, introspectionFromSchema } from 'graphql';
+import assert from 'node:assert';
+import { afterEach, beforeEach, describe, it, mock } from 'node:test';
 import { SchemaLoader, schemaCache } from './SchemaLoader';
 import { healthMonitor } from './utils/service-health';
 
@@ -8,7 +8,7 @@ import { healthMonitor } from './utils/service-health';
 let mockExecutor: any;
 let originalBuildHMACExecutor: any;
 
-describe('SchemaLoader', () => {
+describe('SchemaLoader', { timeout: 30_000 }, () => {
   let schemaLoader: SchemaLoader;
   let mockBuildSchema: (endpoints: any[]) => GraphQLSchema;
   let mockSchema: GraphQLSchema;
@@ -37,7 +37,9 @@ describe('SchemaLoader', () => {
     hmacExecutorModule.buildHMACExecutor = () => mockExecutor;
 
     // Create SchemaLoader instance
-    schemaLoader = new SchemaLoader(mockBuildSchema, ['http://localhost:4000/graphql']);
+    schemaLoader = new SchemaLoader(mockBuildSchema, [
+      'http://localhost:4000/graphql',
+    ]);
   });
 
   afterEach(async () => {
@@ -53,7 +55,10 @@ describe('SchemaLoader', () => {
 
   describe('constructor', () => {
     it('should initialize with provided endpoints and build schema function', () => {
-      const endpoints = ['http://localhost:4000/graphql', 'http://localhost:4001/graphql'];
+      const endpoints = [
+        'http://localhost:4000/graphql',
+        'http://localhost:4001/graphql',
+      ];
       const buildSchemaFn = () => mockSchema;
 
       const loader = new SchemaLoader(buildSchemaFn, endpoints);
@@ -68,8 +73,8 @@ describe('SchemaLoader', () => {
     it('should load schemas from endpoints and build combined schema', async () => {
       const mockIntrospectionData = {
         data: {
-          __schema: introspectionFromSchema(mockSchema).__schema
-        }
+          __schema: introspectionFromSchema(mockSchema).__schema,
+        },
       };
 
       // Mock executor to return introspection data
@@ -80,7 +85,10 @@ describe('SchemaLoader', () => {
       assert.strictEqual(result, mockSchema);
       assert.strictEqual(schemaLoader.schema, mockSchema);
       assert.strictEqual(schemaLoader.loadedEndpoints.length, 1);
-      assert.strictEqual(schemaLoader.loadedEndpoints[0].url, 'http://localhost:4000/graphql');
+      assert.strictEqual(
+        schemaLoader.loadedEndpoints[0].url,
+        'http://localhost:4000/graphql'
+      );
       assert.ok(schemaLoader.loadedEndpoints[0].sdl.includes('type Query'));
     });
 
@@ -91,7 +99,7 @@ describe('SchemaLoader', () => {
       // Pre-populate cache
       schemaCache.set(url, {
         sdl: cachedSdl,
-        lastUpdated: Date.now()
+        lastUpdated: Date.now(),
       });
 
       await schemaLoader.reload();
@@ -103,14 +111,14 @@ describe('SchemaLoader', () => {
       const url = 'http://localhost:4000/graphql';
       const mockIntrospectionData = {
         data: {
-          __schema: introspectionFromSchema(mockSchema).__schema
-        }
+          __schema: introspectionFromSchema(mockSchema).__schema,
+        },
       };
 
       // Pre-populate cache with expired entry
       schemaCache.set(url, {
         sdl: 'type Query { old: String }',
-        lastUpdated: Date.now() - 15 * 60 * 1000 // 15 minutes ago
+        lastUpdated: Date.now() - 15 * 60 * 1000, // 15 minutes ago
       });
 
       // Mock executor to return introspection data
@@ -128,7 +136,7 @@ describe('SchemaLoader', () => {
       // Pre-populate cache with expired entry
       schemaCache.set(url, {
         sdl: cachedSdl,
-        lastUpdated: Date.now() - 15 * 60 * 1000 // 15 minutes ago
+        lastUpdated: Date.now() - 15 * 60 * 1000, // 15 minutes ago
       });
 
       // Mock executor to throw error
@@ -162,15 +170,16 @@ describe('SchemaLoader', () => {
     it('should handle async iterable response from executor', async () => {
       const mockIntrospectionData = {
         data: {
-          __schema: introspectionFromSchema(mockSchema).__schema
-        }
+          __schema: introspectionFromSchema(mockSchema).__schema,
+        },
       };
 
       // Mock async iterable response
       const asyncIterable = {
         [Symbol.asyncIterator]: () => ({
-          next: () => Promise.resolve({ value: mockIntrospectionData, done: false })
-        })
+          next: () =>
+            Promise.resolve({ value: mockIntrospectionData, done: false }),
+        }),
       };
 
       mockExecutor = mock.fn(() => Promise.resolve(asyncIterable));
@@ -190,7 +199,10 @@ describe('SchemaLoader', () => {
     });
 
     it('should use endpoint loader when set', async () => {
-      const dynamicEndpoints = ['http://dynamic1.com/graphql', 'http://dynamic2.com/graphql'];
+      const dynamicEndpoints = [
+        'http://dynamic1.com/graphql',
+        'http://dynamic2.com/graphql',
+      ];
       const mockLoader = mock.fn(() => Promise.resolve(dynamicEndpoints));
 
       schemaLoader.setEndpointLoader(mockLoader);
@@ -202,7 +214,9 @@ describe('SchemaLoader', () => {
     });
 
     it('should handle endpoint loader errors gracefully', async () => {
-      const mockLoader = mock.fn(() => Promise.reject(new Error('Loader failed')));
+      const mockLoader = mock.fn(() =>
+        Promise.reject(new Error('Loader failed'))
+      );
 
       schemaLoader.setEndpointLoader(mockLoader);
 
@@ -217,8 +231,8 @@ describe('SchemaLoader', () => {
     it('should set up automatic refresh interval', (t, done) => {
       const mockIntrospectionData = {
         data: {
-          __schema: introspectionFromSchema(mockSchema).__schema
-        }
+          __schema: introspectionFromSchema(mockSchema).__schema,
+        },
       };
       mockExecutor = mock.fn(() => Promise.resolve(mockIntrospectionData));
 
@@ -281,13 +295,13 @@ describe('SchemaLoader', () => {
       // Add old cache entry
       schemaCache.set(url1, {
         sdl: 'old schema',
-        lastUpdated: Date.now() - 25 * 60 * 1000 // 25 minutes ago
+        lastUpdated: Date.now() - 25 * 60 * 1000, // 25 minutes ago
       });
 
       // Add fresh cache entry
       schemaCache.set(url2, {
         sdl: 'fresh schema',
-        lastUpdated: Date.now()
+        lastUpdated: Date.now(),
       });
 
       schemaLoader.cleanupExpiredCache();
@@ -303,7 +317,7 @@ describe('SchemaLoader', () => {
       // Add recently expired entry (15 minutes ago, TTL is 10 minutes)
       schemaCache.set(url, {
         sdl: 'recent schema',
-        lastUpdated: Date.now() - 15 * 60 * 1000
+        lastUpdated: Date.now() - 15 * 60 * 1000,
       });
 
       schemaLoader.cleanupExpiredCache();
@@ -318,8 +332,8 @@ describe('SchemaLoader', () => {
       const url = 'http://localhost:4000/graphql';
       const mockIntrospectionData = {
         data: {
-          __schema: introspectionFromSchema(mockSchema).__schema
-        }
+          __schema: introspectionFromSchema(mockSchema).__schema,
+        },
       };
 
       let callCount = 0;
@@ -345,10 +359,12 @@ describe('SchemaLoader', () => {
     it('should handle multiple endpoint failures gracefully', async () => {
       const multiEndpointLoader = new SchemaLoader(mockBuildSchema, [
         'http://failing1.com/graphql',
-        'http://failing2.com/graphql'
+        'http://failing2.com/graphql',
       ]);
 
-      mockExecutor = mock.fn(() => Promise.reject(new Error('All endpoints failed')));
+      mockExecutor = mock.fn(() =>
+        Promise.reject(new Error('All endpoints failed'))
+      );
 
       await multiEndpointLoader.reload();
 
@@ -361,8 +377,8 @@ describe('SchemaLoader', () => {
       mockExecutor = mock.fn(() =>
         Promise.resolve({
           data: {
-            __schema: null // Invalid schema
-          }
+            __schema: null, // Invalid schema
+          },
         })
       );
 

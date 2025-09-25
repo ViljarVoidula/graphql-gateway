@@ -10,27 +10,35 @@ import {
   ObjectType,
   Query,
   registerEnumType,
-  Resolver
+  Resolver,
 } from 'type-graphql';
-import { Service } from 'typedi';
+import { Container, Service } from 'typedi';
 import { dataSource } from '../../db/datasource';
 import { DocDocument } from '../../entities/docs/document.entity';
 import { DocRevision } from '../../entities/docs/revision.entity';
-import { Service as ServiceEntity, ServiceStatus } from '../../entities/service.entity';
+import {
+  Service as ServiceEntity,
+  ServiceStatus,
+} from '../../entities/service.entity';
 import { Setting } from '../../entities/setting.entity';
-import { decryptSecret, EncryptedPayload, encryptSecret } from '../../utils/crypto';
+import {
+  decryptSecret,
+  EncryptedPayload,
+  encryptSecret,
+} from '../../utils/crypto';
 import { compileMDX } from '../docs/mdx-compile';
 import { chunkAndStoreRevision } from '../docs/revision-chunking';
+import { GatewayMessagePublisher, MessageSeverity } from '../subscriptions';
 
 enum AIProvider {
-  OPENAI = 'OPENAI'
+  OPENAI = 'OPENAI',
 }
 registerEnumType(AIProvider, { name: 'AIProvider' });
 
 enum AIAssistMode {
   APPEND = 'APPEND',
   REPLACE = 'REPLACE',
-  SECTION = 'SECTION'
+  SECTION = 'SECTION',
 }
 registerEnumType(AIAssistMode, { name: 'AIAssistMode' });
 
@@ -38,7 +46,7 @@ enum AIStyle {
   CONCISE = 'CONCISE',
   TUTORIAL = 'TUTORIAL',
   REFERENCE = 'REFERENCE',
-  MARKETING = 'MARKETING'
+  MARKETING = 'MARKETING',
 }
 registerEnumType(AIStyle, { name: 'AIStyle' });
 
@@ -163,6 +171,8 @@ export class AIResolver {
     'color-background-secondary',
     'color-background-tertiary',
     'color-background-code',
+    'color-code-bg',
+    'color-code-text',
     'color-border',
     'color-border-light',
     'color-border-dark',
@@ -171,13 +181,15 @@ export class AIResolver {
     'font-size-base',
     'line-height-normal',
     'border-radius-md',
-    'shadow-sm'
+    'shadow-sm',
   ];
 
   @Query(() => AIDocsConfig)
   @Directive('@authz(rules: ["isAdmin"])')
   async aiDocsConfig(): Promise<AIDocsConfig> {
-    const row = await this.settingRepo.findOne({ where: { key: this.CONFIG_KEY } });
+    const row = await this.settingRepo.findOne({
+      where: { key: this.CONFIG_KEY },
+    });
     let payload: SecretPayload | null = row?.jsonValue || null;
     // env fallbacks if not set
     const envKey = process.env.OPENAI_API_KEY;
@@ -187,18 +199,23 @@ export class AIResolver {
       provider: AIProvider.OPENAI,
       baseUrl: payload?.baseUrl || envBase || undefined,
       model: payload?.model || envModel || undefined,
-      apiKeySet: !!(payload?.secret || envKey)
+      apiKeySet: !!(payload?.secret || envKey),
     };
   }
 
   @Mutation(() => Boolean)
   @Directive('@authz(rules: ["isAdmin"])')
-  async setAIDocsConfig(@Arg('input') input: SetAIDocsConfigInput): Promise<boolean> {
-    if (input.provider !== AIProvider.OPENAI) throw new Error('Only OpenAI provider supported for now');
+  async setAIDocsConfig(
+    @Arg('input') input: SetAIDocsConfigInput
+  ): Promise<boolean> {
+    if (input.provider !== AIProvider.OPENAI)
+      throw new Error('Only OpenAI provider supported for now');
     const row =
       (await this.settingRepo.findOne({ where: { key: this.CONFIG_KEY } })) ||
       this.settingRepo.create({ key: this.CONFIG_KEY, valueType: 'json' });
-    const current: SecretPayload = (row.jsonValue as any) || { provider: 'OPENAI' };
+    const current: SecretPayload = (row.jsonValue as any) || {
+      provider: 'OPENAI',
+    };
     if (typeof input.baseUrl === 'string') current.baseUrl = input.baseUrl;
     if (typeof input.model === 'string') current.model = input.model;
     if (typeof input.apiKey === 'string' && input.apiKey.length > 0) {
@@ -216,111 +233,288 @@ export class AIResolver {
   @Mutation(() => GenerateDocsResult)
   @Directive('@authz(rules: ["isAdmin"])')
   async generateDocsFromSDL(
-    @Arg('options', () => GenerateDocsOptions, { nullable: true }) options: GenerateDocsOptions | null,
+    @Arg('options', () => GenerateDocsOptions, { nullable: true })
+    options: GenerateDocsOptions | null,
     @Ctx() ctx: any
   ): Promise<GenerateDocsResult> {
+    // Get publisher for real-time notifications
+    const publisher = Container.get(GatewayMessagePublisher);
+
     // Collect only ACTIVE services (SDL kept updated by loader)
-    let services = await this.serviceRepo.find({ where: { status: ServiceStatus.ACTIVE } });
-    if (options?.serviceIds?.length) services = services.filter((s) => options!.serviceIds!.includes(s.id));
+    let services = await this.serviceRepo.find({
+      where: { status: ServiceStatus.ACTIVE },
+    });
+    if (options?.serviceIds?.length)
+      services = services.filter((s) => options!.serviceIds!.includes(s.id));
     const publish = !!options?.publish;
+
+    // Notify generation process started
+    await publisher.publishSystemBroadcast(
+      `Started generating documentation for ${services.length} service${services.length === 1 ? '' : 's'}`,
+      MessageSeverity.INFO
+    );
+
+    // Send detailed notification for admin users
+    await publisher.publishGatewayMessage({
+      topic: 'system/docs-generation',
+      type: 'generation_started',
+      severity: MessageSeverity.INFO,
+      payload: {
+        totalServices: services.length,
+        serviceNames: services.map((s) => s.name),
+        publishMode: publish,
+        timestamp: new Date().toISOString(),
+      },
+    });
 
     let created = 0;
     let updated = 0;
+    const startTime = Date.now();
 
     // Load AI config (if available)
-    const cfgRow = await this.settingRepo.findOne({ where: { key: this.CONFIG_KEY } });
+    const cfgRow = await this.settingRepo.findOne({
+      where: { key: this.CONFIG_KEY },
+    });
     const payload: SecretPayload | null = (cfgRow?.jsonValue as any) || null;
     const envKey = process.env.OPENAI_API_KEY;
     const decryptedKey = payload?.secret ? safeDecrypt(payload.secret) : null;
     const apiKey = decryptedKey || envKey || null;
-    const baseUrl = payload?.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
-    const model = payload?.model || process.env.OPENAI_MODEL || 'gpt5-mini';
+    const baseUrl =
+      payload?.baseUrl ||
+      process.env.OPENAI_BASE_URL ||
+      'https://api.openai.com/v1';
+    const model = payload?.model || process.env.OPENAI_MODEL || 'gpt-5-mini';
 
-    for (const svc of services) {
-      // Determine slug and existing doc
-      const slug = `api-${slugify(svc.name || svc.id)}`;
-      let doc = await this.docRepo.findOne({ where: { slug }, relations: { revisions: true } });
-      const sdl = svc.sdl || findServiceSDLFromLoader(ctx?.schemaLoader, svc.url) || '';
-      // Try LLM enrichment if configured, else fallback to static seed
-      let mdx: string;
-      if (apiKey) {
-        try {
-          console.debug(`[AIDocs] Generating with OpenAI for service="${svc.name}" model=${model} baseUrl=${baseUrl}`);
-          mdx = await maybeGenerateWithLLM({ name: svc.name, description: svc.description, sdl, apiKey, baseUrl, model });
-        } catch (err: any) {
-          console.warn(`[AIDocs] OpenAI generation failed for service="${svc.name}": ${err?.message || err}. Falling back.`);
+    try {
+      for (const [index, svc] of services.entries()) {
+        // Notify individual service processing started
+        await publisher.publishGatewayMessage({
+          topic: 'system/docs-generation',
+          type: 'service_processing',
+          severity: MessageSeverity.INFO,
+          payload: {
+            serviceName: svc.name,
+            serviceId: svc.id,
+            progress: {
+              current: index + 1,
+              total: services.length,
+              percentage: Math.round(((index + 1) / services.length) * 100),
+            },
+            timestamp: new Date().toISOString(),
+          },
+        });
+
+        // Determine slug and existing doc
+        const slug = `api-${slugify(svc.name || svc.id)}`;
+        let doc = await this.docRepo.findOne({
+          where: { slug },
+          relations: { revisions: true },
+        });
+        const sdl =
+          svc.sdl || findServiceSDLFromLoader(ctx?.schemaLoader, svc.url) || '';
+        // Try LLM enrichment if configured, else fallback to static seed
+        let mdx: string;
+        if (apiKey) {
+          try {
+            console.debug(
+              `[AIDocs] Generating with OpenAI for service="${svc.name}" model=${model} baseUrl=${baseUrl}`
+            );
+            mdx = await maybeGenerateWithLLM({
+              name: svc.name,
+              description: svc.description,
+              sdl,
+              apiKey,
+              baseUrl,
+              model,
+            });
+          } catch (err: any) {
+            console.warn(
+              `[AIDocs] OpenAI generation failed for service="${svc.name}": ${err?.message || err}. Falling back.`
+            );
+            mdx = buildSeedDocMDX(svc.name, svc.description, sdl);
+          }
+        } else {
+          console.warn(
+            `[AIDocs] No OpenAI API key available; using fallback for service="${svc.name}".`
+          );
           mdx = buildSeedDocMDX(svc.name, svc.description, sdl);
         }
-      } else {
-        console.warn(`[AIDocs] No OpenAI API key available; using fallback for service="${svc.name}".`);
-        mdx = buildSeedDocMDX(svc.name, svc.description, sdl);
-      }
-      // Normalize to guarantee required frontmatter keys
-      mdx = ensureFrontmatter(mdx, { title: `${svc.name} API`, category: 'APIs' });
-      if (!doc) {
-        // create new doc
-        doc = this.docRepo.create({ slug, title: `${svc.name} API`, tags: [], status: 'ACTIVE' });
-        await this.docRepo.save(doc);
-        const compiled = await compileMDX(mdx);
-        const rev = this.revRepo.create({
-          document: doc,
-          version: 1,
-          state: publish ? 'PUBLISHED' : 'DRAFT',
-          mdxRaw: mdx,
-          frontmatterJson: compiled.frontmatter || { title: `${svc.name} API`, category: 'APIs' },
-          headings: compiled.headings || [],
-          createdBy: 'system',
-          publishedAt: publish ? new Date() : null
+        // Normalize to guarantee required frontmatter keys
+        mdx = ensureFrontmatter(mdx, {
+          title: `${svc.name} API`,
+          category: 'APIs',
         });
-        await this.revRepo.save(rev);
-        if (publish) {
-          doc.primaryRevisionId = rev.id;
+        if (!doc) {
+          // create new doc
+          doc = this.docRepo.create({
+            slug,
+            title: `${svc.name} API`,
+            tags: [],
+            status: 'ACTIVE',
+          });
           await this.docRepo.save(doc);
-          await chunkAndStoreRevision(rev);
-        }
-        created++;
-      } else {
-        // update draft or create new draft version with content
-        const latest = [...(doc.revisions || [])].sort((a, b) => b.version - a.version)[0];
-        const compiled = await compileMDX(mdx);
-        const rev = this.revRepo.create({
-          document: doc,
-          version: (latest?.version || 0) + 1,
-          state: publish ? 'PUBLISHED' : 'DRAFT',
-          mdxRaw: mdx,
-          frontmatterJson: compiled.frontmatter || { title: `${svc.name} API`, category: 'APIs' },
-          headings: compiled.headings || [],
-          createdBy: 'system',
-          publishedAt: publish ? new Date() : null
-        });
-        await this.revRepo.save(rev);
-        if (publish) {
-          doc.primaryRevisionId = rev.id;
-          await this.docRepo.save(doc);
-          await chunkAndStoreRevision(rev);
-        }
-        updated++;
-      }
-    }
+          const compiled = await compileMDX(mdx);
+          const rev = this.revRepo.create({
+            document: { id: doc.id } as any,
+            version: 1,
+            state: publish ? 'PUBLISHED' : 'DRAFT',
+            mdxRaw: mdx,
+            frontmatterJson: compiled.frontmatter || {
+              title: `${svc.name} API`,
+              category: 'APIs',
+            },
+            headings: compiled.headings || [],
+            createdBy: 'system',
+            publishedAt: publish ? new Date() : null,
+          });
+          await this.revRepo.save(rev);
+          if (publish) {
+            // Partial update for doc primaryRevisionId
+            await this.docRepo.update(
+              { id: doc.id },
+              { primaryRevisionId: rev.id }
+            );
+            await chunkAndStoreRevision(rev, doc.slug);
+          }
+          created++;
 
-    return { created, updated };
+          // Notify successful creation
+          await publisher.publishGatewayMessage({
+            topic: 'system/docs-generation',
+            type: 'service_completed',
+            severity: MessageSeverity.INFO,
+            payload: {
+              serviceName: svc.name,
+              serviceId: svc.id,
+              action: 'created',
+              slug,
+              published: publish,
+              timestamp: new Date().toISOString(),
+            },
+          });
+        } else {
+          // update draft or create new draft version with content
+          const latest = [...(doc.revisions || [])].sort(
+            (a, b) => b.version - a.version
+          )[0];
+          const compiled = await compileMDX(mdx);
+          const rev = this.revRepo.create({
+            document: { id: doc.id } as any,
+            version: (latest?.version || 0) + 1,
+            state: publish ? 'PUBLISHED' : 'DRAFT',
+            mdxRaw: mdx,
+            frontmatterJson: compiled.frontmatter || {
+              title: `${svc.name} API`,
+              category: 'APIs',
+            },
+            headings: compiled.headings || [],
+            createdBy: 'system',
+            publishedAt: publish ? new Date() : null,
+          });
+          await this.revRepo.save(rev);
+          if (publish) {
+            await this.docRepo.update(
+              { id: doc.id },
+              { primaryRevisionId: rev.id }
+            );
+            await chunkAndStoreRevision(rev, doc.slug);
+          }
+          updated++;
+
+          // Notify successful update
+          await publisher.publishGatewayMessage({
+            topic: 'system/docs-generation',
+            type: 'service_completed',
+            severity: MessageSeverity.INFO,
+            payload: {
+              serviceName: svc.name,
+              serviceId: svc.id,
+              action: 'updated',
+              slug,
+              version: (latest?.version || 0) + 1,
+              published: publish,
+              timestamp: new Date().toISOString(),
+            },
+          });
+        }
+      }
+
+      // Notify generation process completed
+      const totalProcessed = created + updated;
+      await publisher.publishSystemBroadcast(
+        `Documentation generation completed: ${created} created, ${updated} updated`,
+        MessageSeverity.INFO
+      );
+
+      // Send detailed completion notification
+      await publisher.publishGatewayMessage({
+        topic: 'system/docs-generation',
+        type: 'generation_completed',
+        severity: MessageSeverity.INFO,
+        payload: {
+          summary: {
+            totalServices: services.length,
+            created,
+            updated,
+            totalProcessed,
+          },
+          publishMode: publish,
+          duration: `${Date.now() - startTime}ms`,
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      return { created, updated };
+    } catch (error) {
+      // Notify generation process failed
+      await publisher.publishSystemBroadcast(
+        `Documentation generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        MessageSeverity.ERROR
+      );
+
+      await publisher.publishGatewayMessage({
+        topic: 'system/docs-generation',
+        type: 'generation_failed',
+        severity: MessageSeverity.ERROR,
+        payload: {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          servicesProcessed: created + updated,
+          totalServices: services.length,
+          duration: `${Date.now() - startTime}ms`,
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      throw error; // Re-throw to maintain API contract
+    }
   }
 
   @Mutation(() => AIDocAssistResult)
   @Directive('@authz(rules: ["isAdmin"])')
-  async aiDocAssist(@Arg('input') input: AIDocAssistInput): Promise<AIDocAssistResult> {
-    const cfgRow = await this.settingRepo.findOne({ where: { key: this.CONFIG_KEY } });
+  async aiDocAssist(
+    @Arg('input') input: AIDocAssistInput
+  ): Promise<AIDocAssistResult> {
+    const cfgRow = await this.settingRepo.findOne({
+      where: { key: this.CONFIG_KEY },
+    });
     const payload: SecretPayload | null = (cfgRow?.jsonValue as any) || null;
     const envKey = process.env.OPENAI_API_KEY;
     const decryptedKey = payload?.secret ? safeDecrypt(payload.secret) : null;
     const apiKey = decryptedKey || envKey || null;
-    const baseUrl = payload?.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
-    const model = payload?.model || process.env.OPENAI_MODEL || 'gpt5-mini';
+    const baseUrl =
+      payload?.baseUrl ||
+      process.env.OPENAI_BASE_URL ||
+      'https://api.openai.com/v1';
+    const model = payload?.model || process.env.OPENAI_MODEL || 'gpt-5-mini';
 
     // If no key, provide a basic heuristic fallback snippet
     if (!apiKey) {
       const snippet = buildAssistFallback(input);
-      return { snippet, usedLLM: false, note: 'No OpenAI key configured; returned heuristic snippet.' };
+      return {
+        snippet,
+        usedLLM: false,
+        note: 'No OpenAI key configured; returned heuristic snippet.',
+      };
     }
 
     try {
@@ -334,13 +528,18 @@ export class AIResolver {
         title: input.title || '',
         currentMdx: input.currentMdx || '',
         sdl: input.sdl || '',
-        maxTokens: input.maxTokens && input.maxTokens > 0 ? input.maxTokens : undefined
+        maxTokens:
+          input.maxTokens && input.maxTokens > 0 ? input.maxTokens : undefined,
       });
       return { snippet, usedLLM: true };
     } catch (err: any) {
       console.warn(`[AIDocs] aiDocAssist failed: ${err?.message || err}`);
       const snippet = buildAssistFallback(input);
-      return { snippet, usedLLM: false, note: 'LLM request failed; returned heuristic snippet.' };
+      return {
+        snippet,
+        usedLLM: false,
+        note: 'LLM request failed; returned heuristic snippet.',
+      };
     }
   }
 
@@ -348,9 +547,12 @@ export class AIResolver {
 
   @Mutation(() => ThemeImportResult)
   @Directive('@authz(rules: ["isAdmin"])')
-  async aiImportThemeFromUrl(@Arg('url') url: string): Promise<ThemeImportResult> {
+  async aiImportThemeFromUrl(
+    @Arg('url') url: string
+  ): Promise<ThemeImportResult> {
     // Basic URL validation and safety checks
-    if (!/^https?:\/\//i.test(url)) throw new Error('Only http(s) URLs are allowed');
+    if (!/^https?:\/\//i.test(url))
+      throw new Error('Only http(s) URLs are allowed');
     const { apiKey, baseUrl, model } = await this.getAIConfig();
 
     let html = '';
@@ -360,11 +562,20 @@ export class AIResolver {
       throw new Error(`Failed to fetch URL: ${e?.message || e}`);
     }
 
-    const { cssText, linksFetched } = await collectCssFromHtml(html, url, 3, 10000, 200_000);
+    const { cssText, linksFetched } = await collectCssFromHtml(
+      html,
+      url,
+      3,
+      10000,
+      200_000
+    );
     const palette = extractColorPalette(cssText);
 
     // Heuristic extraction first
-    const heuristicTokens = extractTokensHeuristically(cssText, this.THEME_TOKENS);
+    const heuristicTokens = extractTokensHeuristically(
+      cssText,
+      this.THEME_TOKENS
+    );
 
     // If AI available, try to map with LLM, then refine for UX/contrast
     if (apiKey) {
@@ -375,7 +586,7 @@ export class AIResolver {
           apiKey,
           baseUrl,
           model,
-          knownTokens: this.THEME_TOKENS
+          knownTokens: this.THEME_TOKENS,
         });
         if (llmTokens && llmTokens.length) {
           const refined = refineTokensForUX(llmTokens, palette);
@@ -383,7 +594,7 @@ export class AIResolver {
             tokens: refined.tokens,
             usedLLM: true,
             palette,
-            note: `Parsed ${linksFetched} stylesheet(s). ${refined.note}`
+            note: `Parsed ${linksFetched} stylesheet(s). ${refined.note}`,
           };
         }
       } catch (err: any) {
@@ -395,7 +606,7 @@ export class AIResolver {
       tokens: refined.tokens,
       usedLLM: false,
       palette,
-      note: `Heuristic mapping from ${linksFetched} stylesheet(s). ${refined.note}`
+      note: `Heuristic mapping from ${linksFetched} stylesheet(s). ${refined.note}`,
     };
   }
 
@@ -407,9 +618,14 @@ export class AIResolver {
   ): Promise<ThemeImportResult> {
     const { apiKey, baseUrl, model } = await this.getAIConfig();
     if (!apiKey) {
-      return { tokens: [], usedLLM: false, note: 'No OpenAI key configured; cannot analyze image.' };
+      return {
+        tokens: [],
+        usedLLM: false,
+        note: 'No OpenAI key configured; cannot analyze image.',
+      };
     }
-    if (!imageUrl && !imageBase64) throw new Error('Provide imageUrl or imageBase64');
+    if (!imageUrl && !imageBase64)
+      throw new Error('Provide imageUrl or imageBase64');
 
     const tokens = await suggestTokensFromImageLLM({
       imageUrl,
@@ -417,7 +633,7 @@ export class AIResolver {
       apiKey,
       baseUrl,
       model,
-      knownTokens: this.THEME_TOKENS
+      knownTokens: this.THEME_TOKENS,
     });
     const refined = refineTokensForUX(tokens, null);
     return { tokens: refined.tokens, usedLLM: true, note: refined.note };
@@ -425,13 +641,18 @@ export class AIResolver {
 
   // Utility to expose config
   private async getAIConfig() {
-    const cfgRow = await this.settingRepo.findOne({ where: { key: this.CONFIG_KEY } });
+    const cfgRow = await this.settingRepo.findOne({
+      where: { key: this.CONFIG_KEY },
+    });
     const payload: SecretPayload | null = (cfgRow?.jsonValue as any) || null;
     const envKey = process.env.OPENAI_API_KEY;
     const decryptedKey = payload?.secret ? safeDecrypt(payload.secret) : null;
     const apiKey = decryptedKey || envKey || null;
-    const baseUrl = payload?.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
-    const model = payload?.model || process.env.OPENAI_MODEL || 'gpt5-mini';
+    const baseUrl =
+      payload?.baseUrl ||
+      process.env.OPENAI_BASE_URL ||
+      'https://api.openai.com/v1';
+    const model = payload?.model || process.env.OPENAI_MODEL || 'gpt-5-mini';
     return { apiKey, baseUrl, model };
   }
 }
@@ -446,7 +667,8 @@ function slugify(input: string): string {
 
 function findServiceSDLFromLoader(loader: any, url: string): string | null {
   try {
-    const arr = (loader?.loadedEndpoints as Array<{ url: string; sdl: string }>) || [];
+    const arr =
+      (loader?.loadedEndpoints as Array<{ url: string; sdl: string }>) || [];
     const match = arr.find((e) => e.url === url);
     return match?.sdl || null;
   } catch {
@@ -454,10 +676,15 @@ function findServiceSDLFromLoader(loader: any, url: string): string | null {
   }
 }
 
-function buildSeedDocMDX(name: string, description: string | undefined, sdl: string): string {
+function buildSeedDocMDX(
+  name: string,
+  description: string | undefined,
+  sdl: string
+): string {
   const ops = extractOperationFields(sdl);
   const title = `${name} API`;
-  const short = description || 'A concise, developer-friendly API for your application.';
+  const short =
+    description || 'A concise, developer-friendly API for your application.';
   const qFirst = ops.query[0];
   const sampleQuery = createSampleQuery(qFirst);
   const sampleCurl = createCurlForQuery(sampleQuery);
@@ -476,11 +703,18 @@ function buildSeedDocMDX(name: string, description: string | undefined, sdl: str
   body += `## Highlights\n\n`;
   const highlights: string[] = [];
   if (ops.query.length)
-    highlights.push(`Fast access to ${ops.query.length} query operation${ops.query.length === 1 ? '' : 's'}`);
-  if (ops.mutation.length) highlights.push(`Mutation support for write operations (${ops.mutation.length}+ endpoints)`);
+    highlights.push(
+      `Fast access to ${ops.query.length} query operation${ops.query.length === 1 ? '' : 's'}`
+    );
+  if (ops.mutation.length)
+    highlights.push(
+      `Mutation support for write operations (${ops.mutation.length}+ endpoints)`
+    );
   highlights.push('Standards-based GraphQL schema and tooling');
   highlights.push('Copy/paste friendly examples');
-  body += (highlights.map((h) => `- ${h}`).join('\n') || '- Simple and productive developer experience') + '\n\n';
+  body +=
+    (highlights.map((h) => `- ${h}`).join('\n') ||
+      '- Simple and productive developer experience') + '\n\n';
 
   body += `## Quickstart\n\n`;
   body += '```graphql\n' + sampleQuery + '\n```\n\n';
@@ -526,7 +760,10 @@ function buildSeedDocMDX(name: string, description: string | undefined, sdl: str
   return body;
 }
 
-function extractOperationFields(sdl: string): { query: string[]; mutation: string[] } {
+function extractOperationFields(sdl: string): {
+  query: string[];
+  mutation: string[];
+} {
   const q: string[] = [];
   const m: string[] = [];
   // naive regex to capture field names in type Query/Mutation blocks
@@ -556,19 +793,28 @@ function extractOperationFields(sdl: string): { query: string[]; mutation: strin
 }
 
 // Ensure MDX starts with a valid frontmatter containing at least title and category
-function ensureFrontmatter(mdx: string, defaults: { title: string; category: string }): string {
+function ensureFrontmatter(
+  mdx: string,
+  defaults: { title: string; category: string }
+): string {
   const hasFM = /^---\n[\s\S]*?\n---/m.test(mdx);
   if (!hasFM) {
     return (
-      `---\n` + `title: "${defaults.title.replace(/"/g, '\\"')}"\n` + `category: "${defaults.category}"\n` + `---\n\n` + mdx
+      `---\n` +
+      `title: "${defaults.title.replace(/"/g, '\\"')}"\n` +
+      `category: "${defaults.category}"\n` +
+      `---\n\n` +
+      mdx
     );
   }
   // If frontmatter exists, ensure required keys by patching minimal missing ones
   const parts = mdx.split(/^---\n|\n---\n/m);
   if (parts.length >= 3) {
     let yaml = parts[1];
-    if (!/\btitle\s*:\s*/.test(yaml)) yaml = `title: "${defaults.title.replace(/"/g, '\\"')}"\n` + yaml;
-    if (!/\bcategory\s*:\s*/.test(yaml)) yaml = `category: "${defaults.category}"\n` + yaml;
+    if (!/\btitle\s*:\s*/.test(yaml))
+      yaml = `title: "${defaults.title.replace(/"/g, '\\"')}"\n` + yaml;
+    if (!/\bcategory\s*:\s*/.test(yaml))
+      yaml = `category: "${defaults.category}"\n` + yaml;
     return `---\n${yaml}\n---\n` + parts.slice(2).join('\n---\n');
   }
   return mdx;
@@ -597,7 +843,10 @@ function createCurlForQuery(query: string): string {
 function buildIntegrationGuides(query: string): string {
   const qBacktickSafe = query.replace(/`/g, '\\`');
   const qOneLine = query.replace(/\n/g, ' ').replace(/"/g, '\\"');
-  const qOneLinePHP = query.replace(/\n/g, ' ').replace(/"/g, '\\"').replace(/'/g, "\\'");
+  const qOneLinePHP = query
+    .replace(/\n/g, ' ')
+    .replace(/"/g, '\\"')
+    .replace(/'/g, "\\'");
 
   const ts = [
     '### TypeScript (fetch)',
@@ -611,7 +860,7 @@ function buildIntegrationGuides(query: string): string {
     '});',
     'const json = await res.json();',
     'console.log(json);',
-    '```'
+    '```',
   ].join('\n');
 
   const py = [
@@ -624,7 +873,7 @@ function buildIntegrationGuides(query: string): string {
     '"""',
     'resp = requests.post(url, json={"query": query})',
     'print(resp.json())',
-    '```'
+    '```',
   ].join('\n');
 
   const java = [
@@ -642,7 +891,7 @@ function buildIntegrationGuides(query: string): string {
     '    .build();',
     'HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());',
     'System.out.println(response.body());',
-    '```'
+    '```',
   ].join('\n');
 
   const php = [
@@ -661,7 +910,7 @@ function buildIntegrationGuides(query: string): string {
     '$response = curl_exec($ch);',
     'curl_close($ch);',
     'echo $response, PHP_EOL;',
-    '```'
+    '```',
   ].join('\n');
 
   return [ts, '', py, '', java, '', php].join('\n');
@@ -717,27 +966,31 @@ Requirements:
 - Be accurate to the SDL. If Mutations don’t exist, omit that subsection.
 - Keep code blocks copy/paste friendly.`;
 
-  const client = new OpenAI({ apiKey: args.apiKey, baseURL: args.baseUrl?.replace(/\/$/, '') });
+  const client = new OpenAI({
+    apiKey: args.apiKey,
+    baseURL: args.baseUrl?.replace(/\/$/, ''),
+  });
   let completion;
   try {
     completion = await client.chat.completions.create({
       model: args.model,
       messages: [
         { role: 'system', content: system },
-        { role: 'user', content: user }
-      ]
+        { role: 'user', content: user },
+      ],
     });
   } catch (err: any) {
     const msg = err?.message || '';
-    const isTempUnsupported = /Unsupported value: 'temperature'|param\s*=\s*'temperature'/i.test(msg);
+    const isTempUnsupported =
+      /Unsupported value: 'temperature'|param\s*=\s*'temperature'/i.test(msg);
     if (isTempUnsupported) {
       // Retry without temperature for models/providers that only accept defaults
       completion = await client.chat.completions.create({
         model: args.model,
         messages: [
           { role: 'system', content: system },
-          { role: 'user', content: user }
-        ]
+          { role: 'user', content: user },
+        ],
       });
     } else {
       throw err;
@@ -779,7 +1032,9 @@ async function maybeAssistWithLLM(args: {
         ? 'Improve and rewrite ONLY the provided selection. Keep it self-contained and ready to paste back in place.'
         : 'Create a concise section to append to the existing document.';
 
-  const styleHint = args.style ? `Adopt a ${args.style.toLowerCase()} style.` : 'Adopt a neutral, developer-friendly style.';
+  const styleHint = args.style
+    ? `Adopt a ${args.style.toLowerCase()} style.`
+    : 'Adopt a neutral, developer-friendly style.';
 
   const user = `Title: ${args.title || 'Untitled'}
 Instruction: ${args.instruction}
@@ -802,30 +1057,35 @@ Output requirements:
 - ${styleHint}
 - Keep it self-contained so it can be pasted into the doc.`;
 
-  const client = new OpenAI({ apiKey: args.apiKey, baseURL: args.baseUrl?.replace(/\/$/, '') });
+  const client = new OpenAI({
+    apiKey: args.apiKey,
+    baseURL: args.baseUrl?.replace(/\/$/, ''),
+  });
   let completion;
   try {
     completion = await client.chat.completions.create({
       model: args.model,
       messages: [
         { role: 'system', content: system },
-        { role: 'user', content: user }
+        { role: 'user', content: user },
       ],
       temperature: 0.25,
-      max_tokens: args.maxTokens
+      max_tokens: args.maxTokens,
     } as any);
   } catch (err: any) {
     const msg = err?.message || '';
-    const isTempUnsupported = /Unsupported value: 'temperature'|param\s*=\s*'temperature'/i.test(msg);
+    const isTempUnsupported =
+      /Unsupported value: 'temperature'|param\s*=\s*'temperature'/i.test(msg);
     const req: any = {
       model: args.model,
       messages: [
         { role: 'system', content: system },
-        { role: 'user', content: user }
-      ]
+        { role: 'user', content: user },
+      ],
     };
     if (args.maxTokens) req.max_tokens = args.maxTokens;
-    if (isTempUnsupported) completion = await client.chat.completions.create(req);
+    if (isTempUnsupported)
+      completion = await client.chat.completions.create(req);
     else throw err;
   }
 
@@ -874,7 +1134,7 @@ function buildAssistFallback(input: AIDocAssistInput): string {
       'query Example {',
       '  __typename',
       '}',
-      '```'
+      '```',
     ].join('\n');
   }
   if (goal.includes('faq')) {
@@ -888,7 +1148,7 @@ function buildAssistFallback(input: AIDocAssistInput): string {
       '**How do I find available fields?**',
       '',
       'Open GraphiQL and inspect the schema or introspection.',
-      ''
+      '',
     ].join('\n');
   }
   if (goal.includes('integrat')) {
@@ -897,7 +1157,7 @@ function buildAssistFallback(input: AIDocAssistInput): string {
       '',
       'See examples for TypeScript, Python, Java, and PHP.',
       '',
-      buildIntegrationGuides(createSampleQuery('example'))
+      buildIntegrationGuides(createSampleQuery('example')),
     ].join('\n');
   }
   // default improvement tip
@@ -907,13 +1167,16 @@ function buildAssistFallback(input: AIDocAssistInput): string {
     '- Clarify the purpose of each section.',
     '- Add a minimal Quickstart with a single request and response.',
     '- Provide 2–3 realistic examples with code.',
-    ''
+    '',
   ].join('\n');
 }
 
 // --- Helpers for Theme Import ---
 
-async function fetchWithTimeout(url: string, timeoutMs: number): Promise<string> {
+async function fetchWithTimeout(
+  url: string,
+  timeoutMs: number
+): Promise<string> {
   const ctl = new AbortController();
   const to = setTimeout(() => ctl.abort(), timeoutMs);
   try {
@@ -941,14 +1204,18 @@ async function collectCssFromHtml(
   timeoutMs: number,
   maxTotalBytes: number
 ): Promise<{ cssText: string; linksFetched: number }> {
-  const linkHrefs = Array.from(html.matchAll(/<link[^>]+rel=["']stylesheet["'][^>]*>/gi))
+  const linkHrefs = Array.from(
+    html.matchAll(/<link[^>]+rel=["']stylesheet["'][^>]*>/gi)
+  )
     .map((m) => {
       const tag = m[0];
       const href = /href=["']([^"']+)["']/i.exec(tag)?.[1];
       return href ? absolutizeUrl(baseUrl, href) : null;
     })
     .filter(Boolean) as string[];
-  const inlineStyles = Array.from(html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)).map((m) => m[1]);
+  const inlineStyles = Array.from(
+    html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)
+  ).map((m) => m[1]);
   let cssText = inlineStyles.join('\n/* inline */\n');
   let fetched = 0;
   for (const href of linkHrefs.slice(0, maxLinks)) {
@@ -966,7 +1233,11 @@ async function collectCssFromHtml(
 
 function extractColorPalette(cssText: string): string[] {
   const colors = new Map<string, number>();
-  const regexes = [/#(?:[0-9a-fA-F]{3}){1,2}\b/g, /rgba?\([^\)]+\)/g, /hsla?\([^\)]+\)/g];
+  const regexes = [
+    /#(?:[0-9a-fA-F]{3}){1,2}\b/g,
+    /rgba?\([^\)]+\)/g,
+    /hsla?\([^\)]+\)/g,
+  ];
   for (const rx of regexes) {
     const matches = cssText.match(rx) || [];
     for (const c of matches) {
@@ -981,11 +1252,18 @@ function extractColorPalette(cssText: string): string[] {
     .map(([c]) => c);
 }
 
-function extractTokensHeuristically(cssText: string, knownTokens: string[]): ThemeTokenSuggestion[] {
+function extractTokensHeuristically(
+  cssText: string,
+  knownTokens: string[]
+): ThemeTokenSuggestion[] {
   const map: Record<string, string> = {};
-  // Parse :root vars
-  const rootBlocks = Array.from(cssText.matchAll(/:root\s*{([\s\S]*?)}/g)).map((m) => m[1]);
-  for (const body of rootBlocks) {
+  // Parse variables from :root and various theme selectors (light, dark, auto)
+  const blocks = Array.from(
+    cssText.matchAll(
+      /(?::root|\[data-theme=['"](?:light|dark|auto)['"]\]|\.theme-(?:light|dark)|\.(?:light|dark))\s*{([\s\S]*?)}/g
+    )
+  ).map((m) => m[1]);
+  for (const body of blocks) {
     const lines = body.split(/;\n?|\n/);
     for (const line of lines) {
       const m = line.match(/--([A-Za-z0-9_-]+):\s*([^;\n]+)\s*/);
@@ -997,13 +1275,27 @@ function extractTokensHeuristically(cssText: string, knownTokens: string[]): The
     // direct name match
     if (map[name]) suggestions.push({ name, value: map[name], confidence: 95 });
   }
-  // Heuristic for common aliases
+  // Heuristic for common aliases and typical CSS var names
   const aliases: Array<[string, string[]]> = [
-    ['color-primary', ['primary', 'brand', 'accent']],
-    ['color-secondary', ['secondary']],
-    ['color-background', ['background', 'bg']],
-    ['color-text-primary', ['text', 'foreground', 'fg']],
-    ['font-family-sans', ['font-sans', 'font-family']]
+    ['color-primary', ['color-primary', 'primary', 'brand', 'accent']],
+    ['color-secondary', ['color-secondary', 'secondary']],
+    ['color-success', ['success', 'green']],
+    ['color-warning', ['warning', 'amber', 'orange', 'yellow']],
+    ['color-error', ['error', 'danger', 'red']],
+    [
+      'color-background',
+      ['background', 'bg', 'surface', 'body-bg', 'page-bg', 'main-bg'],
+    ],
+    [
+      'color-text-primary',
+      ['text', 'foreground', 'fg', 'body', 'on-background'],
+    ],
+    ['color-text-inverse', ['on-primary', 'inverse', 'text-on-primary']],
+    ['color-border', ['border', 'divider']],
+    ['font-family-sans', ['font-sans', 'font-family', 'fontbase']],
+    ['font-family-mono', ['font-mono', 'monospace']],
+    ['font-size-base', ['font-size-base', 'font-size']],
+    ['line-height-normal', ['line-height', 'leading']],
   ];
   for (const [target, keys] of aliases) {
     if (suggestions.find((s) => s.name === target)) continue;
@@ -1016,6 +1308,33 @@ function extractTokensHeuristically(cssText: string, knownTokens: string[]): The
     }
   }
   return dedupeByName(suggestions);
+}
+
+// Heuristic to determine if source assets indicate a dark theme.
+function detectSourceDark(cssText: string, palette: string[]): boolean {
+  // Look for dark theme markers
+  const darkMarkers = /(theme-dark|data-theme="dark"|\.dark\b)/i.test(cssText);
+  // Extract common background-like vars
+  const bgCandidates: string[] = [];
+  for (const m of cssText.matchAll(
+    /--[A-Za-z0-9_-]*(background|bg|surface)[A-Za-z0-9_-]*:\s*([^;\n]+)/gi
+  )) {
+    const val = m[2].trim();
+    bgCandidates.push(val);
+  }
+  // Combine with palette for sampling
+  const sample = [...bgCandidates.slice(0, 6), ...palette.slice(0, 6)];
+  let darkCount = 0;
+  let total = 0;
+  for (const c of sample) {
+    const rgb = parseCssColorToRgb(c);
+    if (!rgb) continue;
+    total++;
+    const lum = luminance(rgb);
+    if (lum < 0.45) darkCount++;
+  }
+  if (darkMarkers && darkCount === 0) return true; // explicit marker overrides
+  return total > 0 ? darkCount / total > 0.5 : false;
 }
 
 function dedupeByName(items: ThemeTokenSuggestion[]): ThemeTokenSuggestion[] {
@@ -1037,48 +1356,60 @@ async function suggestTokensWithLLM(args: {
   model: string;
   knownTokens: string[];
 }): Promise<ThemeTokenSuggestion[]> {
-  const client = new OpenAI({ apiKey: args.apiKey, baseURL: args.baseUrl?.replace(/\/$/, '') });
+  const client = new OpenAI({
+    apiKey: args.apiKey,
+    baseURL: args.baseUrl?.replace(/\/$/, ''),
+  });
+  // Detect whether the source assets suggest a dark theme so we hint the model.
+  const sourceLikelyDark = detectSourceDark(args.cssText, args.palette);
   const system = `You are a senior UI theming specialist.
-Your task: map the site's CSS and color palette to a fixed set of theme tokens with excellent UX and accessibility.
+Your job: extract or synthesize a modern, readable, accessible theme for a documentation website.
 
-Requirements:
-- Produce a cohesive theme appropriate for a docs portal.
-- Ensure WCAG AA readable contrast (≥ 4.5:1) for text against backgrounds, and for inverse text on primary surfaces.
-- Derive hover and light variants sensibly (hover: slightly darker for dark-on-light, or lighter for light-on-dark; light: subtle background tint of primary).
-- If brand colors are dark, prefer a dark primary with a background that still allows high contrast for body text; otherwise prefer a light background.
-- Prefer hex colors; fallback to rgb()/hsl() only if necessary.
+Hard requirements:
+- Output ALL requested tokens. If the source CSS doesn't define some, choose excellent modern defaults.
+- Ensure WCAG AA contrast (≥ 4.5:1) for body text on backgrounds and inverse text on primary surfaces.
+- Use 6-digit hex for all color values (e.g., #2563eb). Do not output rgb()/hsl() unless impossible.
+- Derive variants:
+  - color-primary-hover: slightly darker than color-primary on light themes; slightly lighter on dark themes.
+  - color-primary-light: a subtle tinted background using the primary hue.
+- Choose light or dark based ONLY on the source signals: if base/background colors are predominantly dark (average luminance < 0.45) or explicit dark backgrounds are present, produce a true dark theme (dark backgrounds with light text). Otherwise produce a light theme. Never override a clearly dark source with a light one.
+- Provide opinionated, modern defaults for typography, radius and shadows:
+  - font-family-sans: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"
+  - font-family-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace
+  - font-size-base: 16px
+  - line-height-normal: 1.6
+  - border-radius-md: 8px
+  - shadow-sm: 0 1px 2px rgba(0,0,0,0.08)
 
-Semantics of tokens (output names must match exactly):
-- color-primary: main accent brand color used for CTAs and highlights
-- color-primary-hover: hover state variant of color-primary
-- color-primary-light: light/tinted background using the primary hue
-- color-secondary: secondary accent
-- color-text-primary: default body text color
-- color-text-secondary: less prominent text
-- color-text-muted: captions/metadata
-- color-text-inverse: text color when placed on primary-filled surfaces
-- color-background: page background
-- color-background-secondary: panels/cards background
-- color-background-tertiary: subtle alt bg
-- color-background-code: code block bg
-- color-border / color-border-light / color-border-dark: separator shades
-- font-family-sans, font-family-mono, font-size-base, line-height-normal, border-radius-md, shadow-sm (leave as reasonable defaults if unknown).
+Token semantics (names must match exactly):
+- color-primary, color-primary-hover, color-primary-light, color-secondary,
+- color-success, color-warning, color-error,
+- color-text-primary, color-text-secondary, color-text-muted, color-text-inverse,
+- color-background, color-background-secondary, color-background-tertiary, color-background-code,
+- color-border, color-border-light, color-border-dark,
+- font-family-sans, font-family-mono, font-size-base, line-height-normal, border-radius-md, shadow-sm.
 
-Return ONLY JSON: {"tokens":[{"name":"token","value":"css-color-or-value","confidence":0-100}...]}.`;
-  const user = `Known theme tokens: ${args.knownTokens.join(', ')}\n\nCSS (truncated):\n${truncate(args.cssText, 16000)}\n\nPalette candidates: ${args.palette.join(', ')}\n\nGoal: deliver a nice, accessible UI theme with good contrast and hierarchy.`;
+Return ONLY compact JSON with this shape: {"tokens":[{"name":"token","value":"css-color-or-value","confidence":0-100}...]}.`;
+  const user = `Known theme tokens: ${args.knownTokens.join(', ')}\nSourceLikelyDark: ${sourceLikelyDark}\n\nCSS (truncated):\n${truncate(args.cssText, 16000)}\n\nPalette candidates: ${args.palette.join(', ')}\n\nGoal: deliver a modern, accessible theme with strong hierarchy and comfortable reading. If SourceLikelyDark is true, output a DARK theme.`;
   const resp = await client.chat.completions.create({
     model: args.model,
     messages: [
       { role: 'system', content: system },
-      { role: 'user', content: user }
-    ] as any
+      { role: 'user', content: user },
+    ] as any,
   } as any);
   const text = resp?.choices?.[0]?.message?.content || '';
   const json = safeJson(text);
   const tokens = (json?.tokens as any[]) || [];
   return tokens
-    .filter((t) => t && typeof t.name === 'string' && typeof t.value === 'string')
-    .map((t) => ({ name: t.name, value: t.value, confidence: clampInt(t.confidence, 0, 100) }))
+    .filter(
+      (t) => t && typeof t.name === 'string' && typeof t.value === 'string'
+    )
+    .map((t) => ({
+      name: t.name,
+      value: t.value,
+      confidence: clampInt(t.confidence, 0, 100),
+    }))
     .filter((t) => args.knownTokens.includes(t.name));
 }
 
@@ -1090,30 +1421,48 @@ async function suggestTokensFromImageLLM(args: {
   model: string;
   knownTokens: string[];
 }): Promise<ThemeTokenSuggestion[]> {
-  const client = new OpenAI({ apiKey: args.apiKey, baseURL: args.baseUrl?.replace(/\/$/, '') });
+  const client = new OpenAI({
+    apiKey: args.apiKey,
+    baseURL: args.baseUrl?.replace(/\/$/, ''),
+  });
   const system = `You are a senior UI theming specialist.
 From the provided image (screenshot/marketing page), infer brand colors and map them to the given theme tokens with excellent UX.
 Ensure WCAG AA contrast for text/background and inverse text on primary surfaces. Provide sensible hover/light variants.
 Prefer hex colors.
 Return ONLY JSON: {"tokens":[{"name":"token","value":"css-color","confidence":0-100}...]}.`;
-  const content: any[] = [{ type: 'text', text: 'Analyze this image and output JSON mapping to the tokens listed.' }];
-  if (args.imageUrl) content.push({ type: 'image_url', image_url: { url: args.imageUrl } });
+  const content: any[] = [
+    {
+      type: 'text',
+      text: 'Analyze this image and output JSON mapping to the tokens listed.',
+    },
+  ];
+  if (args.imageUrl)
+    content.push({ type: 'image_url', image_url: { url: args.imageUrl } });
   else if (args.imageBase64)
-    content.push({ type: 'image_url', image_url: { url: `data:image/png;base64,${args.imageBase64}` } });
+    content.push({
+      type: 'image_url',
+      image_url: { url: `data:image/png;base64,${args.imageBase64}` },
+    });
   const user = `Tokens: ${args.knownTokens.join(', ')}\nGoal: deliver a nice, accessible UI theme with strong contrast and clear hierarchy.`;
   const resp = await client.chat.completions.create({
     model: args.model,
     messages: [
       { role: 'system', content: system },
-      { role: 'user', content }
-    ] as any
+      { role: 'user', content },
+    ] as any,
   } as any);
   const text = resp?.choices?.[0]?.message?.content || '';
   const json = safeJson(text);
   const tokens = (json?.tokens as any[]) || [];
   return tokens
-    .filter((t) => t && typeof t.name === 'string' && typeof t.value === 'string')
-    .map((t) => ({ name: t.name, value: t.value, confidence: clampInt(t.confidence, 0, 100) }))
+    .filter(
+      (t) => t && typeof t.name === 'string' && typeof t.value === 'string'
+    )
+    .map((t) => ({
+      name: t.name,
+      value: t.value,
+      confidence: clampInt(t.confidence, 0, 100),
+    }))
     .filter((t) => args.knownTokens.includes(t.name));
 }
 
@@ -1186,7 +1535,8 @@ function parseCssColorToRgb(input: string): RGB | null {
   const rgb = input.match(/^rgba?\(([^)]+)\)/i);
   if (rgb) {
     const parts = rgb[1].split(',').map((s) => parseFloat(s.trim()));
-    if (parts.length >= 3 && parts.every((n) => Number.isFinite(n))) return { r: parts[0], g: parts[1], b: parts[2] };
+    if (parts.length >= 3 && parts.every((n) => Number.isFinite(n)))
+      return { r: parts[0], g: parts[1], b: parts[2] };
   }
   const hsl = input.match(/^hsla?\(([^)]+)\)/i);
   if (hsl) {
@@ -1225,10 +1575,15 @@ function lightenDarkenHex(hex: string, amt: number): string {
   return rgbToHex({ r, g, b });
 }
 
-function ensureContrastHex(fg: string, bg: string, minRatio = 4.5): { color: string; adjusted: boolean } {
+function ensureContrastHex(
+  fg: string,
+  bg: string,
+  minRatio = 4.5
+): { color: string; adjusted: boolean } {
   let color = hexNormalize(fg) || fg;
   const bgHex = hexNormalize(bg) || bg;
-  if (contrastRatioHex(color, bgHex) >= minRatio) return { color, adjusted: false };
+  if (contrastRatioHex(color, bgHex) >= minRatio)
+    return { color, adjusted: false };
   // Try darkening and lightening progressively
   let adjusted = false;
   for (let step = 0; step < 12; step++) {
@@ -1251,9 +1606,15 @@ function ensureContrastHex(fg: string, bg: string, minRatio = 4.5): { color: str
 
 function pickBackgroundFromPalette(palette?: string[]): string | null {
   if (!palette || !palette.length) return null;
-  const rgbs = palette.map((p) => parseCssColorToRgb(p)).filter(Boolean) as RGB[];
+  const rgbs = palette
+    .map((p) => parseCssColorToRgb(p))
+    .filter(Boolean) as RGB[];
   if (!rgbs.length) return null;
-  const avg = rgbs.reduce((a, b) => ({ r: a.r + b.r, g: a.g + b.g, b: a.b + b.b })) as any;
+  const avg = rgbs.reduce((a, b) => ({
+    r: a.r + b.r,
+    g: a.g + b.g,
+    b: a.b + b.b,
+  })) as any;
   avg.r /= rgbs.length;
   avg.g /= rgbs.length;
   avg.b /= rgbs.length;
@@ -1269,33 +1630,53 @@ function refineTokensForUX(
 ): { tokens: ThemeTokenSuggestion[]; note: string } {
   const map = new Map(base.map((t) => [t.name, t.value]));
 
-  // Ensure background/text pairing
+  // Ensure background first - preserve imported background if available
   if (!map.get('color-background')) {
-    const bg = pickBackgroundFromPalette(palette || undefined) || '#ffffff';
+    // Check if we have a background from the imported theme first
+    const importedBg = base.find((t) => t.name === 'color-background')?.value;
+    const bg =
+      importedBg ||
+      pickBackgroundFromPalette(palette || undefined) ||
+      '#ffffff';
     map.set('color-background', bg);
   }
-  // Coerce background to hex when possible
   const bgHex = (() => {
     const rgb = parseCssColorToRgb(map.get('color-background')!);
-    return rgb ? rgbToHex(rgb) : hexNormalize(map.get('color-background')!) || map.get('color-background')!;
+    return rgb
+      ? rgbToHex(rgb)
+      : hexNormalize(map.get('color-background')!) ||
+          map.get('color-background')!;
   })();
   map.set('color-background', bgHex);
 
+  // Primary body text
   if (!map.get('color-text-primary')) {
-    const defaultText = contrastRatioHex('#111827', bgHex) >= minContrast ? '#111827' : '#f8fafc';
+    const defaultText =
+      contrastRatioHex('#111827', bgHex) >= minContrast ? '#111827' : '#f8fafc';
     const ensured = ensureContrastHex(defaultText, bgHex, minContrast);
     map.set('color-text-primary', ensured.color);
   } else {
-    const ensured = ensureContrastHex(map.get('color-text-primary')!, bgHex, minContrast);
+    const ensured = ensureContrastHex(
+      map.get('color-text-primary')!,
+      bgHex,
+      minContrast
+    );
     map.set('color-text-primary', ensured.color);
   }
 
-  // Secondary/muted text as toned versions
+  // Secondary/muted text as toned versions but keep reasonable contrast
+  const secondaryCandidate = lightenDarkenHex(
+    map.get('color-text-primary')!,
+    40
+  );
+  const secondaryEnsured = ensureContrastHex(secondaryCandidate, bgHex, 3.0);
   if (!map.get('color-text-secondary')) {
-    map.set('color-text-secondary', lightenDarkenHex(map.get('color-text-primary')!, 40));
+    map.set('color-text-secondary', secondaryEnsured.color);
   }
+  const mutedCandidate = lightenDarkenHex(map.get('color-text-primary')!, 80);
+  const mutedEnsured = ensureContrastHex(mutedCandidate, bgHex, 3.0);
   if (!map.get('color-text-muted')) {
-    map.set('color-text-muted', lightenDarkenHex(map.get('color-text-primary')!, 80));
+    map.set('color-text-muted', mutedEnsured.color);
   }
 
   // Primary and related variants
@@ -1306,12 +1687,14 @@ function refineTokensForUX(
   // Coerce primary to hex when possible
   const primary = (() => {
     const rgb = parseCssColorToRgb(map.get('color-primary')!);
-    return rgb ? rgbToHex(rgb) : hexNormalize(map.get('color-primary')!) || map.get('color-primary')!;
+    return rgb
+      ? rgbToHex(rgb)
+      : hexNormalize(map.get('color-primary')!) || map.get('color-primary')!;
   })();
   map.set('color-primary', primary);
   if (!map.get('color-primary-hover')) {
     // Darken for hover by default
-    map.set('color-primary-hover', lightenDarkenHex(primary, -25));
+    map.set('color-primary-hover', lightenDarkenHex(primary, -20));
   }
   if (!map.get('color-primary-light')) {
     map.set('color-primary-light', lightenDarkenHex(primary, 60));
@@ -1322,6 +1705,27 @@ function refineTokensForUX(
   const ensuredInv = ensureContrastHex(inv, primary, minContrast);
   map.set('color-text-inverse', ensuredInv.color);
 
+  // Secondary color: choose far from primary in palette, else a modern teal
+  if (!map.get('color-secondary')) {
+    const sec = pickSecondaryFromPalette(primary, palette) || '#10b981';
+    map.set('color-secondary', sec);
+  }
+
+  // Semantic colors with sufficient contrast
+  const semBg = bgHex;
+  if (!map.get('color-success')) {
+    const c = ensureContrastHex('#16a34a', semBg, 3.0).color;
+    map.set('color-success', c);
+  }
+  if (!map.get('color-warning')) {
+    const c = ensureContrastHex('#f59e0b', semBg, 3.0).color;
+    map.set('color-warning', c);
+  }
+  if (!map.get('color-error')) {
+    const c = ensureContrastHex('#ef4444', semBg, 3.0).color;
+    map.set('color-error', c);
+  }
+
   // Panel/code/background variants defaults
   if (!map.get('color-background-secondary')) {
     map.set('color-background-secondary', lightenDarkenHex(bgHex, 8));
@@ -1330,23 +1734,100 @@ function refineTokensForUX(
     map.set('color-background-tertiary', lightenDarkenHex(bgHex, 16));
   }
   if (!map.get('color-background-code')) {
-    map.set('color-background-code', lightenDarkenHex(bgHex, 12));
+    const bgLum = luminance(parseCssColorToRgb(bgHex)!);
+    if (bgLum > 0.5) {
+      map.set('color-background-code', '#0f172a');
+    } else {
+      map.set('color-background-code', lightenDarkenHex(bgHex, 20));
+    }
+  }
+  // Dedicated code block tokens (prefer dark background if overall theme is light)
+  if (!map.get('color-code-bg')) {
+    const bgLum = luminance(parseCssColorToRgb(bgHex)!);
+    const baseCode = bgLum > 0.5 ? '#0f172a' : lightenDarkenHex(bgHex, 20);
+    map.set('color-code-bg', baseCode);
+  }
+  if (!map.get('color-code-text')) {
+    const codeBg = map.get('color-code-bg')!;
+    const codeLum = luminance(parseCssColorToRgb(codeBg)!);
+    const target = codeLum < 0.35 ? '#e2e8f0' : '#1e293b';
+    const ensured = ensureContrastHex(target, codeBg, 4.5);
+    map.set('color-code-text', ensured.color);
   }
 
   // Borders
-  if (!map.get('color-border')) map.set('color-border', lightenDarkenHex(bgHex, 30));
-  if (!map.get('color-border-light')) map.set('color-border-light', lightenDarkenHex(bgHex, 45));
-  if (!map.get('color-border-dark')) map.set('color-border-dark', lightenDarkenHex(bgHex, 15));
+  if (!map.get('color-border'))
+    map.set('color-border', lightenDarkenHex(bgHex, 30));
+  if (!map.get('color-border-light'))
+    map.set('color-border-light', lightenDarkenHex(bgHex, 45));
+  if (!map.get('color-border-dark'))
+    map.set('color-border-dark', lightenDarkenHex(bgHex, 15));
+
+  // Typography and shape defaults
+  if (!map.get('font-family-sans'))
+    map.set(
+      'font-family-sans',
+      'Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"'
+    );
+  if (!map.get('font-family-mono'))
+    map.set(
+      'font-family-mono',
+      'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace'
+    );
+  if (!map.get('font-size-base')) map.set('font-size-base', '16px');
+  if (!map.get('line-height-normal')) map.set('line-height-normal', '1.6');
+  if (!map.get('border-radius-md')) map.set('border-radius-md', '8px');
+  if (!map.get('shadow-sm')) map.set('shadow-sm', '0 1px 2px rgba(0,0,0,0.08)');
 
   // Ensure all color-* tokens are 6-digit hex where possible
-  const out: ThemeTokenSuggestion[] = Array.from(map.entries()).map(([name, value]) => {
+  const normalizedMap = new Map<string, string>();
+  for (const [name, value] of map.entries()) {
     if (name.startsWith('color-')) {
       const rgb = parseCssColorToRgb(value);
       const hex = rgb ? rgbToHex(rgb) : hexNormalize(value) || value;
-      return { name, value: hex };
+      normalizedMap.set(name, hex);
+    } else {
+      normalizedMap.set(name, value);
     }
-    return { name, value };
-  });
+  }
+
+  // Output tokens in a stable order (known tokens first)
+  const out: ThemeTokenSuggestion[] = [];
+  const known = [
+    'color-primary',
+    'color-primary-hover',
+    'color-primary-light',
+    'color-secondary',
+    'color-success',
+    'color-warning',
+    'color-error',
+    'color-text-primary',
+    'color-text-secondary',
+    'color-text-muted',
+    'color-text-inverse',
+    'color-background',
+    'color-background-secondary',
+    'color-background-tertiary',
+    'color-background-code',
+    'color-code-bg',
+    'color-code-text',
+    'color-border',
+    'color-border-light',
+    'color-border-dark',
+    'font-family-sans',
+    'font-family-mono',
+    'font-size-base',
+    'line-height-normal',
+    'border-radius-md',
+    'shadow-sm',
+  ];
+  for (const key of known) {
+    const v = normalizedMap.get(key);
+    if (v) out.push({ name: key, value: v });
+  }
+  for (const [k, v] of normalizedMap.entries()) {
+    if (!known.includes(k)) out.push({ name: k, value: v });
+  }
   return { tokens: out, note: 'Adjusted for contrast and UX (WCAG AA).' };
 }
 
@@ -1365,4 +1846,34 @@ function clampInt(n: any, min: number, max: number): number | undefined {
   const v = Number.isFinite(n) ? Math.floor(n) : undefined;
   if (typeof v === 'number') return Math.max(min, Math.min(max, v));
   return undefined;
+}
+
+// --- Additional palette helpers ---
+function colorDistanceHex(a: string, b: string): number {
+  const ra = parseCssColorToRgb(a);
+  const rb = parseCssColorToRgb(b);
+  if (!ra || !rb) return 0;
+  const dr = ra.r - rb.r;
+  const dg = ra.g - rb.g;
+  const db = ra.b - rb.b;
+  return Math.sqrt(dr * dr + dg * dg + db * db);
+}
+
+function pickSecondaryFromPalette(
+  primary: string,
+  palette?: string[] | null
+): string | null {
+  if (!palette || palette.length < 2) return null;
+  // Choose the color farthest from primary to ensure clear differentiation
+  const normalizedPrimary = hexNormalize(primary) || primary;
+  let best: { color: string; dist: number } | null = null;
+  for (const c of palette) {
+    const dist = colorDistanceHex(normalizedPrimary, c);
+    if (!best || dist > best.dist) best = { color: c, dist };
+  }
+  return best
+    ? parseCssColorToRgb(best.color)
+      ? rgbToHex(parseCssColorToRgb(best.color)!)
+      : hexNormalize(best.color) || best.color
+    : null;
 }

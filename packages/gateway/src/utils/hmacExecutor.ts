@@ -1,5 +1,11 @@
 import { buildHTTPExecutor } from '@graphql-tools/executor-http';
-import { DocumentNode, ExecutionResult, getOperationAST, GraphQLError, print } from 'graphql';
+import {
+  DocumentNode,
+  ExecutionResult,
+  getOperationAST,
+  GraphQLError,
+  print,
+} from 'graphql';
 import { createClient as createSSEClient } from 'graphql-sse';
 import { createClient as createWSClient, Client as WSClient } from 'graphql-ws';
 import { Container } from 'typedi';
@@ -39,16 +45,40 @@ export interface HMACExecutorOptions {
   timeout?: number;
   enableHMAC?: boolean;
   useMsgPack?: boolean; // when true, allow propagating x-msgpack-enabled header downstream
+  /**
+   * Optional fetch implementation override. Useful for testing to capture downstream requests
+   * without replacing the global fetch.
+   */
+  fetchImpl?: typeof globalThis.fetch;
+  /**
+   * Optional callback invoked with the final downstream headers right before request execution.
+   * Intended for tests/diagnostics only.
+   */
+  onHeaders?: (headers: Record<string, string>) => void;
 }
 
 /**
  * Create an HTTP executor with HMAC signing capabilities
  */
 export function buildHMACExecutor(options: HMACExecutorOptions): any {
-  const { endpoint, timeout = 5000, enableHMAC = true, useMsgPack = false } = options;
+  const {
+    endpoint,
+    timeout = 5000,
+    enableHMAC = true,
+    useMsgPack = false,
+    fetchImpl,
+    onHeaders,
+  } = options;
+
+  // Resolve the fetch implementation we will use for all downstream calls
+  const doFetch: typeof globalThis.fetch = fetchImpl || globalThis.fetch;
 
   // Helper to prepare downstream headers (auth, tracing, hmac, msgpack)
-  const prepareHeaders = async (url: URL, requestOptions: any, context: any): Promise<Record<string, string>> => {
+  const prepareHeaders = async (
+    url: URL,
+    requestOptions: any,
+    context: any
+  ): Promise<Record<string, string>> => {
     // Get the original request object (context might be undefined during introspection)
     const req = context?.req ?? requestOptions;
 
@@ -59,14 +89,16 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
     if (requestOptions.headers) {
       if (Array.isArray(requestOptions.headers)) {
         requestOptions.headers.forEach(([key, value]) => {
-          if (key.toLowerCase() !== 'content-length') {
-            headers[key] = value;
+          const lk = key.toLowerCase();
+          if (lk !== 'content-length') {
+            headers[lk] = value;
           }
         });
       } else {
         Object.entries(requestOptions.headers).forEach(([key, value]) => {
-          if (typeof value === 'string' && key.toLowerCase() !== 'content-length') {
-            headers[key] = value;
+          const lk = key.toLowerCase();
+          if (typeof value === 'string' && lk !== 'content-length') {
+            headers[lk] = value;
           }
         });
       }
@@ -76,37 +108,31 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
     const contextHeaders = context?.req?.headers || {};
 
     if (contextHeaders.authorization) {
-      headers['Authorization'] = contextHeaders.authorization;
+      headers['authorization'] = contextHeaders.authorization;
     }
 
     if (contextHeaders.cookie) {
-      headers['Cookie'] = contextHeaders.cookie;
+      headers['cookie'] = contextHeaders.cookie;
     }
 
-    if (contextHeaders['x-request-id']) {
+    if (contextHeaders['x-request-id'])
       headers['x-request-id'] = contextHeaders['x-request-id'];
-    }
-
-    if (contextHeaders['x-correlation-id']) {
+    if (contextHeaders['x-correlation-id'])
       headers['x-correlation-id'] = contextHeaders['x-correlation-id'];
-    }
-
-    if (contextHeaders.traceparent) {
+    if (contextHeaders.traceparent)
       headers['traceparent'] = contextHeaders.traceparent;
-    }
 
     // Propagate API key header to downstream if present (some downstream services may authorize at their edge)
-    if (contextHeaders['x-api-key']) {
+    if (contextHeaders['x-api-key'])
       headers['x-api-key'] = contextHeaders['x-api-key'];
-    }
 
     // Propagate MessagePack preference if enabled for this service and present on incoming request
     if (useMsgPack) {
       // Always request msgpack from downstream if the service is configured for it
       headers['x-msgpack-enabled'] = '1';
       // Accept header for clarity (remote may ignore)
-      headers['Accept'] = headers['Accept']
-        ? headers['Accept'] + ',application/x-msgpack'
+      headers['accept'] = headers['accept']
+        ? headers['accept'] + ',application/x-msgpack'
         : 'application/x-msgpack,application/json';
     }
 
@@ -116,24 +142,33 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
       if (serviceKey) {
         try {
           const method = requestOptions.method || 'POST';
-          const body = requestOptions.body ? String(requestOptions.body) : undefined;
+          const body = requestOptions.body
+            ? String(requestOptions.body)
+            : undefined;
 
           const hmacHeaders = HMACUtils.createHeaders(
             {
               method,
               url: url.toString(),
               body,
-              keyId: serviceKey.keyId
+              keyId: serviceKey.keyId,
             },
             serviceKey.secretKey
           );
 
-          // Add HMAC headers
-          Object.assign(headers, hmacHeaders);
+          // Add HMAC headers (normalize keys to lowercase for fetch options)
+          for (const [k, v] of Object.entries(hmacHeaders)) {
+            headers[k.toLowerCase()] = v as string;
+          }
 
-          log.debug(`Added HMAC signature for request to ${endpoint}, keyId: ${serviceKey.keyId}`);
+          log.debug(
+            `Added HMAC signature for request to ${endpoint}, keyId: ${serviceKey.keyId}`
+          );
         } catch (error) {
-          log.error(`Failed to generate HMAC signature for ${endpoint}:`, error);
+          log.error(
+            `Failed to generate HMAC signature for ${endpoint}:`,
+            error
+          );
           // Continue without HMAC if signing fails
         }
       } else {
@@ -147,6 +182,11 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
       }
     }
 
+    // For tests/diagnostics, allow tapping the computed headers
+    try {
+      onHeaders?.({ ...headers });
+    } catch {}
+
     return headers;
   };
 
@@ -155,7 +195,11 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
     endpoint,
     timeout,
     fetch: async (url, requestOptions, context) => {
-      const headers = await prepareHeaders(new URL(String(url)), requestOptions, context);
+      const headers = await prepareHeaders(
+        new URL(String(url)),
+        requestOptions,
+        context
+      );
 
       // Update request options with new headers
       const updatedOptions = { ...requestOptions, headers };
@@ -173,7 +217,7 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
             throw new GraphQLError(
               'Authentication required: downstream service requests require user session or application API key',
               {
-                extensions: { code: 'UNAUTHENTICATED' }
+                extensions: { code: 'UNAUTHENTICATED' },
               }
             );
           }
@@ -187,8 +231,10 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
       log.debug(`Making request to ${url}`, {
         method: updatedOptions.method,
         hasBody: !!updatedOptions.body,
-        bodyLength: updatedOptions.body ? String(updatedOptions.body).length : 0,
-        headers: Object.keys(updatedOptions.headers || {})
+        bodyLength: updatedOptions.body
+          ? String(updatedOptions.body).length
+          : 0,
+        headers: Object.keys(updatedOptions.headers || {}),
       });
 
       return withSpan(
@@ -215,22 +261,33 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
               })();
               const contextApp = (context as any)?.application; // Provided by auth layer for api-key
               const contextUser = (context as any)?.user; // User context if available
-              const usageService = Container.has(ApplicationUsageService) ? Container.get(ApplicationUsageService) : null;
-              const audit = Container.has(AuditLogService) ? Container.get(AuditLogService) : null;
-              const latencyService = Container.has(RequestLatencyService) ? Container.get(RequestLatencyService) : null;
+              const usageService = Container.has(ApplicationUsageService)
+                ? Container.get(ApplicationUsageService)
+                : null;
+              const audit = Container.has(AuditLogService)
+                ? Container.get(AuditLogService)
+                : null;
+              const latencyService = Container.has(RequestLatencyService)
+                ? Container.get(RequestLatencyService)
+                : null;
 
               // Look up service ID by URL for usage tracking
               let serviceId: string | undefined;
               try {
                 const serviceRepository = dataSource.getRepository(Service);
-                const service = await serviceRepository.findOne({ where: { url: String(url) } });
+                const service = await serviceRepository.findOne({
+                  where: { url: String(url) },
+                });
                 serviceId = service?.id;
               } catch (error) {
-                log.debug('Failed to resolve service ID for usage tracking:', error);
+                log.debug(
+                  'Failed to resolve service ID for usage tracking:',
+                  error
+                );
               }
               const start = Date.now();
               try {
-                const res = await fetch(url, updatedOptions);
+                const res = await doFetch(url as any, updatedOptions as any);
                 const latencyMs = Date.now() - start;
 
                 // Track downstream service latency if we have the required context
@@ -243,14 +300,19 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
                     latencyMs,
                     success: res.ok,
                     statusCode: res.status,
-                    httpMethod: String((updatedOptions as any).method || 'POST'),
-                    correlationId: headers['x-correlation-id'] || headers['x-request-id']
+                    httpMethod: String(
+                      (updatedOptions as any).method || 'POST'
+                    ),
+                    correlationId:
+                      headers['x-correlation-id'] || headers['x-request-id'],
                     // TODO: Add request/response size tracking if needed
                   });
                 }
 
                 if (contextApp && usageService && serviceId) {
-                  await usageService.increment(contextApp.id, serviceId, { error: !res.ok });
+                  await usageService.increment(contextApp.id, serviceId, {
+                    error: !res.ok,
+                  });
                 }
                 if (contextApp && audit) {
                   await audit.logApiRequest({
@@ -259,9 +321,11 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
                     serviceName: serviceHost,
                     statusCode: res.status,
                     latencyMs,
-                    httpMethod: String((updatedOptions as any).method || 'POST'),
+                    httpMethod: String(
+                      (updatedOptions as any).method || 'POST'
+                    ),
                     success: res.ok,
-                    extraMetadata: { rawStatus: res.status, url: String(url) }
+                    extraMetadata: { rawStatus: res.status, url: String(url) },
                   });
                 }
                 // If we requested msgpack, attempt transparent decode so gateway continues operating on JSON
@@ -277,9 +341,13 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
                         if (!msgpackDecode) {
                           await ensureMsgPackDecodeLoaded();
                         }
-                        if (msgpackDecode) decoded = msgpackDecode(new Uint8Array(arrayBuffer));
+                        if (msgpackDecode)
+                          decoded = msgpackDecode(new Uint8Array(arrayBuffer));
                       } catch (e) {
-                        log.warn('MsgPack decode failed, passing raw response', e);
+                        log.warn(
+                          'MsgPack decode failed, passing raw response',
+                          e
+                        );
                       }
                       if (decoded != null) {
                         try {
@@ -292,20 +360,31 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
                             msgpackBytes: originalSize,
                             jsonBytes: jsonSize,
                             savingsBytes: jsonSize - originalSize,
-                            savingsPercent: jsonSize > 0 ? Math.round(((jsonSize - originalSize) / jsonSize) * 100) : 0
+                            savingsPercent:
+                              jsonSize > 0
+                                ? Math.round(
+                                    ((jsonSize - originalSize) / jsonSize) * 100
+                                  )
+                                : 0,
                           });
                           return new Response(jsonStr, {
                             status: res.status,
                             statusText: res.statusText,
-                            headers: { 'content-type': 'application/json' }
+                            headers: { 'content-type': 'application/json' },
                           });
                         } catch (encodeErr) {
-                          log.warn('Failed to stringify decoded msgpack; falling back to raw', encodeErr);
+                          log.warn(
+                            'Failed to stringify decoded msgpack; falling back to raw',
+                            encodeErr
+                          );
                         }
                       }
                     }
                   } catch (e) {
-                    log.warn('Failed to transparently decode msgpack response', e);
+                    log.warn(
+                      'Failed to transparently decode msgpack response',
+                      e
+                    );
                   }
                 }
                 return res;
@@ -322,15 +401,20 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
                     serviceUrl: String(url),
                     latencyMs,
                     success: false,
-                    httpMethod: String((updatedOptions as any).method || 'POST'),
+                    httpMethod: String(
+                      (updatedOptions as any).method || 'POST'
+                    ),
                     errorClass: error?.name,
                     errorMessage: error?.message?.slice(0, 300),
-                    correlationId: headers['x-correlation-id'] || headers['x-request-id']
+                    correlationId:
+                      headers['x-correlation-id'] || headers['x-request-id'],
                   });
                 }
 
                 if (contextApp && usageService && serviceId) {
-                  await usageService.increment(contextApp.id, serviceId, { error: true });
+                  await usageService.increment(contextApp.id, serviceId, {
+                    error: true,
+                  });
                 }
                 if (contextApp && audit) {
                   await audit.logApiRequest({
@@ -339,30 +423,40 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
                     serviceName: serviceHost,
                     statusCode: undefined,
                     latencyMs,
-                    httpMethod: String((updatedOptions as any).method || 'POST'),
+                    httpMethod: String(
+                      (updatedOptions as any).method || 'POST'
+                    ),
                     success: false,
                     errorClass: error?.name,
                     errorMessage: error?.message?.slice(0, 300),
-                    extraMetadata: { networkError: true, url: String(url) }
+                    extraMetadata: { networkError: true, url: String(url) },
                   });
                 }
-                throw new Error(`Failed to fetch from ${url}: ${error.message}`);
+                throw new Error(
+                  `Failed to fetch from ${url}: ${error.message}`
+                );
               }
-            }
+            },
           }),
         { attributes: { 'url.full': String(url) } }
       );
-    }
+    },
   });
 
   // Helper: create AsyncIterable via graphql-sse
-  function subscribeViaSSE(args: { url: string; headers: Record<string, string>; body: any; customPath?: string | null }) {
+  function subscribeViaSSE(args: {
+    url: string;
+    headers: Record<string, string>;
+    body: any;
+    customPath?: string | null;
+  }) {
     const parsedUrl = new URL(args.url);
     const sseUrl = new URL(parsedUrl.toString());
     if (args.customPath) {
       sseUrl.pathname = args.customPath;
     } else {
-      if (!sseUrl.pathname.endsWith('/stream')) sseUrl.pathname = sseUrl.pathname.replace(/\/?$/, '/stream');
+      if (!sseUrl.pathname.endsWith('/stream'))
+        sseUrl.pathname = sseUrl.pathname.replace(/\/?$/, '/stream');
     }
 
     const sseClient = createSSEClient({
@@ -373,7 +467,10 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
         const u = new URL(String(input));
         const method = init?.method || 'GET';
         const body = init?.body ? String(init.body as any) : undefined;
-        const headers = { ...(init?.headers as Record<string, string> | undefined), ...args.headers } as Record<string, string>;
+        const headers = {
+          ...(init?.headers as Record<string, string> | undefined),
+          ...args.headers,
+        } as Record<string, string>;
         if (enableHMAC) {
           const serviceKey = keyManager.getActiveKey(endpoint);
           if (serviceKey) {
@@ -388,8 +485,8 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
             }
           }
         }
-        return fetch(u, { ...(init || {}), headers });
-      }
+        return doFetch(u as any, { ...(init || {}), headers } as any);
+      },
     });
 
     const { query, variables, operationName, extensions } = args.body;
@@ -398,7 +495,8 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
       [Symbol.asyncIterator](): AsyncIterator<ExecutionResult> {
         let dispose: (() => void) | undefined;
         const queue: Array<ExecutionResult> = [];
-        let pending: ((value: IteratorResult<ExecutionResult>) => void) | null = null;
+        let pending: ((value: IteratorResult<ExecutionResult>) => void) | null =
+          null;
         let done = false;
 
         dispose = sseClient.subscribe(
@@ -419,7 +517,10 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
               if (pending) {
                 const p = pending;
                 pending = null;
-                p({ value: { errors: [{ message: String(err) }] } as any, done: true });
+                p({
+                  value: { errors: [{ message: String(err) }] } as any,
+                  done: true,
+                });
               }
             },
             complete: () => {
@@ -429,7 +530,7 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
                 pending = null;
                 p({ value: undefined as any, done: true });
               }
-            }
+            },
           }
         );
 
@@ -438,8 +539,11 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
             if (queue.length) {
               return Promise.resolve({ value: queue.shift()!, done: false });
             }
-            if (done) return Promise.resolve({ value: undefined as any, done: true });
-            return new Promise<IteratorResult<ExecutionResult>>((resolve) => (pending = resolve));
+            if (done)
+              return Promise.resolve({ value: undefined as any, done: true });
+            return new Promise<IteratorResult<ExecutionResult>>(
+              (resolve) => (pending = resolve)
+            );
           },
           return() {
             if (dispose) dispose();
@@ -450,15 +554,20 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
             if (dispose) dispose();
             done = true;
             return Promise.reject(error);
-          }
+          },
         } as AsyncIterator<ExecutionResult>;
-      }
+      },
     };
     return asyncIterable;
   }
 
   // Helper: create AsyncIterable via graphql-ws (fallback)
-  function subscribeViaWS(args: { url: string; headers: Record<string, string>; body: any; customPath?: string | null }) {
+  function subscribeViaWS(args: {
+    url: string;
+    headers: Record<string, string>;
+    body: any;
+    customPath?: string | null;
+  }) {
     const httpUrl = new URL(args.url);
     const wsUrl = new URL(args.url);
     wsUrl.protocol = httpUrl.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -471,13 +580,13 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
 
     const connectionParams = {
       // Pass auth-related headers in connectionParams; many servers accept this pattern
-      headers: args.headers
+      headers: args.headers,
     } as any;
 
     const client: WSClient = createWSClient({
       url: wsUrl.toString(),
       webSocketImpl: WebSocket,
-      connectionParams
+      connectionParams,
     });
 
     const { query, variables, operationName, extensions } = args.body;
@@ -486,7 +595,8 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
       [Symbol.asyncIterator](): AsyncIterator<ExecutionResult> {
         let unsubscribe: (() => void) | undefined;
         const queue: Array<ExecutionResult> = [];
-        let pending: ((value: IteratorResult<ExecutionResult>) => void) | null = null;
+        let pending: ((value: IteratorResult<ExecutionResult>) => void) | null =
+          null;
         let done = false;
 
         unsubscribe = client.subscribe(
@@ -507,7 +617,10 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
               if (pending) {
                 const p = pending;
                 pending = null;
-                p({ value: { errors: [{ message: String(err) }] } as any, done: true });
+                p({
+                  value: { errors: [{ message: String(err) }] } as any,
+                  done: true,
+                });
               }
             },
             complete: () => {
@@ -517,7 +630,7 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
                 pending = null;
                 p({ value: undefined as any, done: true });
               }
-            }
+            },
           }
         );
 
@@ -526,8 +639,11 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
             if (queue.length) {
               return Promise.resolve({ value: queue.shift()!, done: false });
             }
-            if (done) return Promise.resolve({ value: undefined as any, done: true });
-            return new Promise<IteratorResult<ExecutionResult>>((resolve) => (pending = resolve));
+            if (done)
+              return Promise.resolve({ value: undefined as any, done: true });
+            return new Promise<IteratorResult<ExecutionResult>>(
+              (resolve) => (pending = resolve)
+            );
           },
           return() {
             if (unsubscribe) unsubscribe();
@@ -538,16 +654,19 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
             if (unsubscribe) unsubscribe();
             done = true;
             return Promise.reject(error);
-          }
+          },
         } as AsyncIterator<ExecutionResult>;
-      }
+      },
     };
     return asyncIterable;
   }
 
   // Final executor: route subscriptions via SSE/WS, others via HTTP
   return async function executor(request: any) {
-    const op = getOperationAST(request.document as DocumentNode, request.operationName);
+    const op = getOperationAST(
+      request.document as DocumentNode,
+      request.operationName
+    );
     const isSubscription = op?.operation === 'subscription';
 
     if (!isSubscription) {
@@ -557,12 +676,19 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
     // For subscriptions, prepare headers using a faux POST body to compute HMAC
     const url = new URL(endpoint);
     const body = {
-      query: typeof request.document === 'string' ? request.document : print(request.document as DocumentNode),
+      query:
+        typeof request.document === 'string'
+          ? request.document
+          : print(request.document as DocumentNode),
       variables: request.variables,
       operationName: request.operationName,
-      extensions: (request as any).extensions
+      extensions: (request as any).extensions,
     };
-    const baseHeaders = await prepareHeaders(url, { method: 'POST', body: JSON.stringify(body), headers: {} }, request.context);
+    const baseHeaders = await prepareHeaders(
+      url,
+      { method: 'POST', body: JSON.stringify(body), headers: {} },
+      request.context
+    );
     // Remove content headers inappropriate for SSE establish
     delete (baseHeaders as any)['content-length'];
     delete (baseHeaders as any)['content-type'];
@@ -574,24 +700,45 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
       const repo = dataSource.getRepository(Service);
       const svc = await repo.findOne({ where: { url: endpoint } });
       if (svc) {
-        transportPref = (svc as any).subscriptionTransport || SubscriptionTransport.AUTO;
+        transportPref =
+          (svc as any).subscriptionTransport || SubscriptionTransport.AUTO;
         customPath = (svc as any).subscriptionPath ?? null;
       }
     } catch {}
 
     // Route based on transport preference
     if (transportPref === SubscriptionTransport.WS) {
-      return subscribeViaWS({ url: url.toString(), headers: baseHeaders, body, customPath });
+      return subscribeViaWS({
+        url: url.toString(),
+        headers: baseHeaders,
+        body,
+        customPath,
+      });
     }
     if (transportPref === SubscriptionTransport.SSE) {
-      return subscribeViaSSE({ url: url.toString(), headers: baseHeaders, body, customPath });
+      return subscribeViaSSE({
+        url: url.toString(),
+        headers: baseHeaders,
+        body,
+        customPath,
+      });
     }
     // AUTO: try SSE then fallback to WS
     try {
-      return subscribeViaSSE({ url: url.toString(), headers: baseHeaders, body, customPath });
+      return subscribeViaSSE({
+        url: url.toString(),
+        headers: baseHeaders,
+        body,
+        customPath,
+      });
     } catch (e) {
       log.warn('SSE subscription setup failed, falling back to WebSocket', e);
-      return subscribeViaWS({ url: url.toString(), headers: baseHeaders, body, customPath });
+      return subscribeViaWS({
+        url: url.toString(),
+        headers: baseHeaders,
+        body,
+        customPath,
+      });
     }
   };
 }
@@ -615,7 +762,7 @@ export function createHMACValidationMiddleware(
         if (required) {
           return res.status(401).json({
             error: 'Missing HMAC headers',
-            code: 'HMAC_MISSING'
+            code: 'HMAC_MISSING',
           });
         }
         return next(); // Continue without HMAC validation
@@ -628,14 +775,14 @@ export function createHMACValidationMiddleware(
       if (!serviceKey) {
         return res.status(401).json({
           error: 'Invalid HMAC key ID',
-          code: 'HMAC_INVALID_KEY'
+          code: 'HMAC_INVALID_KEY',
         });
       }
 
       if (serviceKey.status !== 'active') {
         return res.status(401).json({
           error: 'HMAC key is not active',
-          code: 'HMAC_KEY_INACTIVE'
+          code: 'HMAC_KEY_INACTIVE',
         });
       }
 
@@ -643,14 +790,15 @@ export function createHMACValidationMiddleware(
       if (serviceKey.expiresAt && serviceKey.expiresAt < new Date()) {
         return res.status(401).json({
           error: 'HMAC key has expired',
-          code: 'HMAC_KEY_EXPIRED'
+          code: 'HMAC_KEY_EXPIRED',
         });
       }
 
       // Get request body for validation
       let body = '';
       if (req.body) {
-        body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+        body =
+          typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
       }
 
       // Verify HMAC signature
@@ -660,7 +808,7 @@ export function createHMACValidationMiddleware(
           url: req.originalUrl || req.url,
           body,
           timestamp,
-          keyId
+          keyId,
         },
         signature,
         serviceKey.secretKey,
@@ -670,7 +818,7 @@ export function createHMACValidationMiddleware(
       if (!isValid) {
         return res.status(401).json({
           error: 'Invalid HMAC signature',
-          code: 'HMAC_INVALID_SIGNATURE'
+          code: 'HMAC_INVALID_SIGNATURE',
         });
       }
 
@@ -685,7 +833,7 @@ export function createHMACValidationMiddleware(
       if (required) {
         return res.status(500).json({
           error: 'HMAC validation failed',
-          code: 'HMAC_VALIDATION_ERROR'
+          code: 'HMAC_VALIDATION_ERROR',
         });
       }
 
@@ -717,6 +865,6 @@ The HMAC signature should be calculated from:
 METHOD\\nURL\\nBODY_SHA256\\nTIMESTAMP\\nKEY_ID
 
 Example implementation available in gateway documentation.
-    `.trim()
+    `.trim(),
   };
 }
