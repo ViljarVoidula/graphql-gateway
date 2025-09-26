@@ -16,7 +16,7 @@ import {
   Text,
   ThemeIcon,
   Title,
-  Tooltip
+  Tooltip,
 } from '@mantine/core';
 import { useList } from '@refinedev/core';
 import {
@@ -27,11 +27,19 @@ import {
   IconKey,
   IconSettings,
   IconTrendingUp,
-  IconUsers
+  IconUsers,
 } from '@tabler/icons-react';
 import gql from 'graphql-tag';
 import React, { useEffect, useState } from 'react';
-import { Area, AreaChart, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, XAxis, YAxis } from 'recharts';
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { AutoRefreshWelcome } from '../components/AutoRefreshWelcome';
 import { TokenRefreshNotification } from '../components/TokenRefreshNotification';
 import {
@@ -39,7 +47,7 @@ import {
   LatencyMetricsCards,
   LatencyTrendsChart,
   SlowestServicesCard,
-  StatsCard
+  StatsCard,
 } from '../components/dashboard';
 import { authenticatedFetch } from '../utils/auth';
 
@@ -61,8 +69,18 @@ interface ServiceHealth {
 }
 
 interface UsageSummary {
-  topServices: { serviceId: string; serviceName: string; requestCount24h: number; errorRate24h: number }[];
-  topApplications: { applicationId: string; applicationName: string; requestCount24h: number; apiKeyCount: number }[];
+  topServices: {
+    serviceId: string;
+    serviceName: string;
+    requestCount24h: number;
+    errorRate24h: number;
+  }[];
+  topApplications: {
+    applicationId: string;
+    applicationName: string;
+    requestCount24h: number;
+    apiKeyCount: number;
+  }[];
   generatedAt: string;
 }
 
@@ -128,8 +146,8 @@ export const Dashboard: React.FC = () => {
             }
           }
         }
-      `
-    }
+      `,
+    },
   });
 
   const { data: servicesData, isLoading: servicesLoading } = useList({
@@ -145,28 +163,46 @@ export const Dashboard: React.FC = () => {
             createdAt
           }
         }
-      `
-    }
+      `,
+    },
   });
 
   // Extra backend summaries
-  const [auditSummary, setAuditSummary] = useState<AuditLogSummary | null>(null);
+  const [auditSummary, setAuditSummary] = useState<AuditLogSummary | null>(
+    null
+  );
   const [serviceHealth, setServiceHealth] = useState<ServiceHealth[]>([]);
   const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
   const [loadingExtras, setLoadingExtras] = useState(false);
 
   // Latency tracking state
-  const [latencyMetrics, setLatencyMetrics] = useState<LatencyMetrics | null>(null);
-  const [serviceLatencyStats, setServiceLatencyStats] = useState<ServiceLatencyStats[]>([]);
-  const [applicationLatencyStats, setApplicationLatencyStats] = useState<ApplicationLatencyStats[]>([]);
+  const [latencyMetrics, setLatencyMetrics] = useState<LatencyMetrics | null>(
+    null
+  );
+  const [serviceLatencyStats, setServiceLatencyStats] = useState<
+    ServiceLatencyStats[]
+  >([]);
+  const [applicationLatencyStats, setApplicationLatencyStats] = useState<
+    ApplicationLatencyStats[]
+  >([]);
   const [latencyTrends, setLatencyTrends] = useState<LatencyTrend[]>([]);
   const [latencyTimeRange, setLatencyTimeRange] = useState('24h');
   const [latencyTrackingEnabled, setLatencyTrackingEnabled] = useState(false);
-  const [latencyType, setLatencyType] = useState<'all' | 'gateway_operation' | 'downstream_service'>('all');
+  const [latencyType, setLatencyType] = useState<
+    'all' | 'gateway_operation' | 'downstream_service'
+  >('all');
   // Usage widgets state
-  const [daily, setDaily] = useState<Array<{ date: string; requestCount: number }>>([]);
-  const [topKeys, setTopKeys] = useState<Array<{ apiKeyId: string; requestCount: number }>>([]);
-  const [totals, setTotals] = useState<{ totalRequests: number; totalErrors: number; totalRateLimited: number } | null>(null);
+  const [daily, setDaily] = useState<
+    Array<{ date: string; requestCount: number }>
+  >([]);
+  const [topKeys, setTopKeys] = useState<
+    Array<{ apiKeyId: string; requestCount: number }>
+  >([]);
+  const [totals, setTotals] = useState<{
+    totalRequests: number;
+    totalErrors: number;
+    totalRateLimited: number;
+  } | null>(null);
 
   // Latency data fetching functions
   const fetchLatencyMetrics = async (timeRange: string = '24h') => {
@@ -189,7 +225,7 @@ export const Dashboard: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ query, variables: { filters } })
+        body: JSON.stringify({ query, variables: { filters } }),
       });
       const json = await resp.json();
       if (json.errors) throw new Error(json.errors[0].message);
@@ -199,13 +235,16 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const fetchServiceLatencyStats = async (timeRange: string = '24h', limit: number = 10) => {
+  const fetchServiceLatencyStats = async (
+    timeRange: string = '24h',
+    limit: number = 10
+  ) => {
     try {
       const filters = getFiltersForTimeRange(timeRange);
       // Force downstream services only for service stats regardless of global filter
       const serviceFilters = {
         ...filters,
-        latencyTypes: ['downstream_service']
+        latencyTypes: ['downstream_service'],
       };
       const query = `query GetServiceLatencyStats($limit: Int!, $filters: LatencyFiltersInput) {
         slowestServices(limit: $limit, filters: $filters) {
@@ -221,7 +260,10 @@ export const Dashboard: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ query, variables: { limit, filters: serviceFilters } })
+        body: JSON.stringify({
+          query,
+          variables: { limit, filters: serviceFilters },
+        }),
       });
       const json = await resp.json();
       if (json.errors) throw new Error(json.errors[0].message);
@@ -231,7 +273,10 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const fetchApplicationLatencyStats = async (timeRange: string = '24h', limit: number = 10) => {
+  const fetchApplicationLatencyStats = async (
+    timeRange: string = '24h',
+    limit: number = 10
+  ) => {
     try {
       const filters = getFiltersForTimeRange(timeRange);
       const query = `query GetApplicationLatencyStats($limit: Int!, $filters: LatencyFiltersInput) {
@@ -248,7 +293,7 @@ export const Dashboard: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ query, variables: { limit, filters } })
+        body: JSON.stringify({ query, variables: { limit, filters } }),
       });
       const json = await resp.json();
       if (json.errors) throw new Error(json.errors[0].message);
@@ -275,7 +320,7 @@ export const Dashboard: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ query, variables: { filters } })
+        body: JSON.stringify({ query, variables: { filters } }),
       });
       const json = await resp.json();
       if (json.errors) throw new Error(json.errors[0].message);
@@ -292,24 +337,34 @@ export const Dashboard: React.FC = () => {
 
     switch (timeRange) {
       case '1h':
-        startDate = new Date(now.getTime() - 60 * 60 * 1000).toISOString().split('T')[0];
+        startDate = new Date(now.getTime() - 60 * 60 * 1000)
+          .toISOString()
+          .split('T')[0];
         break;
       case '24h':
-        startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+          .toISOString()
+          .split('T')[0];
         break;
       case '7d':
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+          .toISOString()
+          .split('T')[0];
         break;
       case '30d':
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+          .toISOString()
+          .split('T')[0];
         break;
       default:
-        startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+          .toISOString()
+          .split('T')[0];
     }
 
     const filters: any = {
       startDate,
-      endDate: now.toISOString().split('T')[0]
+      endDate: now.toISOString().split('T')[0],
     };
 
     // Add latency type filter if not 'all'
@@ -330,7 +385,7 @@ export const Dashboard: React.FC = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ query })
+          body: JSON.stringify({ query }),
         });
         const json = await resp.json();
         if (json.errors) throw new Error(json.errors[0].message);
@@ -341,7 +396,9 @@ export const Dashboard: React.FC = () => {
           setTotals(json.data.usageTotals || null);
           setDaily(json.data.usageDailyRequests || []);
           setTopKeys(json.data.usageTopApiKeys || []);
-          setLatencyTrackingEnabled(json.data.settings?.latencyTrackingEnabled || false);
+          setLatencyTrackingEnabled(
+            json.data.settings?.latencyTrackingEnabled || false
+          );
 
           // Fetch latency data if tracking is enabled
           if (json.data.settings?.latencyTrackingEnabled) {
@@ -349,7 +406,7 @@ export const Dashboard: React.FC = () => {
               fetchLatencyMetrics(latencyTimeRange),
               fetchServiceLatencyStats(latencyTimeRange, 10),
               fetchApplicationLatencyStats(latencyTimeRange, 10),
-              fetchLatencyTrends(latencyTimeRange)
+              fetchLatencyTrends(latencyTimeRange),
             ]);
           }
         }
@@ -384,13 +441,23 @@ export const Dashboard: React.FC = () => {
   // Extract all sessions from users
   const sessions = users.flatMap((user: any) => user.sessions || []);
 
-  const activeSessions = sessions.filter((session: any) => session.isActive && new Date(session.expiresAt) > new Date()).length;
+  const activeSessions = sessions.filter(
+    (session: any) =>
+      session.isActive && new Date(session.expiresAt) > new Date()
+  ).length;
 
   // Normalize status casing defensively (enum is lower-case in backend but guard against variations)
   const servicesStatus = services.reduce(
     (acc: any, service: any) => {
-      const status = typeof service.status === 'string' ? service.status.toLowerCase() : 'unknown';
-      if (status === 'active' || status === 'inactive' || status === 'maintenance') {
+      const status =
+        typeof service.status === 'string'
+          ? service.status.toLowerCase()
+          : 'unknown';
+      if (
+        status === 'active' ||
+        status === 'inactive' ||
+        status === 'maintenance'
+      ) {
         acc[status] += 1;
       }
       return acc;
@@ -400,16 +467,25 @@ export const Dashboard: React.FC = () => {
 
   // Updated health score: weights active services, penalizes breaking changes & high error rates
   // Formula (simple heuristic): base = active/total; penalty = avg(errorRate24h) * 30 + (totalBreaking24h * 5) / totalServices
-  const totalBreaking = serviceHealth.reduce((acc, s) => acc + s.breakingChanges24h, 0);
+  const totalBreaking = serviceHealth.reduce(
+    (acc, s) => acc + s.breakingChanges24h,
+    0
+  );
   const avgErrorRate = serviceHealth.length
-    ? serviceHealth.reduce((acc, s) => acc + (s.errorRate24h || 0), 0) / serviceHealth.length
+    ? serviceHealth.reduce((acc, s) => acc + (s.errorRate24h || 0), 0) /
+      serviceHealth.length
     : 0;
-  const base = services.length > 0 ? servicesStatus.active / services.length : 1;
-  const penalty = avgErrorRate * 0.3 + (services.length > 0 ? (totalBreaking * 0.05) / services.length : 0);
+  const base =
+    services.length > 0 ? servicesStatus.active / services.length : 1;
+  const penalty =
+    avgErrorRate * 0.3 +
+    (services.length > 0 ? (totalBreaking * 0.05) / services.length : 0);
   let healthScore = Math.round(Math.max(0, Math.min(1, base - penalty)) * 100);
 
   const offlineServices = serviceHealth.filter((s) => s.status !== 'active');
-  const servicesWithBreaking = serviceHealth.filter((s) => s.breakingChanges24h > 0);
+  const servicesWithBreaking = serviceHealth.filter(
+    (s) => s.breakingChanges24h > 0
+  );
 
   return (
     <Box p="xl" style={{ backgroundColor: '#fafafa', minHeight: '100vh' }}>
@@ -429,7 +505,7 @@ export const Dashboard: React.FC = () => {
           spacing="xl"
           breakpoints={[
             { maxWidth: 'lg', cols: 2 },
-            { maxWidth: 'sm', cols: 1 }
+            { maxWidth: 'sm', cols: 1 },
           ]}
         >
           <StatsCard
@@ -458,7 +534,7 @@ export const Dashboard: React.FC = () => {
                           ? 'orange'
                           : s.severity === 'medium'
                             ? 'yellow'
-                            : 'gray'
+                            : 'gray',
                   }))}
                   label={
                     <Text size="xs" weight={700} align="center">
@@ -469,7 +545,13 @@ export const Dashboard: React.FC = () => {
               )}
             </Group>
             <Stack spacing="xs">
-              <Text size="sm" color="dimmed" weight={500} transform="uppercase" style={{ letterSpacing: '0.5px' }}>
+              <Text
+                size="sm"
+                color="dimmed"
+                weight={500}
+                transform="uppercase"
+                style={{ letterSpacing: '0.5px' }}
+              >
                 Recent Activity
               </Text>
               <Text size="xl" weight={700} color="dark">
@@ -494,12 +576,22 @@ export const Dashboard: React.FC = () => {
               <ThemeIcon size="xl" radius="md" variant="light" color="teal">
                 <IconSettings size={24} />
               </ThemeIcon>
-              <Badge size="sm" color={totalBreaking > 0 ? 'red' : 'green'} variant="light">
+              <Badge
+                size="sm"
+                color={totalBreaking > 0 ? 'red' : 'green'}
+                variant="light"
+              >
                 {totalBreaking > 0 ? `${totalBreaking} issues` : 'All good'}
               </Badge>
             </Group>
             <Stack spacing="xs">
-              <Text size="sm" color="dimmed" weight={500} transform="uppercase" style={{ letterSpacing: '0.5px' }}>
+              <Text
+                size="sm"
+                color="dimmed"
+                weight={500}
+                transform="uppercase"
+                style={{ letterSpacing: '0.5px' }}
+              >
                 System Overview
               </Text>
               <Text size="xl" weight={700} color="dark">
@@ -507,7 +599,9 @@ export const Dashboard: React.FC = () => {
               </Text>
               <Text size="xs" color="dimmed">
                 {servicesStatus.active} active •{' '}
-                {avgErrorRate > 0 ? `${(avgErrorRate * 100).toFixed(1)}% avg error rate` : 'No errors'}
+                {avgErrorRate > 0
+                  ? `${(avgErrorRate * 100).toFixed(1)}% avg error rate`
+                  : 'No errors'}
               </Text>
             </Stack>
           </Card>
@@ -516,7 +610,13 @@ export const Dashboard: React.FC = () => {
         {/* Usage Analytics */}
         <Grid gutter="xl">
           <Grid.Col span={8}>
-            <Card shadow="xs" p="xl" radius="lg" withBorder style={{ height: '300px' }}>
+            <Card
+              shadow="xs"
+              p="xl"
+              radius="lg"
+              withBorder
+              style={{ height: '300px' }}
+            >
               <Group position="apart" align="center" mb="xl">
                 <Group spacing="sm">
                   <ThemeIcon size="md" radius="md" variant="light" color="blue">
@@ -537,7 +637,9 @@ export const Dashboard: React.FC = () => {
                       <Text size="xs" color="dimmed" transform="uppercase">
                         Total
                       </Text>
-                      <Text weight={600}>{totals.totalRequests.toLocaleString()}</Text>
+                      <Text weight={600}>
+                        {totals.totalRequests.toLocaleString()}
+                      </Text>
                     </div>
                     <div style={{ textAlign: 'center' }}>
                       <Text size="xs" color="dimmed" transform="uppercase">
@@ -564,17 +666,34 @@ export const Dashboard: React.FC = () => {
                     <AreaChart
                       data={daily.map((d) => ({
                         ...d,
-                        formattedDate: new Date(d.date).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric'
-                        })
+                        formattedDate: new Date(d.date).toLocaleDateString(
+                          'en-US',
+                          {
+                            month: 'short',
+                            day: 'numeric',
+                          }
+                        ),
                       }))}
                       margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
                     >
                       <defs>
-                        <linearGradient id="colorRequests" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#339af0" stopOpacity={0.8} />
-                          <stop offset="95%" stopColor="#339af0" stopOpacity={0.1} />
+                        <linearGradient
+                          id="colorRequests"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop
+                            offset="5%"
+                            stopColor="#339af0"
+                            stopOpacity={0.8}
+                          />
+                          <stop
+                            offset="95%"
+                            stopColor="#339af0"
+                            stopOpacity={0.1}
+                          />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e9ecef" />
@@ -595,9 +714,12 @@ export const Dashboard: React.FC = () => {
                           backgroundColor: 'white',
                           border: '1px solid #e9ecef',
                           borderRadius: '8px',
-                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
                         }}
-                        formatter={(value: number) => [value.toLocaleString(), 'Requests']}
+                        formatter={(value: number) => [
+                          value.toLocaleString(),
+                          'Requests',
+                        ]}
                         labelFormatter={(label) => `Date: ${label}`}
                       />
                       <Area
@@ -624,10 +746,21 @@ export const Dashboard: React.FC = () => {
             </Card>
           </Grid.Col>
           <Grid.Col span={4}>
-            <Card shadow="xs" p="xl" radius="lg" withBorder style={{ height: '300px' }}>
+            <Card
+              shadow="xs"
+              p="xl"
+              radius="lg"
+              withBorder
+              style={{ height: '300px' }}
+            >
               <Group position="apart" align="center" mb="xl">
                 <Group spacing="sm">
-                  <ThemeIcon size="md" radius="md" variant="light" color="violet">
+                  <ThemeIcon
+                    size="md"
+                    radius="md"
+                    variant="light"
+                    color="violet"
+                  >
                     <IconKey size={18} />
                   </ThemeIcon>
                   <div>
@@ -651,7 +784,11 @@ export const Dashboard: React.FC = () => {
                               #{index + 1}
                             </Badge>
                             <Tooltip label={k.apiKeyId} withinPortal>
-                              <Text size="sm" weight={500} style={{ fontFamily: 'monospace' }}>
+                              <Text
+                                size="sm"
+                                weight={500}
+                                style={{ fontFamily: 'monospace' }}
+                              >
                                 {k.apiKeyId.slice(0, 8)}...
                               </Text>
                             </Tooltip>
@@ -689,7 +826,12 @@ export const Dashboard: React.FC = () => {
             <Card shadow="xs" p="xl" radius="lg" withBorder>
               <Group position="apart" align="center" mb="xl">
                 <Group spacing="sm">
-                  <ThemeIcon size="md" radius="md" variant="light" color="green">
+                  <ThemeIcon
+                    size="md"
+                    radius="md"
+                    variant="light"
+                    color="green"
+                  >
                     <IconTrendingUp size={18} />
                   </ThemeIcon>
                   <div>
@@ -715,19 +857,29 @@ export const Dashboard: React.FC = () => {
                   </thead>
                   <tbody>
                     {(usageSummary?.topServices || []).map((s) => {
-                      const sh = serviceHealth.find((h) => h.id === s.serviceId);
+                      const sh = serviceHealth.find(
+                        (h) => h.id === s.serviceId
+                      );
                       return (
                         <tr key={s.serviceId}>
                           <td>
                             <Text weight={500}>{s.serviceName}</Text>
                           </td>
                           <td style={{ textAlign: 'right' }}>
-                            <Text weight={600}>{s.requestCount24h.toLocaleString()}</Text>
+                            <Text weight={600}>
+                              {s.requestCount24h.toLocaleString()}
+                            </Text>
                           </td>
                           <td style={{ textAlign: 'right' }}>
                             <Badge
                               size="sm"
-                              color={s.errorRate24h < 0.01 ? 'green' : s.errorRate24h < 0.05 ? 'yellow' : 'red'}
+                              color={
+                                s.errorRate24h < 0.01
+                                  ? 'green'
+                                  : s.errorRate24h < 0.05
+                                    ? 'yellow'
+                                    : 'red'
+                              }
                               variant="light"
                             >
                               {(s.errorRate24h * 100).toFixed(1)}%
@@ -736,7 +888,13 @@ export const Dashboard: React.FC = () => {
                           <td style={{ textAlign: 'center' }}>
                             <Badge
                               size="sm"
-                              color={sh?.status === 'active' ? 'green' : sh?.status === 'maintenance' ? 'yellow' : 'red'}
+                              color={
+                                sh?.status === 'active'
+                                  ? 'green'
+                                  : sh?.status === 'maintenance'
+                                    ? 'yellow'
+                                    : 'red'
+                              }
                               variant="filled"
                             >
                               {sh?.status || 'unknown'}
@@ -747,7 +905,8 @@ export const Dashboard: React.FC = () => {
                     })}
                   </tbody>
                 </Table>
-                {(!usageSummary?.topServices || usageSummary.topServices.length === 0) && (
+                {(!usageSummary?.topServices ||
+                  usageSummary.topServices.length === 0) && (
                   <Center style={{ height: '100px' }}>
                     <Text size="sm" color="dimmed">
                       No service data available
@@ -757,7 +916,9 @@ export const Dashboard: React.FC = () => {
               </ScrollArea>
             </Card>
           </Grid.Col>
-          <Grid.Col span={4}>{/* This space could be used for future widgets or left empty for cleaner layout */}</Grid.Col>
+          <Grid.Col span={4}>
+            {/* This space could be used for future widgets or left empty for cleaner layout */}
+          </Grid.Col>
         </Grid>
 
         {/* Latency Analytics Section */}
@@ -775,25 +936,34 @@ export const Dashboard: React.FC = () => {
               <Group spacing="md">
                 <Select
                   value={latencyType}
-                  onChange={(value: 'all' | 'gateway_operation' | 'downstream_service' | null) =>
-                    setLatencyType(value || 'all')
-                  }
+                  onChange={(
+                    value:
+                      | 'all'
+                      | 'gateway_operation'
+                      | 'downstream_service'
+                      | null
+                  ) => setLatencyType(value || 'all')}
                   data={[
                     { value: 'all', label: 'All Latencies' },
                     { value: 'gateway_operation', label: 'Gateway Operations' },
-                    { value: 'downstream_service', label: 'Downstream Services' }
+                    {
+                      value: 'downstream_service',
+                      label: 'Downstream Services',
+                    },
                   ]}
                   style={{ width: 180 }}
                   placeholder="Select latency type"
                 />
                 <Select
                   value={latencyTimeRange}
-                  onChange={(value: string | null) => setLatencyTimeRange(value || '24h')}
+                  onChange={(value: string | null) =>
+                    setLatencyTimeRange(value || '24h')
+                  }
                   data={[
                     { value: '1h', label: 'Last Hour' },
                     { value: '24h', label: 'Last 24 Hours' },
                     { value: '7d', label: 'Last 7 Days' },
-                    { value: '30d', label: 'Last 30 Days' }
+                    { value: '30d', label: 'Last 30 Days' },
                   ]}
                   style={{ width: 150 }}
                 />
@@ -801,23 +971,57 @@ export const Dashboard: React.FC = () => {
             </Group>
 
             {/* Latency Overview Cards */}
-            <LatencyMetricsCards metrics={latencyMetrics} loading={loadingExtras} />
+            <LatencyMetricsCards
+              metrics={latencyMetrics}
+              loading={loadingExtras}
+            />
 
             {/* Latency Charts Grid */}
             <Grid>
               <Grid.Col span={8}>
                 <LatencyTrendsChart
-                  data={latencyTrends.map((trend) => ({
-                    date:
-                      latencyTimeRange === '1h'
-                        ? `${trend.hour}:00`
-                        : latencyTimeRange === '24h'
-                          ? `${trend.hour}:00`
-                          : trend.date,
-                    averageLatency: trend.averageLatency,
-                    p95Latency: trend.p95Latency,
-                    requestCount: trend.totalRequests
-                  }))}
+                  data={latencyTrends
+                    .map((trend) => {
+                      // Convert Unix timestamp to Date object
+                      const timestamp =
+                        typeof trend.date === 'string'
+                          ? parseInt(trend.date, 10)
+                          : trend.date;
+
+                      // Handle both milliseconds and seconds timestamps
+                      const dateValue =
+                        timestamp > 1000000000000
+                          ? timestamp
+                          : timestamp * 1000;
+                      const baseDate = new Date(dateValue);
+
+                      let formattedDate: string;
+                      let sortKey: number;
+                      if (
+                        latencyTimeRange === '1h' ||
+                        latencyTimeRange === '24h'
+                      ) {
+                        // For hourly data, create a datetime with the specific hour
+                        const dateWithHour = new Date(baseDate);
+                        dateWithHour.setHours(trend.hour, 0, 0, 0);
+                        formattedDate = dateWithHour.toISOString();
+                        sortKey = dateWithHour.getTime();
+                      } else {
+                        // For daily/weekly data, use just the date part
+                        formattedDate = baseDate.toISOString().split('T')[0];
+                        sortKey = baseDate.getTime();
+                      }
+
+                      return {
+                        date: formattedDate,
+                        averageLatency: trend.averageLatency,
+                        p95Latency: trend.p95Latency,
+                        requestCount: trend.totalRequests,
+                        sortKey,
+                      };
+                    })
+                    .sort((a, b) => a.sortKey - b.sortKey) // Sort chronologically (oldest to newest)
+                    .map(({ sortKey, ...item }) => item)} // Remove sortKey from final data
                   loading={loadingExtras}
                   title="Latency Trends Over Time"
                 />
@@ -829,7 +1033,7 @@ export const Dashboard: React.FC = () => {
                     averageLatency: service.averageLatency,
                     requestCount: service.totalRequests,
                     errorRate: service.errorRate,
-                    p95Latency: service.p95Latency
+                    p95Latency: service.p95Latency,
                   }))}
                   loading={loadingExtras}
                   title="Slowest Services"
@@ -845,7 +1049,7 @@ export const Dashboard: React.FC = () => {
                     p95Latency: app.p95Latency,
                     p99Latency: app.p95Latency * 1.2, // Estimate p99 as slightly higher than p95
                     requestCount: app.totalRequests,
-                    errorRate: app.errorRate
+                    errorRate: app.errorRate,
                   }))}
                   loading={loadingExtras}
                   title="Application Performance Comparison"

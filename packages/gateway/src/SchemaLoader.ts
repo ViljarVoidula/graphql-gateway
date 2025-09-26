@@ -8,12 +8,15 @@ import {
   parse,
   printSchema,
 } from 'graphql';
+import { Container } from 'typedi';
+import { In } from 'typeorm';
 import { dataSource } from './db/datasource';
 import {
   SchemaChange,
   SchemaChangeClassification,
 } from './entities/schema-change.entity';
 import { Service, ServiceStatus } from './entities/service.entity';
+import { PermissionService } from './services/permissions/permission.service';
 import { buildHMACExecutor } from './utils/hmacExecutor';
 import { log } from './utils/logger';
 import {
@@ -43,7 +46,8 @@ export const schemaCache = new Map<
   string,
   { sdl: string; lastUpdated: number }
 >();
-const SCHEMA_CACHE_TTL = 10 * 60 * 1000; // 10 minutes for individual schemas
+const SCHEMA_CACHE_TTL = 5 * 60 * 1000; // 5 minutes for individual schemas (reduced for more frequent updates)
+const SCHEMA_CACHE_CLEANUP_TTL = 30 * 60 * 1000; // 30 minutes before cleaning up expired entries
 
 export class SchemaLoader {
   public schema: GraphQLSchema | null = null;
@@ -85,7 +89,22 @@ export class SchemaLoader {
           // Check schema cache first
           const now = Date.now();
           const cachedSchema = schemaCache.get(url);
-          // If service is currently unhealthy and backoff says skip, try to use cache and skip fetch
+
+          // Helper function to get useMsgPack flag from service table
+          const getUseMsgPackFlag = async (): Promise<boolean | undefined> => {
+            try {
+              const serviceRepo = dataSource.getRepository(Service);
+              const svc = await serviceRepo.findOne({ where: { url } });
+              return svc?.useMsgPack;
+            } catch {
+              return undefined;
+            }
+          };
+
+          const forceBypass =
+            process.env?.FORCE_SCHEMA_RELOAD_BYPASS_CACHE ?? '1';
+
+          // If service is currently unhealthy and backoff says skip, use cache only
           if (!healthMonitor.shouldAttempt(url)) {
             log.warn(
               'Skipping schema fetch due to backoff (service unhealthy)',
@@ -98,23 +117,9 @@ export class SchemaLoader {
               }
             );
             if (cachedSchema) {
-              // Include any known capability flags
-              let useMsgPack: boolean | undefined;
-              try {
-                const serviceRepo = dataSource.getRepository(Service);
-                const svc = await serviceRepo.findOne({ where: { url } });
-                useMsgPack = svc?.useMsgPack;
-              } catch {}
+              const useMsgPack = await getUseMsgPackFlag();
               loadedEndpoints.push({ url, sdl: cachedSchema.sdl, useMsgPack });
             }
-            return;
-          }
-          if (
-            cachedSchema &&
-            now - cachedSchema.lastUpdated < SCHEMA_CACHE_TTL
-          ) {
-            log.debug(`Using cached schema for ${url}`);
-            loadedEndpoints.push({ url, sdl: cachedSchema.sdl });
             return;
           }
 
@@ -128,6 +133,22 @@ export class SchemaLoader {
             });
             const maybeResult = await executor({
               document: parse(introspectionQuery),
+              // Attach a per-request random header via context so downstream (if instrumented) can show it.
+              context: {
+                internalIntrospection: true, // signals executor to bypass downstream auth enforcement
+                req: {
+                  headers: {
+                    'x-gateway-schema-reload': '1',
+                    'x-gateway-reload-rand': Math.random()
+                      .toString(36)
+                      .slice(2),
+                    'x-internal-introspection': '1',
+                    'cache-control': 'no-cache, no-store, must-revalidate',
+                    pragma: 'no-cache',
+                    expires: '0',
+                  },
+                },
+              },
             });
             let result: ExecutionResult<IntrospectionQuery>;
             if (isAsyncIterable(maybeResult)) {
@@ -164,19 +185,46 @@ export class SchemaLoader {
             } catch {}
             loadedEndpoints.push({ url, sdl, useMsgPack });
 
-            // Health success
-            const recovered = healthMonitor.recordSuccess(url);
-            if (recovered) {
-              // Persist status ACTIVE on recovery
-              try {
-                const repo = dataSource.getRepository(Service);
-                const svc = await repo.findOne({ where: { url } });
-                // Only flip from INACTIVE -> ACTIVE automatically; respect MAINTENANCE
-                if (svc && svc.status === ServiceStatus.INACTIVE)
-                  await repo.update(svc.id, { status: ServiceStatus.ACTIVE });
-              } catch (e) {
-                log.warn('Failed to persist service recovery status', e);
+            // Health success (record + unconditional promotion of any INACTIVE services with this URL)
+            healthMonitor.recordSuccess(url);
+            try {
+              const repo = dataSource.getRepository(Service);
+              const svcs = await repo.find({ where: { url } });
+              if (!svcs.length) {
+                log.warn(
+                  'No service entities found for URL on success; cannot promote status',
+                  {
+                    operation: 'schemaLoader.statusPromotion',
+                    metadata: { url },
+                  }
+                );
               }
+              for (const svc of svcs) {
+                if (svc.status === ServiceStatus.INACTIVE) {
+                  log.debug(
+                    'Promoting service status INACTIVE -> ACTIVE after successful introspection',
+                    {
+                      operation: 'schemaLoader.statusPromotion',
+                      metadata: { url, serviceId: svc.id },
+                    }
+                  );
+                  await repo.update(svc.id, { status: ServiceStatus.ACTIVE });
+                } else {
+                  log.debug(
+                    'Service not INACTIVE on success; leaving status as-is',
+                    {
+                      operation: 'schemaLoader.statusPromotion',
+                      metadata: {
+                        url,
+                        serviceId: svc.id,
+                        currentStatus: svc.status,
+                      },
+                    }
+                  );
+                }
+              }
+            } catch (e) {
+              log.warn('Failed to persist service recovery status', e);
             }
 
             // Persist change if SDL differs from saved service.sdl
@@ -214,38 +262,64 @@ export class SchemaLoader {
               log.error('Failed to record schema change', e);
             }
 
-            // Update schema cache
-            schemaCache.set(url, { sdl, lastUpdated: now });
+            // Update schema cache unless forced bypass
+            if (!forceBypass) schemaCache.set(url, { sdl, lastUpdated: now });
           } catch (err) {
             log.error(`Failed to load schema from ${url}:`, err);
-            // Health failure
-            const becameUnhealthy = healthMonitor.recordFailure(url, err);
-            if (becameUnhealthy) {
-              // Persist status INACTIVE when transitioning to unhealthy
-              try {
-                const repo = dataSource.getRepository(Service);
-                const svc = await repo.findOne({ where: { url } });
-                // Only flip from ACTIVE -> INACTIVE automatically; respect MAINTENANCE
-                if (svc && svc.status === ServiceStatus.ACTIVE)
-                  await repo.update(svc.id, { status: ServiceStatus.INACTIVE });
-              } catch (e) {
-                log.warn('Failed to persist service unhealthy status', e);
+            // Health failure (record + unconditional demotion of any ACTIVE services with this URL)
+            healthMonitor.recordFailure(url, err);
+            try {
+              const repo = dataSource.getRepository(Service);
+              const svcs = await repo.find({ where: { url } });
+              if (!svcs.length) {
+                log.warn(
+                  'No service entities found for URL on failure; cannot demote status',
+                  {
+                    operation: 'schemaLoader.statusDemotion',
+                    metadata: { url },
+                  }
+                );
               }
+              for (const svc of svcs) {
+                if (svc.status === ServiceStatus.ACTIVE) {
+                  log.debug(
+                    'Demoting service status ACTIVE -> INACTIVE after consecutive failures',
+                    {
+                      operation: 'schemaLoader.statusDemotion',
+                      metadata: { url, serviceId: svc.id },
+                    }
+                  );
+                  await repo.update(svc.id, { status: ServiceStatus.INACTIVE });
+                } else {
+                  log.debug(
+                    'Service not ACTIVE during failure; leaving status as-is',
+                    {
+                      operation: 'schemaLoader.statusDemotion',
+                      metadata: {
+                        url,
+                        serviceId: svc.id,
+                        currentStatus: svc.status,
+                      },
+                    }
+                  );
+                }
+              }
+            } catch (e) {
+              log.warn('Failed to persist service unhealthy status', e);
             }
 
-            // Try to use cached schema even if expired
-            if (cachedSchema) {
-              log.warn(`Using expired cached schema for ${url}`);
-              // Attempt to still include useMsgPack flag via service lookup
-              let useMsgPack: boolean | undefined;
-              try {
-                const serviceRepo = dataSource.getRepository(Service);
-                const svc = await serviceRepo.findOne({ where: { url } });
-                useMsgPack = svc?.useMsgPack;
-              } catch {}
+            // Try to use cached schema even if expired (unless forced bypass)
+            if (!forceBypass && cachedSchema) {
+              const cacheAge = now - cachedSchema.lastUpdated;
+              log.warn(
+                `Using expired cached schema for ${url} (age: ${Math.round(cacheAge / 1000)}s)`
+              );
+              const useMsgPack = await getUseMsgPackFlag();
               loadedEndpoints.push({ url, sdl: cachedSchema.sdl, useMsgPack });
             } else {
-              log.warn(`No cached schema available for ${url}, skipping`);
+              log.warn(
+                `No cached schema available for ${url}, skipping service`
+              );
             }
           }
         })
@@ -257,8 +331,12 @@ export class SchemaLoader {
         this.loadedEndpoints = loadedEndpoints;
         const newSchema = this.buildSchema(this.loadedEndpoints);
         this.schema = newSchema;
+
+        // Sync permissions with the new schema
+        await this.syncPermissionsWithSchema(this.loadedEndpoints, this.schema);
+
         log.debug(
-          `gateway reload ${new Date().toLocaleString()}, endpoints: ${this.loadedEndpoints.length}`
+          `gateway reload ${new Date().toLocaleString()}, endpoints: ${this.loadedEndpoints.length}, cached: ${schemaCache.size} schemas`
         );
       } catch (err) {
         // Keep old schema if build failed
@@ -277,24 +355,92 @@ export class SchemaLoader {
     }
   }
 
+  private async syncPermissionsWithSchema(
+    loadedEndpoints: LoadedEndpoint[],
+    schema: GraphQLSchema | null
+  ) {
+    if (!dataSource.isInitialized) return;
+
+    let permissionService: PermissionService | null = null;
+    try {
+      permissionService = Container.get(PermissionService);
+    } catch (err) {
+      log.debug('PermissionService not available during schema sync', {
+        operation: 'schemaLoader.permissionSync',
+        error: err instanceof Error ? err : new Error(String(err)),
+      });
+      return;
+    }
+
+    if (loadedEndpoints.length) {
+      try {
+        const urls = Array.from(
+          new Set(loadedEndpoints.map((endpoint) => endpoint.url))
+        );
+        const serviceRepo = dataSource.getRepository(Service);
+        const services = await serviceRepo.find({ where: { url: In(urls) } });
+        const serviceByUrl = new Map(services.map((svc) => [svc.url, svc]));
+
+        for (const endpoint of loadedEndpoints) {
+          const service = serviceByUrl.get(endpoint.url);
+          if (!service) continue;
+          try {
+            await permissionService.syncServicePermissions(
+              service,
+              endpoint.sdl
+            );
+          } catch (error) {
+            log.warn('Failed to sync service permissions from SDL', {
+              operation: 'schemaLoader.permissionSync.service',
+              error: error instanceof Error ? error : new Error(String(error)),
+              metadata: { serviceId: service.id, serviceUrl: service.url },
+            });
+          }
+        }
+      } catch (error) {
+        log.warn(
+          'Failed to synchronize service permissions for stitched schema',
+          {
+            operation: 'schemaLoader.permissionSync.bulk',
+            error: error instanceof Error ? error : new Error(String(error)),
+          }
+        );
+      }
+    }
+
+    if (schema) {
+      try {
+        await permissionService.syncLocalSchemaPermissions(schema);
+      } catch (error) {
+        log.warn('Failed to synchronize local schema permissions', {
+          operation: 'schemaLoader.permissionSync.local',
+          error: error instanceof Error ? error : new Error(String(error)),
+        });
+      }
+    }
+  }
+
   autoRefresh(interval = 3000) {
     this.stopAutoRefresh();
-    this.intervalId = setTimeout(async () => {
-      log.debug(`Refreshing schema every ${interval}ms`);
-      await this.reload();
+    log.debug(`Starting auto-refresh with ${interval}ms interval`);
+    this.intervalId = setInterval(async () => {
+      try {
+        log.debug(`Auto-refreshing schema (interval: ${interval}ms)`);
+        await this.reload();
 
-      // Clean up expired cache entries periodically
-      this.cleanupExpiredCache();
-
-      this.intervalId = null;
-      this.autoRefresh(interval);
+        // Clean up expired cache entries periodically
+        this.cleanupExpiredCache();
+      } catch (error) {
+        log.error('Auto-refresh failed:', error);
+      }
     }, interval);
   }
 
   stopAutoRefresh() {
     if (this.intervalId != null) {
-      clearTimeout(this.intervalId);
+      clearInterval(this.intervalId);
       this.intervalId = null;
+      log.debug('Stopped auto-refresh');
     }
   }
 
@@ -363,24 +509,46 @@ export class SchemaLoader {
 
   cleanupExpiredCache() {
     const now = Date.now();
+    let cleanedCount = 0;
 
-    // Clean up expired schema cache entries
+    // Clean up very old schema cache entries (keep for fallback longer than normal TTL)
     for (const [url, cache] of schemaCache.entries()) {
-      if (now - cache.lastUpdated > SCHEMA_CACHE_TTL * 2) {
-        // Keep expired entries for 2x TTL
+      if (now - cache.lastUpdated > SCHEMA_CACHE_CLEANUP_TTL) {
         schemaCache.delete(url);
-        log.debug(`Cleaned up expired schema cache for ${url}`);
+        cleanedCount++;
+        log.debug(
+          `Cleaned up expired schema cache for ${url} (age: ${Math.round((now - cache.lastUpdated) / 1000)}s)`
+        );
       }
+    }
+
+    if (cleanedCount > 0) {
+      log.debug(
+        `Cache cleanup completed: removed ${cleanedCount} entries, ${schemaCache.size} remaining`
+      );
     }
   }
 
   // Runtime metrics for monitoring
   getMetrics() {
+    const now = Date.now();
+    const cacheStats = Array.from(schemaCache.entries()).map(
+      ([url, cache]) => ({
+        url,
+        ageMs: now - cache.lastUpdated,
+        expired: now - cache.lastUpdated > SCHEMA_CACHE_TTL,
+      })
+    );
+
     return {
       loadedEndpoints: this.loadedEndpoints.length,
       schemaCacheSize: schemaCache.size,
       endpointCacheSize: endpointCache.has(this) ? 1 : 0,
       hasSchema: !!this.schema,
+      autoRefreshActive: !!this.intervalId,
+      cacheStats,
+      cacheTtlMs: SCHEMA_CACHE_TTL,
+      endpointCacheTtlMs: ENDPOINT_CACHE_TTL,
     };
   }
 }

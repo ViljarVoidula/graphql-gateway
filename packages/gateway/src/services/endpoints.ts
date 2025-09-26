@@ -15,11 +15,14 @@ import { ApiKey } from '../entities/api-key.entity';
 import { ApplicationUsage } from '../entities/application-usage.entity';
 import { Application } from '../entities/application.entity';
 import { AuditLog } from '../entities/audit-log.entity';
+import { PermissionTemplate } from '../entities/permission-template.entity';
 import { RequestLatency } from '../entities/request-latency.entity';
 import { SchemaChange } from '../entities/schema-change.entity';
 import { ServiceKey } from '../entities/service-key.entity';
+import { ServicePermission } from '../entities/service-permission.entity';
 import { Service } from '../entities/service.entity';
 import { Session } from '../entities/session.entity';
+import { UserServiceRole } from '../entities/user-service-role.entity';
 import { log } from '../utils/logger';
 import { ApiKeyResolver } from './api-keys/api-key.resolver';
 import { ApplicationResolver } from './applications/application.resolver';
@@ -41,6 +44,7 @@ import { ChatResolver } from './chat/chat.resolver';
 import { DocsAuthoringResolver } from './docs/docs.resolver';
 import { LatencyHealthResolver } from './latency/latency-health.resolver';
 import { RequestLatencyResolver } from './latency/request-latency.resolver';
+import { PermissionResolver } from './permissions/permission.resolver';
 import { DocsSearchResolver } from './search/search.resolver';
 import { GatewayMessageChannelResolver } from './subscriptions/gateway-message-channel.resolver';
 import { PublishToGatewayChannelResolver } from './subscriptions/publish-to-gateway.resolver';
@@ -64,6 +68,18 @@ export function makeEndpointsSchema(loader: SchemaLoader): GraphQLSchema {
   Container.set('ApplicationRepository', dataSource.getRepository(Application));
   Container.set('ServiceRepository', dataSource.getRepository(Service));
   Container.set('ServiceKeyRepository', dataSource.getRepository(ServiceKey));
+  Container.set(
+    'ServicePermissionRepository',
+    dataSource.getRepository(ServicePermission)
+  );
+  Container.set(
+    'PermissionTemplateRepository',
+    dataSource.getRepository(PermissionTemplate)
+  );
+  Container.set(
+    'UserServiceRoleRepository',
+    dataSource.getRepository(UserServiceRole)
+  );
   Container.set('AuditLogRepository', dataSource.getRepository(AuditLog));
   Container.set(
     'SchemaChangeRepository',
@@ -106,6 +122,7 @@ export function makeEndpointsSchema(loader: SchemaLoader): GraphQLSchema {
       RequestLatencyResolver,
       GatewayMessageChannelResolver,
       PublishToGatewayChannelResolver,
+      PermissionResolver,
     ],
     container: Container,
     orphanedTypes: [
@@ -116,6 +133,9 @@ export function makeEndpointsSchema(loader: SchemaLoader): GraphQLSchema {
       ApplicationUsage,
       ApiKeyUsage,
       RequestLatency,
+      ServicePermission,
+      PermissionTemplate,
+      UserServiceRole,
     ],
     pubSub: Container.get('PubSub'),
   });

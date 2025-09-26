@@ -7,6 +7,7 @@ export interface JWTPayload {
   email: string;
   permissions: string[];
   sessionId: string;
+  permissionClaims?: string[];
   iat?: number;
   exp?: number;
 }
@@ -26,8 +27,10 @@ export class JWTService {
   private readonly refreshTokenExpiry: string;
 
   constructor() {
-    this.accessTokenSecret = process.env.JWT_ACCESS_SECRET || 'access-secret-change-in-production';
-    this.refreshTokenSecret = process.env.JWT_REFRESH_SECRET || 'refresh-secret-change-in-production';
+    this.accessTokenSecret =
+      process.env.JWT_ACCESS_SECRET || 'access-secret-change-in-production';
+    this.refreshTokenSecret =
+      process.env.JWT_REFRESH_SECRET || 'refresh-secret-change-in-production';
     this.accessTokenExpiry = process.env.JWT_ACCESS_EXPIRY || '15m'; // 15 minutes
     this.refreshTokenExpiry = process.env.JWT_REFRESH_EXPIRY || '7d'; // 7 days
   }
@@ -38,24 +41,25 @@ export class JWTService {
         userId: payload.userId,
         email: payload.email,
         permissions: payload.permissions,
-        sessionId: payload.sessionId
+        sessionId: payload.sessionId,
+        permissionClaims: payload.permissionClaims ?? [],
       };
 
       const accessToken = jwt.sign(accessPayload, this.accessTokenSecret, {
         expiresIn: this.accessTokenExpiry,
         issuer: 'gateway',
-        audience: 'gateway-client'
+        audience: 'gateway-client',
       } as jwt.SignOptions);
 
       const refreshPayload = {
         userId: payload.userId,
-        sessionId: payload.sessionId
+        sessionId: payload.sessionId,
       };
 
       const refreshToken = jwt.sign(refreshPayload, this.refreshTokenSecret, {
         expiresIn: this.refreshTokenExpiry,
         issuer: 'gateway',
-        audience: 'gateway-client'
+        audience: 'gateway-client',
       } as jwt.SignOptions);
 
       // Calculate expiry time in seconds
@@ -66,7 +70,7 @@ export class JWTService {
         accessToken,
         refreshToken,
         expiresIn,
-        tokenType: 'Bearer'
+        tokenType: 'Bearer',
       };
     } catch (error) {
       log.error('Token generation failed:', error);
@@ -78,7 +82,7 @@ export class JWTService {
     try {
       const payload = jwt.verify(token, this.accessTokenSecret, {
         issuer: 'gateway',
-        audience: 'gateway-client'
+        audience: 'gateway-client',
       }) as JWTPayload;
       return payload;
     } catch (error) {
@@ -87,11 +91,13 @@ export class JWTService {
     }
   }
 
-  verifyRefreshToken(token: string): { userId: string; sessionId: string } | null {
+  verifyRefreshToken(
+    token: string
+  ): { userId: string; sessionId: string } | null {
     try {
       const payload = jwt.verify(token, this.refreshTokenSecret, {
         issuer: 'gateway',
-        audience: 'gateway-client'
+        audience: 'gateway-client',
       }) as { userId: string; sessionId: string };
       return payload;
     } catch (error) {
@@ -112,7 +118,9 @@ export class JWTService {
   }
 
   generateSessionToken(sessionId: string): string {
-    return jwt.sign({ sessionId, type: 'session' }, this.accessTokenSecret, { expiresIn: '24h' });
+    return jwt.sign({ sessionId, type: 'session' }, this.accessTokenSecret, {
+      expiresIn: '24h',
+    });
   }
 
   verifySessionToken(token: string): { sessionId: string } | null {

@@ -13,12 +13,15 @@ import { DocDocument } from '../entities/docs/document.entity';
 import { DocEmbeddingChunk } from '../entities/docs/embedding-chunk.entity';
 import { DocRevision } from '../entities/docs/revision.entity';
 import { GatewayPublishedMessage } from '../entities/gateway-message.entity';
+import { PermissionTemplate } from '../entities/permission-template.entity';
 import { RequestLatency } from '../entities/request-latency.entity';
 import { SchemaChange } from '../entities/schema-change.entity';
 import { ServiceKey } from '../entities/service-key.entity';
+import { ServicePermission } from '../entities/service-permission.entity';
 import { Service } from '../entities/service.entity';
 import { Session } from '../entities/session.entity';
 import { Setting } from '../entities/setting.entity';
+import { UserServiceRole } from '../entities/user-service-role.entity';
 import { User } from '../services/users/user.entity';
 
 const url =
@@ -45,6 +48,7 @@ export const dataSource = new TypeORM.DataSource({
     Session,
     Service,
     ServiceKey,
+    ServicePermission,
     Application,
     ApiKey,
     ApiKeyUsage,
@@ -62,6 +66,8 @@ export const dataSource = new TypeORM.DataSource({
     Asset,
     RequestLatency,
     GatewayPublishedMessage,
+    PermissionTemplate,
+    UserServiceRole,
   ],
   migrations: ['src/migrations/*.ts'],
   migrationsRun: process.env.NODE_ENV === 'production', // Auto-run migrations in production

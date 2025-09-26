@@ -17,7 +17,7 @@ import {
   Text,
   ThemeIcon,
   Title,
-  Tooltip
+  Tooltip,
 } from '@mantine/core';
 import { showNotification } from '@mantine/notifications';
 import { useDelete, useOne } from '@refinedev/core';
@@ -34,13 +34,13 @@ import {
   IconServer,
   IconSettings,
   IconShield,
-  IconTrash
+  IconTrash,
 } from '@tabler/icons-react';
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import SchemaChangesPanel from '../../components/SchemaChangesPanel';
 import { authenticatedFetch } from '../../utils/auth';
-import { ServiceAuditLog } from './components';
+import { PermissionManagement, ServiceAuditLog } from './components';
 
 interface ServiceKey {
   id: string;
@@ -70,10 +70,10 @@ export const ServiceDetail: React.FC = () => {
   const {
     data: serviceData,
     isLoading: isLoadingService,
-    error: loadError
+    error: loadError,
   } = useOne({
     resource: 'services',
-    id: id!
+    id: id!,
   });
 
   const { mutate: deleteService, isLoading: isDeleting } = useDelete();
@@ -88,7 +88,7 @@ export const ServiceDetail: React.FC = () => {
       const response = await authenticatedFetch('/graphql', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         credentials: 'include',
         body: JSON.stringify({
@@ -103,8 +103,8 @@ export const ServiceDetail: React.FC = () => {
               }
             }
           `,
-          variables: { serviceId: id }
-        })
+          variables: { serviceId: id },
+        }),
       });
 
       const result = await response.json();
@@ -119,7 +119,7 @@ export const ServiceDetail: React.FC = () => {
         title: 'Error',
         message: error.message || 'Failed to fetch keys',
         color: 'red',
-        icon: <IconAlertCircle />
+        icon: <IconAlertCircle />,
       });
     } finally {
       setIsLoadingKeys(false);
@@ -132,7 +132,7 @@ export const ServiceDetail: React.FC = () => {
       const response = await authenticatedFetch('/graphql', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         credentials: 'include',
         body: JSON.stringify({
@@ -149,8 +149,8 @@ export const ServiceDetail: React.FC = () => {
               }
             }
           `,
-          variables: { serviceId: id }
-        })
+          variables: { serviceId: id },
+        }),
       });
 
       const result = await response.json();
@@ -163,7 +163,7 @@ export const ServiceDetail: React.FC = () => {
         title: 'Success',
         message: 'Service key rotated successfully',
         color: 'green',
-        icon: <IconCheck />
+        icon: <IconCheck />,
       });
 
       setRotatedKey(result.data.rotateServiceKey.newKey);
@@ -174,7 +174,7 @@ export const ServiceDetail: React.FC = () => {
         title: 'Error',
         message: error.message || 'Failed to rotate key',
         color: 'red',
-        icon: <IconAlertCircle />
+        icon: <IconAlertCircle />,
       });
     } finally {
       setIsRotating(false);
@@ -185,7 +185,7 @@ export const ServiceDetail: React.FC = () => {
     deleteService(
       {
         resource: 'services',
-        id: id!
+        id: id!,
       },
       {
         onSuccess: () => {
@@ -196,9 +196,9 @@ export const ServiceDetail: React.FC = () => {
             title: 'Error',
             message: error.message || 'Failed to delete service',
             color: 'red',
-            icon: <IconAlertCircle />
+            icon: <IconAlertCircle />,
           });
-        }
+        },
       }
     );
   };
@@ -226,7 +226,7 @@ export const ServiceDetail: React.FC = () => {
       title: 'Copied',
       message: 'Copied to clipboard',
       color: 'blue',
-      icon: <IconCopy />
+      icon: <IconCopy />,
     });
   };
 
@@ -245,7 +245,11 @@ export const ServiceDetail: React.FC = () => {
           p="xl"
           radius="lg"
           withBorder
-          style={{ backgroundColor: 'white', position: 'relative', minHeight: 200 }}
+          style={{
+            backgroundColor: 'white',
+            position: 'relative',
+            minHeight: 200,
+          }}
         >
           <LoadingOverlay visible />
           <Text>Loading service details...</Text>
@@ -258,9 +262,18 @@ export const ServiceDetail: React.FC = () => {
     return (
       <Box p="xl" style={{ backgroundColor: '#fafafa', minHeight: '100vh' }}>
         <Stack spacing="xl">
-          <Paper p="xl" radius="lg" withBorder style={{ backgroundColor: 'white' }}>
+          <Paper
+            p="xl"
+            radius="lg"
+            withBorder
+            style={{ backgroundColor: 'white' }}
+          >
             <Group>
-              <Button variant="subtle" leftIcon={<IconArrowLeft size={16} />} onClick={() => navigate('/services')}>
+              <Button
+                variant="subtle"
+                leftIcon={<IconArrowLeft size={16} />}
+                onClick={() => navigate('/services')}
+              >
                 Back to Services
               </Button>
               <Title order={2}>Service Details</Title>
@@ -278,10 +291,19 @@ export const ServiceDetail: React.FC = () => {
     <>
       <Box p="xl" style={{ backgroundColor: '#fafafa', minHeight: '100vh' }}>
         <Stack spacing="xl">
-          <Paper p="xl" radius="lg" withBorder style={{ backgroundColor: 'white' }}>
+          <Paper
+            p="xl"
+            radius="lg"
+            withBorder
+            style={{ backgroundColor: 'white' }}
+          >
             <Group position="apart" align="center">
               <Group spacing="md">
-                <Button variant="subtle" leftIcon={<IconArrowLeft size={16} />} onClick={() => navigate('/services')}>
+                <Button
+                  variant="subtle"
+                  leftIcon={<IconArrowLeft size={16} />}
+                  onClick={() => navigate('/services')}
+                >
                   Back
                 </Button>
                 <ThemeIcon size="xl" radius="md" variant="light" color="green">
@@ -292,7 +314,10 @@ export const ServiceDetail: React.FC = () => {
                     <Title order={1} weight={600}>
                       {service.name}
                     </Title>
-                    <Badge color={getStatusColor(service.status)} variant="filled">
+                    <Badge
+                      color={getStatusColor(service.status)}
+                      variant="filled"
+                    >
                       {service.status}
                     </Badge>
                   </Group>
@@ -325,7 +350,13 @@ export const ServiceDetail: React.FC = () => {
 
           <Grid gutter="xl">
             <Grid.Col span={6}>
-              <Card shadow="xs" p="xl" radius="lg" withBorder style={{ backgroundColor: 'white' }}>
+              <Card
+                shadow="xs"
+                p="xl"
+                radius="lg"
+                withBorder
+                style={{ backgroundColor: 'white' }}
+              >
                 <Group spacing="sm" mb="xl">
                   <ThemeIcon size="md" radius="md" variant="light" color="blue">
                     <IconSettings size={18} />
@@ -347,7 +378,11 @@ export const ServiceDetail: React.FC = () => {
                     <Text size="sm" color="dimmed" weight={500}>
                       URL
                     </Text>
-                    <Text size="sm" style={{ fontFamily: 'monospace' }} color="blue">
+                    <Text
+                      size="sm"
+                      style={{ fontFamily: 'monospace' }}
+                      color="blue"
+                    >
                       {service.url}
                     </Text>
                   </Group>
@@ -378,9 +413,20 @@ export const ServiceDetail: React.FC = () => {
             </Grid.Col>
 
             <Grid.Col span={6}>
-              <Card shadow="xs" p="xl" radius="lg" withBorder style={{ backgroundColor: 'white' }}>
+              <Card
+                shadow="xs"
+                p="xl"
+                radius="lg"
+                withBorder
+                style={{ backgroundColor: 'white' }}
+              >
                 <Group spacing="sm" mb="xl">
-                  <ThemeIcon size="md" radius="md" variant="light" color="violet">
+                  <ThemeIcon
+                    size="md"
+                    radius="md"
+                    variant="light"
+                    color="violet"
+                  >
                     <IconShield size={18} />
                   </ThemeIcon>
                   <Title order={3} weight={600}>
@@ -392,7 +438,10 @@ export const ServiceDetail: React.FC = () => {
                     <Text size="sm" color="dimmed" weight={500}>
                       HMAC Authentication
                     </Text>
-                    <Badge color={service.enableHMAC ? 'green' : 'red'} variant="filled">
+                    <Badge
+                      color={service.enableHMAC ? 'green' : 'red'}
+                      variant="filled"
+                    >
                       {service.enableHMAC ? 'Enabled' : 'Disabled'}
                     </Badge>
                   </Group>
@@ -400,7 +449,10 @@ export const ServiceDetail: React.FC = () => {
                     <Text size="sm" color="dimmed" weight={500}>
                       Batching
                     </Text>
-                    <Badge color={service.enableBatching ? 'green' : 'gray'} variant="light">
+                    <Badge
+                      color={service.enableBatching ? 'green' : 'gray'}
+                      variant="light"
+                    >
                       {service.enableBatching ? 'Enabled' : 'Disabled'}
                     </Badge>
                   </Group>
@@ -408,7 +460,10 @@ export const ServiceDetail: React.FC = () => {
                     <Text size="sm" color="dimmed" weight={500}>
                       MessagePack
                     </Text>
-                    <Badge color={service.useMsgPack ? 'blue' : 'gray'} variant="light">
+                    <Badge
+                      color={service.useMsgPack ? 'blue' : 'gray'}
+                      variant="light"
+                    >
                       {service.useMsgPack ? 'Enabled' : 'Disabled'}
                     </Badge>
                   </Group>
@@ -416,18 +471,27 @@ export const ServiceDetail: React.FC = () => {
                     <Text size="sm" color="dimmed" weight={500}>
                       Created
                     </Text>
-                    <Text size="sm">{new Date(service.createdAt).toLocaleDateString()}</Text>
+                    <Text size="sm">
+                      {new Date(service.createdAt).toLocaleDateString()}
+                    </Text>
                   </Group>
                   <Group position="apart">
                     <Text size="sm" color="dimmed" weight={500}>
                       Updated
                     </Text>
-                    <Text size="sm">{new Date(service.updatedAt).toLocaleDateString()}</Text>
+                    <Text size="sm">
+                      {new Date(service.updatedAt).toLocaleDateString()}
+                    </Text>
                   </Group>
                 </Stack>
               </Card>
             </Grid.Col>
           </Grid>
+
+          <PermissionManagement
+            serviceId={service.id as string}
+            serviceName={service.name}
+          />
 
           {/* Schema Changes Panel */}
           <SchemaChangesPanel serviceId={service.id as string} />
@@ -436,10 +500,21 @@ export const ServiceDetail: React.FC = () => {
           <ServiceAuditLog serviceId={service.id as string} />
 
           {service.enableHMAC && (
-            <Card shadow="xs" p="xl" radius="lg" withBorder style={{ backgroundColor: 'white' }}>
+            <Card
+              shadow="xs"
+              p="xl"
+              radius="lg"
+              withBorder
+              style={{ backgroundColor: 'white' }}
+            >
               <Group position="apart" align="center" mb="xl">
                 <Group spacing="sm">
-                  <ThemeIcon size="md" radius="md" variant="light" color="orange">
+                  <ThemeIcon
+                    size="md"
+                    radius="md"
+                    variant="light"
+                    color="orange"
+                  >
                     <IconKey size={18} />
                   </ThemeIcon>
                   <Title order={3} weight={600}>
@@ -465,17 +540,60 @@ export const ServiceDetail: React.FC = () => {
                 <Table highlightOnHover verticalSpacing="md">
                   <thead>
                     <tr>
-                      <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Key ID</th>
-                      <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Status</th>
-                      <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Created</th>
-                      <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Expires</th>
-                      <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Actions</th>
+                      <th
+                        style={{
+                          fontWeight: 600,
+                          fontSize: '14px',
+                          color: '#495057',
+                        }}
+                      >
+                        Key ID
+                      </th>
+                      <th
+                        style={{
+                          fontWeight: 600,
+                          fontSize: '14px',
+                          color: '#495057',
+                        }}
+                      >
+                        Status
+                      </th>
+                      <th
+                        style={{
+                          fontWeight: 600,
+                          fontSize: '14px',
+                          color: '#495057',
+                        }}
+                      >
+                        Created
+                      </th>
+                      <th
+                        style={{
+                          fontWeight: 600,
+                          fontSize: '14px',
+                          color: '#495057',
+                        }}
+                      >
+                        Expires
+                      </th>
+                      <th
+                        style={{
+                          fontWeight: 600,
+                          fontSize: '14px',
+                          color: '#495057',
+                        }}
+                      >
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {keys.length === 0 ? (
                       <tr>
-                        <td colSpan={5} style={{ textAlign: 'center', padding: '3rem' }}>
+                        <td
+                          colSpan={5}
+                          style={{ textAlign: 'center', padding: '3rem' }}
+                        >
                           <Center>
                             <Stack align="center" spacing="md">
                               <IconKey size={48} color="#ced4da" />
@@ -490,24 +608,43 @@ export const ServiceDetail: React.FC = () => {
                       keys.map((key: ServiceKey) => (
                         <tr key={key.id}>
                           <td>
-                            <Text size="sm" style={{ fontFamily: 'monospace' }} weight={500}>
+                            <Text
+                              size="sm"
+                              style={{ fontFamily: 'monospace' }}
+                              weight={500}
+                            >
                               {key.keyId}
                             </Text>
                           </td>
                           <td>
-                            <Badge color={getStatusColor(key.status)} variant="filled" size="sm">
+                            <Badge
+                              color={getStatusColor(key.status)}
+                              variant="filled"
+                              size="sm"
+                            >
                               {key.status}
                             </Badge>
                           </td>
                           <td>
-                            <Text size="sm">{new Date(key.createdAt).toLocaleDateString()}</Text>
+                            <Text size="sm">
+                              {new Date(key.createdAt).toLocaleDateString()}
+                            </Text>
                           </td>
                           <td>
-                            <Text size="sm">{key.expiresAt ? new Date(key.expiresAt).toLocaleDateString() : 'Never'}</Text>
+                            <Text size="sm">
+                              {key.expiresAt
+                                ? new Date(key.expiresAt).toLocaleDateString()
+                                : 'Never'}
+                            </Text>
                           </td>
                           <td>
                             <Tooltip label="Copy Key ID">
-                              <ActionIcon color="blue" variant="light" size="md" onClick={() => copyToClipboard(key.keyId)}>
+                              <ActionIcon
+                                color="blue"
+                                variant="light"
+                                size="md"
+                                onClick={() => copyToClipboard(key.keyId)}
+                              >
                                 <IconCopy size={16} />
                               </ActionIcon>
                             </Tooltip>
@@ -524,10 +661,16 @@ export const ServiceDetail: React.FC = () => {
       </Box>
 
       {/* Delete Confirmation Modal */}
-      <Modal opened={showDeleteModal} onClose={() => setShowDeleteModal(false)} title="Delete Service" size="md">
+      <Modal
+        opened={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        title="Delete Service"
+        size="md"
+      >
         <Stack spacing="md">
           <Alert icon={<IconAlertCircle />} color="red">
-            Are you sure you want to delete this service? This action cannot be undone.
+            Are you sure you want to delete this service? This action cannot be
+            undone.
           </Alert>
 
           <Text size="sm">
@@ -538,7 +681,11 @@ export const ServiceDetail: React.FC = () => {
             <Button variant="light" onClick={() => setShowDeleteModal(false)}>
               Cancel
             </Button>
-            <Button color="red" onClick={handleDeleteService} loading={isDeleting}>
+            <Button
+              color="red"
+              onClick={handleDeleteService}
+              loading={isDeleting}
+            >
               Delete Service
             </Button>
           </Group>
@@ -570,7 +717,11 @@ export const ServiceDetail: React.FC = () => {
                 </Text>
                 <Group spacing="xs">
                   <Code block>{rotatedKey.keyId}</Code>
-                  <ActionIcon color="blue" variant="light" onClick={() => copyToClipboard(rotatedKey.keyId)}>
+                  <ActionIcon
+                    color="blue"
+                    variant="light"
+                    onClick={() => copyToClipboard(rotatedKey.keyId)}
+                  >
                     <IconCopy size={14} />
                   </ActionIcon>
                 </Group>
@@ -581,13 +732,30 @@ export const ServiceDetail: React.FC = () => {
                   <Text size="sm" weight={500}>
                     Secret Key:
                   </Text>
-                  <ActionIcon color="blue" variant="light" size="sm" onClick={() => setShowSecretKey(!showSecretKey)}>
-                    {showSecretKey ? <IconEyeOff size={14} /> : <IconEye size={14} />}
+                  <ActionIcon
+                    color="blue"
+                    variant="light"
+                    size="sm"
+                    onClick={() => setShowSecretKey(!showSecretKey)}
+                  >
+                    {showSecretKey ? (
+                      <IconEyeOff size={14} />
+                    ) : (
+                      <IconEye size={14} />
+                    )}
                   </ActionIcon>
                 </Group>
                 <Group spacing="xs">
-                  <Code block>{showSecretKey ? rotatedKey.secretKey : '••••••••••••••••••••••••••••••••'}</Code>
-                  <ActionIcon color="blue" variant="light" onClick={() => copyToClipboard(rotatedKey.secretKey)}>
+                  <Code block>
+                    {showSecretKey
+                      ? rotatedKey.secretKey
+                      : '••••••••••••••••••••••••••••••••'}
+                  </Code>
+                  <ActionIcon
+                    color="blue"
+                    variant="light"
+                    onClick={() => copyToClipboard(rotatedKey.secretKey)}
+                  >
                     <IconCopy size={14} />
                   </ActionIcon>
                 </Group>
@@ -595,8 +763,8 @@ export const ServiceDetail: React.FC = () => {
 
               <Alert icon={<IconKey />} color="yellow">
                 <Text size="sm">
-                  <strong>Important:</strong> This is the only time you'll see the new secret key. Your old key will expire in 1
-                  hour.
+                  <strong>Important:</strong> This is the only time you'll see
+                  the new secret key. Your old key will expire in 1 hour.
                 </Text>
               </Alert>
             </>

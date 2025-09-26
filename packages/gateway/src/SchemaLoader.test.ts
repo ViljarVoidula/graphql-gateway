@@ -292,10 +292,10 @@ describe('SchemaLoader', { timeout: 30_000 }, () => {
       const url1 = 'http://old.com/graphql';
       const url2 = 'http://fresh.com/graphql';
 
-      // Add old cache entry
+      // Add old cache entry (older than SCHEMA_CACHE_CLEANUP_TTL = 30 minutes)
       schemaCache.set(url1, {
         sdl: 'old schema',
-        lastUpdated: Date.now() - 25 * 60 * 1000, // 25 minutes ago
+        lastUpdated: Date.now() - 35 * 60 * 1000, // 35 minutes ago
       });
 
       // Add fresh cache entry
@@ -311,10 +311,10 @@ describe('SchemaLoader', { timeout: 30_000 }, () => {
       assert.strictEqual(schemaCache.has(url2), true);
     });
 
-    it('should keep recently expired entries within 2x TTL', () => {
+    it('should keep recently expired entries within cleanup TTL', () => {
       const url = 'http://recent.com/graphql';
 
-      // Add recently expired entry (15 minutes ago, TTL is 10 minutes)
+      // Add recently expired entry (15 minutes ago, but cleanup TTL is 30 minutes)
       schemaCache.set(url, {
         sdl: 'recent schema',
         lastUpdated: Date.now() - 15 * 60 * 1000,
@@ -322,7 +322,7 @@ describe('SchemaLoader', { timeout: 30_000 }, () => {
 
       schemaLoader.cleanupExpiredCache();
 
-      // Should still be present
+      // Should still be present since it's within cleanup TTL
       assert.strictEqual(schemaCache.has(url), true);
     });
   });

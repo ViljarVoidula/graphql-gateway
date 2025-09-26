@@ -3,6 +3,31 @@ import { authenticatedFetch } from '../utils/auth';
 
 const API_URL = '/graphql';
 
+const resolveRequestPayload = (
+  payload: unknown,
+  meta?: Record<string, any>
+): Record<string, any> => {
+  if (payload && typeof payload === 'object') {
+    return payload as Record<string, any>;
+  }
+
+  if (meta && typeof meta === 'object') {
+    const candidates = ['variables', 'values', 'payload'] as const;
+    for (const key of candidates) {
+      const value = (meta as any)[key];
+      if (value && typeof value === 'object') {
+        return value as Record<string, any>;
+      }
+    }
+
+    if (Object.keys(meta).length > 0) {
+      return meta as Record<string, any>;
+    }
+  }
+
+  return {};
+};
+
 export const dataProvider: DataProvider = {
   getApiUrl: () => API_URL,
 
@@ -160,6 +185,7 @@ export const dataProvider: DataProvider = {
             url
             description
             version
+            sdl
             enableHMAC
             timeout
             enableBatching
@@ -481,6 +507,321 @@ export const dataProvider: DataProvider = {
     headers,
     meta,
   }) => {
+    if (meta?.operation === 'servicePermissions') {
+      const request = resolveRequestPayload(payload, meta as any);
+      const queryString = `
+        query ServicePermissions($serviceId: ID!, $includeArchived: Boolean) {
+          servicePermissions(serviceId: $serviceId, includeArchived: $includeArchived) {
+            id
+            permissionKey
+            operationType
+            operationName
+            fieldPath
+            accessLevel
+            active
+            metadata
+            updatedAt
+          }
+        }
+      `;
+
+      const variables = {
+        serviceId: request?.serviceId,
+        includeArchived: request?.includeArchived ?? false,
+      };
+
+      if (!variables.serviceId) {
+        throw new Error('serviceId is required for servicePermissions');
+      }
+
+      const response = await authenticatedFetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ query: queryString, variables }),
+      });
+
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      return { data: result.data.servicePermissions };
+    }
+
+    if (meta?.operation === 'servicePermissionTemplates') {
+      const request = resolveRequestPayload(payload, meta as any);
+      const queryString = `
+        query ServicePermissionTemplates($serviceId: ID!) {
+          servicePermissionTemplates(serviceId: $serviceId) {
+            id
+            name
+            roleKey
+            description
+            permissions
+            tags
+            updatedAt
+          }
+        }
+      `;
+
+      const variables = {
+        serviceId: request?.serviceId,
+      };
+
+      if (!variables.serviceId) {
+        throw new Error('serviceId is required for servicePermissionTemplates');
+      }
+
+      const response = await authenticatedFetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ query: queryString, variables }),
+      });
+
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      return { data: result.data.servicePermissionTemplates };
+    }
+
+    if (meta?.operation === 'serviceUserRoles') {
+      const request = resolveRequestPayload(payload, meta as any);
+      const queryString = `
+        query ServiceUserRoles($serviceId: ID!) {
+          serviceUserRoles(serviceId: $serviceId) {
+            id
+            roleKey
+            roleNamespace
+            displayName
+            permissions
+            expiresAt
+            updatedAt
+            user {
+              id
+              email
+            }
+            template {
+              id
+              name
+              roleKey
+            }
+            service {
+              id
+              name
+            }
+          }
+        }
+      `;
+
+      const variables = {
+        serviceId: request?.serviceId,
+      };
+
+      if (!variables.serviceId) {
+        throw new Error('serviceId is required for serviceUserRoles');
+      }
+
+      const response = await authenticatedFetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ query: queryString, variables }),
+      });
+
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      return { data: result.data.serviceUserRoles };
+    }
+
+    if (meta?.operation === 'updateServicePermission') {
+      const request = resolveRequestPayload(payload, meta as any);
+      const mutation = `
+        mutation UpdateServicePermission($permissionId: ID!, $input: UpdateServicePermissionInput!) {
+          updateServicePermission(permissionId: $permissionId, input: $input) {
+            id
+            permissionKey
+            operationType
+            operationName
+            fieldPath
+            accessLevel
+            active
+            metadata
+            updatedAt
+          }
+        }
+      `;
+
+      const variables = {
+        permissionId: request?.permissionId,
+        input: request?.input ?? {},
+      };
+
+      if (!variables.permissionId) {
+        throw new Error('permissionId is required for updateServicePermission');
+      }
+
+      const response = await authenticatedFetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ query: mutation, variables }),
+      });
+
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      return { data: result.data.updateServicePermission };
+    }
+
+    if (meta?.operation === 'syncServicePermissions') {
+      const request = resolveRequestPayload(payload, meta as any);
+      const mutation = `
+        mutation SyncServicePermissions($serviceId: ID!, $sdl: String!) {
+          syncServicePermissions(serviceId: $serviceId, sdl: $sdl)
+        }
+      `;
+
+      const variables = {
+        serviceId: request?.serviceId,
+        sdl: request?.sdl,
+      };
+
+      if (!variables.serviceId) {
+        throw new Error('serviceId is required for syncServicePermissions');
+      }
+
+      if (!variables.sdl) {
+        throw new Error('sdl is required for syncServicePermissions');
+      }
+
+      const response = await authenticatedFetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ query: mutation, variables }),
+      });
+
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      return { data: result.data.syncServicePermissions };
+    }
+
+    if (meta?.operation === 'setPermissionTemplatePermissions') {
+      const request = resolveRequestPayload(payload, meta as any);
+      const mutation = `
+        mutation SetPermissionTemplatePermissions($templateId: ID!, $permissions: [String!]!) {
+          setPermissionTemplatePermissions(templateId: $templateId, permissions: $permissions) {
+            id
+            name
+            roleKey
+            permissions
+            updatedAt
+          }
+        }
+      `;
+
+      const variables = {
+        templateId: request?.templateId,
+        permissions: request?.permissions ?? [],
+      };
+
+      if (!variables.templateId) {
+        throw new Error(
+          'templateId is required for setPermissionTemplatePermissions'
+        );
+      }
+
+      const response = await authenticatedFetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ query: mutation, variables }),
+      });
+
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      return { data: result.data.setPermissionTemplatePermissions };
+    }
+
+    if (meta?.operation === 'assignUserServiceRole') {
+      const request = resolveRequestPayload(payload, meta as any);
+      const mutation = `
+        mutation AssignUserServiceRole($input: AssignUserServiceRoleInput!) {
+          assignUserServiceRole(input: $input) {
+            id
+            roleKey
+            roleNamespace
+            displayName
+            permissions
+            expiresAt
+            updatedAt
+            user {
+              id
+              email
+            }
+            template {
+              id
+              name
+              roleKey
+            }
+            service {
+              id
+              name
+            }
+          }
+        }
+      `;
+
+      const variables: any = {
+        input: {
+          ...(request ?? {}),
+          permissions: request?.permissions ?? [],
+        },
+      };
+
+      if (!variables.input?.userId || !variables.input?.serviceId) {
+        throw new Error(
+          'userId and serviceId are required for assignUserServiceRole'
+        );
+      }
+
+      const response = await authenticatedFetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ query: mutation, variables }),
+      });
+
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      return { data: result.data.assignUserServiceRole };
+    }
+
+    if (meta?.operation === 'removeUserServiceRole') {
+      const request = resolveRequestPayload(payload, meta as any);
+      const mutation = `
+        mutation RemoveUserServiceRole($roleId: ID!) {
+          removeUserServiceRole(roleId: $roleId)
+        }
+      `;
+
+      const variables = {
+        roleId: request?.roleId,
+      };
+
+      if (!variables.roleId) {
+        throw new Error('roleId is required for removeUserServiceRole');
+      }
+
+      const response = await authenticatedFetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ query: mutation, variables }),
+      });
+
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      return { data: result.data.removeUserServiceRole };
+    }
+
     if (meta?.operation === 'createApplicationApiKey') {
       const mutation = `
         mutation CreateAppKey($applicationId: ID!, $name: String!, $scopes: [String!], $expiresAt: DateTimeISO)

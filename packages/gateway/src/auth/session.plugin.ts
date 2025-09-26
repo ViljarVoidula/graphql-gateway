@@ -1,8 +1,13 @@
 import { Plugin } from '@envelop/types';
-import { getSession, updateSessionActivity, SESSION_COOKIE_NAME, YogaContext } from './session.config';
-import { JWTService } from './jwt.service';
-import { ApiKeyService } from './api-key.service';
 import { Container } from 'typedi';
+import { PermissionService } from '../services/permissions/permission.service';
+import { ApiKeyService } from './api-key.service';
+import { JWTService } from './jwt.service';
+import {
+  getSession,
+  SESSION_COOKIE_NAME,
+  updateSessionActivity,
+} from './session.config';
 
 export const useSession = (): Plugin => {
   return {
@@ -11,6 +16,7 @@ export const useSession = (): Plugin => {
       const request = (context as any).request;
       const jwtService = Container.get(JWTService);
       const apiKeyService = Container.get(ApiKeyService);
+      const permissionService = Container.get(PermissionService);
 
       let sessionId: string | null = null;
       let sessionData = null;
@@ -21,6 +27,10 @@ export const useSession = (): Plugin => {
       if (apiKeyHeader) {
         apiKeyContext = await apiKeyService.validateApiKey(apiKeyHeader);
         if (apiKeyContext) {
+          const permissionProfile =
+            await permissionService.getPermissionProfileForUser(
+              apiKeyContext.user.id
+            );
           // Extend context with API key authentication
           extendContext({
             session: null,
@@ -28,7 +38,8 @@ export const useSession = (): Plugin => {
             application: apiKeyContext.application,
             apiKey: apiKeyContext.apiKeyEntity,
             sessionId: null,
-            authType: 'api-key'
+            authType: 'api-key',
+            permissionProfile,
           });
           return;
         }
@@ -74,6 +85,12 @@ export const useSession = (): Plugin => {
         await updateSessionActivity(sessionId);
       }
 
+      const permissionProfile = sessionData?.isAuthenticated
+        ? await permissionService.getPermissionProfileForUser(
+            sessionData.userId
+          )
+        : null;
+
       // Extend context with session/JWT data
       extendContext({
         session: sessionData,
@@ -81,14 +98,15 @@ export const useSession = (): Plugin => {
           ? {
               id: sessionData.userId,
               email: sessionData.email,
-              permissions: sessionData.permissions || []
+              permissions: sessionData.permissions || [],
             }
           : null,
         application: null,
         apiKey: null,
         sessionId,
-        authType: sessionData?.isAuthenticated ? 'session' : null
+        authType: sessionData?.isAuthenticated ? 'session' : null,
+        permissionProfile,
       });
-    }
+    },
   };
 };

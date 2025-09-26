@@ -1,7 +1,19 @@
 import { Badge, Box, Card, Group, Text } from '@mantine/core';
-import { IconMinus, IconTrendingDown, IconTrendingUp } from '@tabler/icons-react';
+import {
+  IconMinus,
+  IconTrendingDown,
+  IconTrendingUp,
+} from '@tabler/icons-react';
 import React from 'react';
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
 interface LatencyTrendData {
   date: string;
@@ -30,7 +42,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
               h={8}
               style={{
                 backgroundColor: entry.color,
-                borderRadius: '50%'
+                borderRadius: '50%',
               }}
             />
             <Text size="sm">
@@ -44,7 +56,10 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-const calculateTrend = (data: LatencyTrendData[], field: keyof LatencyTrendData): 'up' | 'down' | 'stable' => {
+const calculateTrend = (
+  data: LatencyTrendData[],
+  field: keyof LatencyTrendData
+): 'up' | 'down' | 'stable' => {
   if (data.length < 2) return 'stable';
 
   const recent = data.slice(-5); // Last 5 data points
@@ -82,7 +97,7 @@ const getTrendColor = (trend: 'up' | 'down' | 'stable') => {
 export const LatencyTrendsChart: React.FC<LatencyTrendsChartProps> = ({
   data,
   loading = false,
-  title = 'Latency Trends Over Time'
+  title = 'Latency Trends Over Time',
 }) => {
   const avgTrend = calculateTrend(data, 'averageLatency');
   const p95Trend = calculateTrend(data, 'p95Latency');
@@ -93,7 +108,14 @@ export const LatencyTrendsChart: React.FC<LatencyTrendsChartProps> = ({
         <Group position="apart" mb="xs">
           <Text fw={500}>{title}</Text>
         </Group>
-        <Box h={300} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Box
+          h={300}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
           <Text c="dimmed">Loading chart data...</Text>
         </Box>
       </Card>
@@ -105,10 +127,20 @@ export const LatencyTrendsChart: React.FC<LatencyTrendsChartProps> = ({
       <Group position="apart" mb="xs">
         <Text fw={500}>{title}</Text>
         <Group spacing="xs">
-          <Badge color={getTrendColor(avgTrend)} variant="light" leftSection={getTrendIcon(avgTrend)} size="sm">
+          <Badge
+            color={getTrendColor(avgTrend)}
+            variant="light"
+            leftSection={getTrendIcon(avgTrend)}
+            size="sm"
+          >
             Avg {avgTrend}
           </Badge>
-          <Badge color={getTrendColor(p95Trend)} variant="light" leftSection={getTrendIcon(p95Trend)} size="sm">
+          <Badge
+            color={getTrendColor(p95Trend)}
+            variant="light"
+            leftSection={getTrendIcon(p95Trend)}
+            size="sm"
+          >
             P95 {p95Trend}
           </Badge>
         </Group>
@@ -116,21 +148,71 @@ export const LatencyTrendsChart: React.FC<LatencyTrendsChartProps> = ({
 
       <Box h={300}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+          <LineChart
+            data={data}
+            margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+          >
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis
               dataKey="date"
               tick={{ fontSize: 12 }}
               tickFormatter={(value) => {
                 const date = new Date(value);
-                return date.toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  hour: date.getHours() !== 0 ? 'numeric' : undefined
-                });
+                if (isNaN(date.getTime())) {
+                  return value; // Fallback if date parsing fails
+                }
+
+                // Check if this is an hourly format (has time component)
+                const hasTime = value.includes('T');
+
+                if (hasTime) {
+                  // For hourly data, show date + time for better context
+                  const today = new Date();
+                  const isToday = date.toDateString() === today.toDateString();
+                  const yesterday = new Date(today);
+                  yesterday.setDate(yesterday.getDate() - 1);
+                  const isYesterday =
+                    date.toDateString() === yesterday.toDateString();
+
+                  if (isToday) {
+                    return date.toLocaleTimeString('en-US', {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      hour12: false,
+                    });
+                  } else if (isYesterday) {
+                    return `Yesterday ${date.toLocaleTimeString('en-US', {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      hour12: false,
+                    })}`;
+                  } else {
+                    return `${date.toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                    })} ${date.toLocaleTimeString('en-US', {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      hour12: false,
+                    })}`;
+                  }
+                } else {
+                  // For daily/weekly data, show date
+                  return date.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                  });
+                }
               }}
             />
-            <YAxis tick={{ fontSize: 12 }} label={{ value: 'Latency (ms)', angle: -90, position: 'insideLeft' }} />
+            <YAxis
+              tick={{ fontSize: 12 }}
+              label={{
+                value: 'Latency (ms)',
+                angle: -90,
+                position: 'insideLeft',
+              }}
+            />
             <Tooltip content={<CustomTooltip />} />
             <Line
               type="monotone"

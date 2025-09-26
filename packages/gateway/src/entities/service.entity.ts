@@ -8,14 +8,16 @@ import {
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
-  UpdateDateColumn
+  UpdateDateColumn,
 } from 'typeorm';
 import { User } from '../services/users/user.entity';
+import { ServicePermission } from './service-permission.entity';
+import { UserServiceRole } from './user-service-role.entity';
 
 export enum ServiceStatus {
   ACTIVE = 'active',
   INACTIVE = 'inactive',
-  MAINTENANCE = 'maintenance'
+  MAINTENANCE = 'maintenance',
 }
 
 registerEnumType(ServiceStatus, { name: 'ServiceStatus' });
@@ -23,7 +25,7 @@ registerEnumType(ServiceStatus, { name: 'ServiceStatus' });
 export enum SubscriptionTransport {
   AUTO = 'auto',
   SSE = 'sse',
-  WS = 'ws'
+  WS = 'ws',
 }
 
 registerEnumType(SubscriptionTransport, { name: 'SubscriptionTransport' });
@@ -33,82 +35,90 @@ registerEnumType(SubscriptionTransport, { name: 'SubscriptionTransport' });
 export class Service {
   @Field(() => ID)
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Field()
   @Column({ unique: true })
   @Index()
-  name: string;
+  name!: string;
 
   @Field()
   @Column()
-  url: string;
+  url!: string;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   @Column({ nullable: true })
   description?: string;
 
   @Field(() => ServiceStatus)
   @Column({ type: 'enum', enum: ServiceStatus, default: ServiceStatus.ACTIVE })
-  status: ServiceStatus;
+  status!: ServiceStatus;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   @Column({ nullable: true })
   version?: string;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   @Column({ type: 'text', nullable: true })
   sdl?: string;
 
   @Field()
   @Column({ default: true })
-  enableHMAC: boolean;
+  enableHMAC!: boolean;
 
   @Field()
   @Column({ default: 5000 })
-  timeout: number;
+  timeout!: number;
 
   @Field()
   @Column({ default: true })
-  enableBatching: boolean;
+  enableBatching!: boolean;
 
   @Field()
   @Column({ default: false })
-  useMsgPack: boolean;
+  useMsgPack!: boolean;
 
   @Field()
   @Column({ default: true })
   @Index()
-  externally_accessible: boolean; // Gateway admins control this
+  externally_accessible!: boolean; // Gateway admins control this
 
   @Field(() => User)
   @ManyToOne(() => User, { nullable: false })
   @JoinColumn({ name: 'ownerId' })
-  owner: User;
+  owner!: User;
 
   @Column()
   @Index()
-  ownerId: string;
+  ownerId!: string;
 
   @Field()
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt!: Date;
 
   @Field()
   @UpdateDateColumn()
-  updatedAt: Date;
+  updatedAt!: Date;
 
   @Field(() => [ID]) // Expose as array of IDs for GraphQL to avoid circular import issues
   @OneToMany('ServiceKey', 'service')
-  keys: any[];
+  keys!: any[];
+
+  @Field(() => [ServicePermission])
+  @OneToMany(() => ServicePermission, (permission) => permission.service)
+  permissions!: ServicePermission[];
+
+  @Field(() => [UserServiceRole])
+  @OneToMany(() => UserServiceRole, (role) => role.service)
+  userRoles!: UserServiceRole[];
 
   // Subscription transport config for downstream services
   @Field(() => SubscriptionTransport)
   @Column({ type: 'varchar', default: SubscriptionTransport.AUTO })
-  subscriptionTransport: SubscriptionTransport;
+  subscriptionTransport!: SubscriptionTransport;
 
   // Optional custom subscription path (e.g., '/graphql/stream' or '/ws')
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   @Column({ type: 'varchar', nullable: true })
   subscriptionPath?: string | null;
 }

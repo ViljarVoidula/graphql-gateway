@@ -202,7 +202,12 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
       );
 
       // Update request options with new headers
-      const updatedOptions = { ...requestOptions, headers };
+      const updatedOptions: RequestInit = { ...requestOptions, headers };
+
+      // Disable caching for introspection queries, which don't have a context
+      if (!context) {
+        updatedOptions.cache = 'no-store';
+      }
 
       // Enforce downstream authentication if configured: must have either user session or application (api-key)
       try {
@@ -210,10 +215,14 @@ export function buildHMACExecutor(options: HMACExecutorOptions): any {
         const enforce = await config.isDownstreamAuthEnforced();
         if (enforce) {
           // Only enforce for actual incoming requests (skip internal stitching/introspection calls where no req is present)
+          const internalBypass =
+            (context as any)?.internalIntrospection === true ||
+            (updatedOptions.headers as any)?.['x-internal-introspection'] ===
+              '1';
           const hasRequestContext = !!(context as any)?.req;
           const hasUser = !!(context as any)?.user?.id;
           const hasApp = !!(context as any)?.application?.id;
-          if (hasRequestContext && !hasUser && !hasApp) {
+          if (!internalBypass && hasRequestContext && !hasUser && !hasApp) {
             throw new GraphQLError(
               'Authentication required: downstream service requests require user session or application API key',
               {

@@ -34,13 +34,17 @@ import { ApiKeyUsage } from './entities/api-key-usage.entity';
 import { ApplicationUsage } from './entities/application-usage.entity';
 import { Application } from './entities/application.entity';
 import { AuditLog } from './entities/audit-log.entity';
+import { PermissionTemplate } from './entities/permission-template.entity';
 import { RequestLatency } from './entities/request-latency.entity';
 import { SchemaChange } from './entities/schema-change.entity';
 import { ServiceKey } from './entities/service-key.entity';
+import { ServicePermission } from './entities/service-permission.entity';
 import { Service } from './entities/service.entity';
 import { Session } from './entities/session.entity';
 import { Setting, coerceSettingValue } from './entities/setting.entity';
+import { UserServiceRole } from './entities/user-service-role.entity';
 import { createLatencyTrackingPlugin } from './middleware/latency-tracking-optimized.plugin';
+import { createPermissionGuardPlugin } from './middleware/permission-guard.plugin';
 import { createRateLimitPlugin } from './middleware/rate-limit.middleware';
 import { createUsageTrackingPlugin } from './middleware/usage-tracking.plugin';
 import { SchemaLoader } from './SchemaLoader';
@@ -59,6 +63,7 @@ import { ConfigurationService } from './services/config/configuration.service';
 import './services/docs/docs.resolver';
 import './services/latency/latency-health.resolver';
 import './services/latency/request-latency.resolver';
+import { PermissionService } from './services/permissions/permission.service';
 import './services/search/search.resolver';
 import {
   ServiceCacheManager,
@@ -193,8 +198,11 @@ async function loadServicesFromDatabase(): Promise<string[]> {
 
   try {
     const serviceRegistry = Container.get(ServiceRegistryService);
-    const services = await serviceRegistry.getAllServices();
-    const endpoints = services.map((service) => service.url);
+    // Include INACTIVE services as pollable so they can be recovered automatically
+    const services =
+      (await (serviceRegistry as any).getPollableServices?.()) ||
+      (await serviceRegistry.getAllServices());
+    const endpoints = services.map((service: any) => service.url);
 
     // Update cache on successful fetch
     serviceEndpointCache.set(cacheKey, {
@@ -446,6 +454,7 @@ const yoga = createYoga({
     // Rate limit (must come before session if it doesn't need session info; here we rely only on API key auth data)
     createRateLimitPlugin(),
     useSession(),
+    createPermissionGuardPlugin(),
     createUsageTrackingPlugin(),
     createLatencyTrackingPlugin({
       enabled: process.env.LATENCY_TRACKING_ENABLED !== 'false',
@@ -643,7 +652,7 @@ app.use(async (ctx, next) => {
       }
 
       // Always provide defaults for missing tokens, then override with saved values
-  const allTokens: Record<string, string> = {
+      const allTokens: Record<string, string> = {
         // Primary brand colors - TESTING WITH GREEN
         'color-primary': '#059669',
         'color-primary-hover': '#047857',
@@ -663,10 +672,10 @@ app.use(async (ctx, next) => {
         'color-background': '#ffffff',
         'color-background-secondary': '#f9fafb',
         'color-background-tertiary': '#f3f4f6',
-    'color-background-code': '#1e293b',
-    // New dedicated code tokens (will be overridden if theme provides them)
-    'color-code-bg': '#1e293b',
-    'color-code-text': '#e2e8f0',
+        'color-background-code': '#1e293b',
+        // New dedicated code tokens (will be overridden if theme provides them)
+        'color-code-bg': '#1e293b',
+        'color-code-text': '#e2e8f0',
 
         // Border colors
         'color-border': '#e5e7eb',
@@ -1045,7 +1054,7 @@ app.use(async (ctx, next) => {
 });
 
 export async function startServer() {
-  const REFERSH_INTERVAL = process.env.REFRESH_INTERVAL
+  const REFRESH_INTERVAL = process.env.REFRESH_INTERVAL
     ? parseInt(process.env.REFRESH_INTERVAL, 10)
     : 30_000;
   const MEMORY_LOG_INTERVAL = process.env.MEMORY_LOG_INTERVAL
@@ -1146,6 +1155,18 @@ export async function startServer() {
   Container.set('ApplicationRepository', dataSource.getRepository(Application));
   Container.set('ServiceRepository', dataSource.getRepository(Service));
   Container.set('ServiceKeyRepository', dataSource.getRepository(ServiceKey));
+  Container.set(
+    'ServicePermissionRepository',
+    dataSource.getRepository(ServicePermission)
+  );
+  Container.set(
+    'PermissionTemplateRepository',
+    dataSource.getRepository(PermissionTemplate)
+  );
+  Container.set(
+    'UserServiceRoleRepository',
+    dataSource.getRepository(UserServiceRole)
+  );
   Container.set('AuditLogRepository', dataSource.getRepository(AuditLog));
   Container.set(
     'SchemaChangeRepository',
@@ -1166,6 +1187,8 @@ export async function startServer() {
     'ServiceRegistryService',
     Container.get(ServiceRegistryService)
   );
+  const permissionService = Container.get(PermissionService);
+  await permissionService.initialize();
 
   // JWTService is automatically registered via @Service() decorator
 
@@ -1195,9 +1218,16 @@ export async function startServer() {
     ServiceCacheManager.setSchemaLoader(loader);
     ServiceCacheManager.setServiceCache(serviceEndpointCache);
 
-    log.debug(
-      `Loaded ${serviceEndpoints.length} services from database:`,
-      serviceEndpoints
+    log.info(
+      `Loaded ${serviceEndpoints.length} services from database for schema polling`,
+      {
+        operation: 'loadServicesFromDatabase',
+        metadata: {
+          source: 'database',
+          endpoints: serviceEndpoints,
+          endpointCount: serviceEndpoints.length,
+        },
+      }
     );
   } catch (error) {
     log.error('Failed to load services from database', {
@@ -1245,8 +1275,13 @@ export async function startServer() {
     }
   }, securityConfig.auditLogCleanupIntervalMs);
 
-  // sleep 2s
+  // Perform initial schema load
+  log.info('Performing initial schema load and starting background polling');
   await loader.reload();
+  log.info('Initial schema load completed', {
+    operation: 'initialSchemaLoad',
+    metadata: loader.getMetrics(),
+  });
 
   // Start background flushers for buffered services (audit + usage)
   try {
@@ -1325,8 +1360,17 @@ export async function startServer() {
   log.debug('Gateway started on http://localhost:4000');
   log.debug(`HMAC key cleanup will run every ${KEY_CLEANUP_INTERVAL} ms`);
 
-  await loader.autoRefresh(REFERSH_INTERVAL);
-  log.debug(`Gateway schema will refresh every ${REFERSH_INTERVAL} ms`);
+  loader.autoRefresh(REFRESH_INTERVAL);
+  log.info(
+    `Gateway schema auto-refresh started: polling every ${REFRESH_INTERVAL} ms`,
+    {
+      operation: 'startAutoRefresh',
+      metadata: {
+        intervalMs: REFRESH_INTERVAL,
+        schemaMetrics: loader.getMetrics(),
+      },
+    }
+  );
 
   // Store cleanup intervals for stopping later
   (server as any).keyCleanupInterval = cleanupInterval;

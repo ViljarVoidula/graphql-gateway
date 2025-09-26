@@ -11,6 +11,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Service } from '../../entities/service.entity';
+import { UserServiceRole } from '../../entities/user-service-role.entity';
 
 @ObjectType()
 @Entity()
@@ -73,6 +74,10 @@ export class User {
   @Field(() => [Service])
   @OneToMany(() => Service, (service) => service.owner)
   ownedServices!: Service[];
+
+  @Field(() => [UserServiceRole])
+  @OneToMany(() => UserServiceRole, (role) => role.user)
+  serviceRoles!: UserServiceRole[];
 
   private passwordChanged = false;
 
