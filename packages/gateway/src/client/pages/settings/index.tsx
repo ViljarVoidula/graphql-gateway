@@ -1,133 +1,81 @@
-import {
-  Alert,
-  Badge,
-  Button,
-  Card,
-  Divider,
-  Group,
-  Loader,
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
-  Text,
-  Title,
-} from '@mantine/core';
-import {
-  IconClock,
-  IconDatabase,
-  IconInfoCircle,
-  IconRobot,
-  IconSettings,
-  IconShield,
-} from '@tabler/icons-react';
-import React, { useEffect, useState } from 'react';
-import { DocumentGenerationProgress } from '../../components/DocumentGenerationProgress';
+import { Alert, Button, Group, Stack, Text, Title } from '@mantine/core';
+import { IconClock, IconDatabase, IconInfoCircle, IconSettings, IconShield } from '@tabler/icons-react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   authenticatedFetch,
   getTokenTimeToExpiry,
   isAutoRefreshEnabled,
   refreshAuthToken,
-  setAutoRefreshEnabled,
+  setAutoRefreshEnabled
 } from '../../utils/auth';
+import { AIDocsCard } from './components/AIDocsCard';
+import { AuditRetentionCard } from './components/AuditRetentionCard';
+import { FeatureToggleCardProps } from './components/FeatureToggleCard';
+import { FeatureTogglesSection } from './components/FeatureTogglesSection';
+import { HowItWorksCard } from './components/HowItWorksCard';
+import { DocumentationMode, PublicDocsModeCard } from './components/PublicDocsModeCard';
+import { ResponseCacheCard } from './components/ResponseCacheCard';
+import { SessionRefreshCard } from './components/SessionRefreshCard';
+import { SessionStatusCard } from './components/SessionStatusCard';
 
 export const SessionSettings: React.FC = () => {
   const [autoRefreshEnabled, setAutoRefreshEnabledState] = useState(true);
   const [timeToExpiry, setTimeToExpiry] = useState<number | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  // Audit retention state
   const [auditRetention, setAuditRetention] = useState<number | null>(null);
   const [auditInitial, setAuditInitial] = useState<number | null>(null);
   const [auditLoading, setAuditLoading] = useState(true);
-  const [auditSaving, setAuditSaving] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
-  // Public documentation mode
-  const [docsMode, setDocsMode] = useState<
-    'DISABLED' | 'PREVIEW' | 'ENABLED' | null
-  >(null);
-  const [docsModeInitial, setDocsModeInitial] = useState<
-    'DISABLED' | 'PREVIEW' | 'ENABLED' | null
-  >(null);
-  const [docsModeSaving, setDocsModeSaving] = useState(false);
+  const [docsMode, setDocsMode] = useState<DocumentationMode | null>(null);
+  const [docsModeInitial, setDocsModeInitial] = useState<DocumentationMode | null>(null);
   const [docsModeError, setDocsModeError] = useState<string | null>(null);
-  // AI docs generation config
   const [aiProvider, setAiProvider] = useState<'OPENAI'>('OPENAI');
   const [aiBaseUrl, setAiBaseUrl] = useState<string>('');
   const [aiModel, setAiModel] = useState<string>('');
   const [aiApiKey, setAiApiKey] = useState<string>('');
+  const [aiBaseUrlInitial, setAiBaseUrlInitial] = useState<string>('');
+  const [aiModelInitial, setAiModelInitial] = useState<string>('');
   const [aiLoading, setAiLoading] = useState<boolean>(true);
-  const [aiSaving, setAiSaving] = useState<boolean>(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiKeySet, setAiKeySet] = useState<boolean>(false);
   const [genBusy, setGenBusy] = useState<boolean>(false);
   const [genMsg, setGenMsg] = useState<string | null>(null);
-  // Enforce downstream auth
-  const [enforceDownstream, setEnforceDownstream] = useState<boolean | null>(
-    null
-  );
-  const [enforceDownstreamInitial, setEnforceDownstreamInitial] = useState<
-    boolean | null
-  >(null);
+  const [enforceDownstream, setEnforceDownstream] = useState<boolean | null>(null);
+  const [enforceDownstreamInitial, setEnforceDownstreamInitial] = useState<boolean | null>(null);
   const [enforceSaving, setEnforceSaving] = useState<boolean>(false);
   const [enforceError, setEnforceError] = useState<string | null>(null);
-  // GraphQL Voyager
-  const [graphqlVoyagerEnabled, setGraphqlVoyagerEnabled] = useState<
-    boolean | null
-  >(null);
-  const [graphqlVoyagerInitial, setGraphqlVoyagerInitial] = useState<
-    boolean | null
-  >(null);
+  const [graphqlVoyagerEnabled, setGraphqlVoyagerEnabled] = useState<boolean | null>(null);
+  const [graphqlVoyagerInitial, setGraphqlVoyagerInitial] = useState<boolean | null>(null);
   const [voyagerSaving, setVoyagerSaving] = useState<boolean>(false);
   const [voyagerError, setVoyagerError] = useState<string | null>(null);
-  // GraphQL Playground
-  const [graphqlPlaygroundEnabled, setGraphqlPlaygroundEnabled] = useState<
-    boolean | null
-  >(null);
-  const [graphqlPlaygroundInitial, setGraphqlPlaygroundInitial] = useState<
-    boolean | null
-  >(null);
+  const [graphqlPlaygroundEnabled, setGraphqlPlaygroundEnabled] = useState<boolean | null>(null);
+  const [graphqlPlaygroundInitial, setGraphqlPlaygroundInitial] = useState<boolean | null>(null);
   const [playgroundSaving, setPlaygroundSaving] = useState<boolean>(false);
   const [playgroundError, setPlaygroundError] = useState<string | null>(null);
-  // Latency Tracking
-  const [latencyTrackingEnabled, setLatencyTrackingEnabled] = useState<
-    boolean | null
-  >(null);
-  const [latencyTrackingInitial, setLatencyTrackingInitial] = useState<
-    boolean | null
-  >(null);
+  const [latencyTrackingEnabled, setLatencyTrackingEnabled] = useState<boolean | null>(null);
+  const [latencyTrackingInitial, setLatencyTrackingInitial] = useState<boolean | null>(null);
   const [latencySaving, setLatencySaving] = useState<boolean>(false);
   const [latencyError, setLatencyError] = useState<string | null>(null);
-  // Response Cache
   const [rcLoading, setRcLoading] = useState<boolean>(true);
   const [rcError, setRcError] = useState<string | null>(null);
-  const [rcSaving, setRcSaving] = useState<boolean>(false);
   const [rcEnabled, setRcEnabled] = useState<boolean | null>(null);
-  const [rcEnabledInitial, setRcEnabledInitial] = useState<boolean | null>(
-    null
-  );
+  const [rcEnabledInitial, setRcEnabledInitial] = useState<boolean | null>(null);
   const [rcTtlMs, setRcTtlMs] = useState<number | null>(null);
   const [rcTtlInitial, setRcTtlInitial] = useState<number | null>(null);
   const [rcIncludeExt, setRcIncludeExt] = useState<boolean | null>(null);
-  const [rcIncludeExtInitial, setRcIncludeExtInitial] = useState<
-    boolean | null
-  >(null);
+  const [rcIncludeExtInitial, setRcIncludeExtInitial] = useState<boolean | null>(null);
   const [rcScope, setRcScope] = useState<'global' | 'per-session' | null>(null);
-  const [rcScopeInitial, setRcScopeInitial] = useState<
-    'global' | 'per-session' | null
-  >(null);
+  const [rcScopeInitial, setRcScopeInitial] = useState<'global' | 'per-session' | null>(null);
   const [rcClearing, setRcClearing] = useState<boolean>(false);
   const [rcClearMsg, setRcClearMsg] = useState<string | null>(null);
   const [rcTtlPerType, setRcTtlPerType] = useState<Record<string, number>>({});
-  const [rcTtlPerTypeInitial, setRcTtlPerTypeInitial] = useState<
-    Record<string, number>
-  >({});
-  const [rcTtlPerCoord, setRcTtlPerCoord] = useState<Record<string, number>>(
-    {}
-  );
-  const [rcTtlPerCoordInitial, setRcTtlPerCoordInitial] = useState<
-    Record<string, number>
-  >({});
+  const [rcTtlPerTypeInitial, setRcTtlPerTypeInitial] = useState<Record<string, number>>({});
+  const [rcTtlPerCoord, setRcTtlPerCoord] = useState<Record<string, number>>({});
+  const [rcTtlPerCoordInitial, setRcTtlPerCoordInitial] = useState<Record<string, number>>({});
   const [rcTtlErr, setRcTtlErr] = useState<string | null>(null);
+  const [isSavingAll, setIsSavingAll] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   useEffect(() => {
     // Load current settings
@@ -146,103 +94,88 @@ export const SessionSettings: React.FC = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            query: `query Settings { settings { auditLogRetentionDays publicDocumentationMode enforceDownstreamAuth graphqlVoyagerEnabled graphqlPlaygroundEnabled latencyTrackingEnabled responseCacheEnabled responseCacheTtlMs responseCacheIncludeExtensions responseCacheScope responseCacheTtlPerType responseCacheTtlPerSchemaCoordinate } }`,
-          }),
+            query: `query Settings {
+              settings {
+                auditLogRetentionDays
+                publicDocumentationMode
+                enforceDownstreamAuth
+                graphqlVoyagerEnabled
+                graphqlPlaygroundEnabled
+                latencyTrackingEnabled
+                responseCacheEnabled
+                responseCacheTtlMs
+                responseCacheIncludeExtensions
+                responseCacheScope
+                responseCacheTtlPerType
+                responseCacheTtlPerSchemaCoordinate
+              }
+            }`
+          })
         });
         const data = await res.json();
         if (data?.data?.settings) {
-          setAuditRetention(data.data.settings.auditLogRetentionDays);
-          setAuditInitial(data.data.settings.auditLogRetentionDays);
-          if (data.data.settings.publicDocumentationMode) {
-            setDocsMode(
-              data.data.settings.publicDocumentationMode as
-                | 'DISABLED'
-                | 'PREVIEW'
-                | 'ENABLED'
-            );
-            setDocsModeInitial(
-              data.data.settings.publicDocumentationMode as
-                | 'DISABLED'
-                | 'PREVIEW'
-                | 'ENABLED'
-            );
+          const settings = data.data.settings;
+          setAuditRetention(settings.auditLogRetentionDays);
+          setAuditInitial(settings.auditLogRetentionDays);
+
+          if (settings.publicDocumentationMode) {
+            const mode = settings.publicDocumentationMode as DocumentationMode;
+            setDocsMode(mode);
+            setDocsModeInitial(mode);
           }
-          if (typeof data.data.settings.enforceDownstreamAuth === 'boolean') {
-            setEnforceDownstream(data.data.settings.enforceDownstreamAuth);
-            setEnforceDownstreamInitial(
-              data.data.settings.enforceDownstreamAuth
-            );
+
+          if (typeof settings.enforceDownstreamAuth === 'boolean') {
+            setEnforceDownstream(settings.enforceDownstreamAuth);
+            setEnforceDownstreamInitial(settings.enforceDownstreamAuth);
           }
-          if (typeof data.data.settings.graphqlVoyagerEnabled === 'boolean') {
-            setGraphqlVoyagerEnabled(data.data.settings.graphqlVoyagerEnabled);
-            setGraphqlVoyagerInitial(data.data.settings.graphqlVoyagerEnabled);
+
+          if (typeof settings.graphqlVoyagerEnabled === 'boolean') {
+            setGraphqlVoyagerEnabled(settings.graphqlVoyagerEnabled);
+            setGraphqlVoyagerInitial(settings.graphqlVoyagerEnabled);
           }
-          if (
-            typeof data.data.settings.graphqlPlaygroundEnabled === 'boolean'
-          ) {
-            setGraphqlPlaygroundEnabled(
-              data.data.settings.graphqlPlaygroundEnabled
-            );
-            setGraphqlPlaygroundInitial(
-              data.data.settings.graphqlPlaygroundEnabled
-            );
+
+          if (typeof settings.graphqlPlaygroundEnabled === 'boolean') {
+            setGraphqlPlaygroundEnabled(settings.graphqlPlaygroundEnabled);
+            setGraphqlPlaygroundInitial(settings.graphqlPlaygroundEnabled);
           }
-          if (typeof data.data.settings.latencyTrackingEnabled === 'boolean') {
-            setLatencyTrackingEnabled(
-              data.data.settings.latencyTrackingEnabled
-            );
-            setLatencyTrackingInitial(
-              data.data.settings.latencyTrackingEnabled
-            );
+
+          if (typeof settings.latencyTrackingEnabled === 'boolean') {
+            setLatencyTrackingEnabled(settings.latencyTrackingEnabled);
+            setLatencyTrackingInitial(settings.latencyTrackingEnabled);
           }
-          // Response cache
-          if (typeof data.data.settings.responseCacheEnabled === 'boolean') {
-            setRcEnabled(data.data.settings.responseCacheEnabled);
-            setRcEnabledInitial(data.data.settings.responseCacheEnabled);
+
+          if (typeof settings.responseCacheEnabled === 'boolean') {
+            setRcEnabled(settings.responseCacheEnabled);
+            setRcEnabledInitial(settings.responseCacheEnabled);
           }
-          if (typeof data.data.settings.responseCacheTtlMs === 'number') {
-            setRcTtlMs(data.data.settings.responseCacheTtlMs);
-            setRcTtlInitial(data.data.settings.responseCacheTtlMs);
+          if (typeof settings.responseCacheTtlMs === 'number') {
+            setRcTtlMs(settings.responseCacheTtlMs);
+            setRcTtlInitial(settings.responseCacheTtlMs);
           }
-          if (
-            typeof data.data.settings.responseCacheIncludeExtensions ===
-            'boolean'
-          ) {
-            setRcIncludeExt(data.data.settings.responseCacheIncludeExtensions);
-            setRcIncludeExtInitial(
-              data.data.settings.responseCacheIncludeExtensions
-            );
+          if (typeof settings.responseCacheIncludeExtensions === 'boolean') {
+            setRcIncludeExt(settings.responseCacheIncludeExtensions);
+            setRcIncludeExtInitial(settings.responseCacheIncludeExtensions);
           }
-          if (typeof data.data.settings.responseCacheScope === 'string') {
-            const scope =
-              (data.data.settings.responseCacheScope as
-                | 'global'
-                | 'per-session') || 'global';
+          if (typeof settings.responseCacheScope === 'string') {
+            const scope = (settings.responseCacheScope as 'global' | 'per-session') || 'global';
             setRcScope(scope);
             setRcScopeInitial(scope);
           }
-          if (
-            data.data.settings.responseCacheTtlPerType &&
-            typeof data.data.settings.responseCacheTtlPerType === 'object'
-          ) {
-            setRcTtlPerType(data.data.settings.responseCacheTtlPerType);
-            setRcTtlPerTypeInitial(data.data.settings.responseCacheTtlPerType);
+          if (settings.responseCacheTtlPerType && typeof settings.responseCacheTtlPerType === 'object') {
+            setRcTtlPerType(settings.responseCacheTtlPerType);
+            setRcTtlPerTypeInitial(settings.responseCacheTtlPerType);
           }
           if (
-            data.data.settings.responseCacheTtlPerSchemaCoordinate &&
-            typeof data.data.settings.responseCacheTtlPerSchemaCoordinate ===
-              'object'
+            settings.responseCacheTtlPerSchemaCoordinate &&
+            typeof settings.responseCacheTtlPerSchemaCoordinate === 'object'
           ) {
-            setRcTtlPerCoord(
-              data.data.settings.responseCacheTtlPerSchemaCoordinate
-            );
-            setRcTtlPerCoordInitial(
-              data.data.settings.responseCacheTtlPerSchemaCoordinate
-            );
+            setRcTtlPerCoord(settings.responseCacheTtlPerSchemaCoordinate);
+            setRcTtlPerCoordInitial(settings.responseCacheTtlPerSchemaCoordinate);
           }
         }
       } catch (e: any) {
         setAuditError(e?.message || 'Failed to load settings');
+        setRcError(e?.message || 'Failed to load settings');
       } finally {
         setAuditLoading(false);
         setRcLoading(false);
@@ -256,17 +189,24 @@ export const SessionSettings: React.FC = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            query: `query { aiDocsConfig { provider baseUrl model apiKeySet } }`,
-          }),
+            query: `query { aiDocsConfig { provider baseUrl model apiKeySet } }`
+          })
         });
         const json = await res.json();
         if (json?.data?.aiDocsConfig) {
+          const baseUrl = json.data.aiDocsConfig.baseUrl || '';
+          const model = json.data.aiDocsConfig.model || 'gpt-5-mini';
           setAiProvider('OPENAI');
-          setAiBaseUrl(json.data.aiDocsConfig.baseUrl || '');
-          setAiModel(json.data.aiDocsConfig.model || 'gpt-5-mini');
+          setAiBaseUrl(baseUrl);
+          setAiModel(model);
+          setAiBaseUrlInitial(baseUrl);
+          setAiModelInitial(model);
           setAiKeySet(!!json.data.aiDocsConfig.apiKeySet);
+        } else {
+          setAiBaseUrlInitial('');
+          setAiModelInitial('gpt-5-mini');
         }
-      } catch (e) {
+      } catch (error) {
         // ignore silently for non-admin users
       } finally {
         setAiLoading(false);
@@ -292,1333 +232,677 @@ export const SessionSettings: React.FC = () => {
     setIsRefreshing(false);
   };
 
+  const hasResponseCacheChanges =
+    rcEnabled !== rcEnabledInitial ||
+    rcTtlMs !== rcTtlInitial ||
+    rcIncludeExt !== rcIncludeExtInitial ||
+    rcScope !== rcScopeInitial ||
+    JSON.stringify(rcTtlPerType) !== JSON.stringify(rcTtlPerTypeInitial) ||
+    JSON.stringify(rcTtlPerCoord) !== JSON.stringify(rcTtlPerCoordInitial);
+
+  const handleResponseCacheSave = useCallback(async (): Promise<boolean> => {
+    if (!hasResponseCacheChanges) {
+      return true;
+    }
+    setRcError(null);
+    try {
+      const ops: Promise<any>[] = [];
+      if (rcEnabled !== rcEnabledInitial && rcEnabled !== null) {
+        ops.push(
+          authenticatedFetch('/graphql', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              query: `mutation Set($enabled:Boolean!){ setResponseCacheEnabled(enabled:$enabled) }`,
+              variables: { enabled: rcEnabled }
+            })
+          }).then((r) => r.json())
+        );
+      }
+      if (rcTtlMs !== rcTtlInitial && rcTtlMs !== null) {
+        ops.push(
+          authenticatedFetch('/graphql', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              query: `mutation Set($ttlMs:Int!){ setResponseCacheTtlMs(ttlMs:$ttlMs) }`,
+              variables: { ttlMs: rcTtlMs }
+            })
+          }).then((r) => r.json())
+        );
+      }
+      if (rcIncludeExt !== rcIncludeExtInitial && rcIncludeExt !== null) {
+        ops.push(
+          authenticatedFetch('/graphql', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              query: `mutation Set($enabled:Boolean!){ setResponseCacheIncludeExtensions(enabled:$enabled) }`,
+              variables: { enabled: rcIncludeExt }
+            })
+          }).then((r) => r.json())
+        );
+      }
+      if (rcScope !== rcScopeInitial && rcScope) {
+        ops.push(
+          authenticatedFetch('/graphql', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              query: `mutation Set($scope:String!){ setResponseCacheScope(scope:$scope) }`,
+              variables: { scope: rcScope }
+            })
+          }).then((r) => r.json())
+        );
+      }
+      if (JSON.stringify(rcTtlPerType) !== JSON.stringify(rcTtlPerTypeInitial)) {
+        ops.push(
+          authenticatedFetch('/graphql', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              query: `mutation Set($map: JSON!){ setResponseCacheTtlPerType(map:$map) }`,
+              variables: { map: rcTtlPerType }
+            })
+          }).then((r) => r.json())
+        );
+      }
+      if (JSON.stringify(rcTtlPerCoord) !== JSON.stringify(rcTtlPerCoordInitial)) {
+        ops.push(
+          authenticatedFetch('/graphql', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              query: `mutation Set($map: JSON!){ setResponseCacheTtlPerSchemaCoordinate(map:$map) }`,
+              variables: { map: rcTtlPerCoord }
+            })
+          }).then((r) => r.json())
+        );
+      }
+      const results = await Promise.all(ops);
+      const err = results.find((j) => j?.errors?.length);
+      if (err) throw new Error(err.errors[0]?.message || 'Failed to save');
+
+      setRcEnabledInitial(rcEnabled);
+      setRcTtlInitial(rcTtlMs);
+      setRcIncludeExtInitial(rcIncludeExt);
+      setRcScopeInitial(rcScope);
+      setRcTtlPerTypeInitial(rcTtlPerType);
+      setRcTtlPerCoordInitial(rcTtlPerCoord);
+      return true;
+    } catch (e: any) {
+      setRcError(e?.message || 'Failed to save');
+      return false;
+    }
+  }, [
+    rcEnabled,
+    rcEnabledInitial,
+    rcTtlMs,
+    rcTtlInitial,
+    rcIncludeExt,
+    rcIncludeExtInitial,
+    rcScope,
+    rcScopeInitial,
+    rcTtlPerType,
+    rcTtlPerTypeInitial,
+    rcTtlPerCoord,
+    rcTtlPerCoordInitial,
+    hasResponseCacheChanges
+  ]);
+
+  const handleResponseCacheReset = useCallback(() => {
+    setRcEnabled(rcEnabledInitial);
+    setRcTtlMs(rcTtlInitial);
+    setRcIncludeExt(rcIncludeExtInitial);
+    setRcScope(rcScopeInitial);
+    setRcTtlPerType(rcTtlPerTypeInitial);
+    setRcTtlPerCoord(rcTtlPerCoordInitial);
+    setRcTtlErr(null);
+  }, [rcEnabledInitial, rcTtlInitial, rcIncludeExtInitial, rcScopeInitial, rcTtlPerTypeInitial, rcTtlPerCoordInitial]);
+
+  const handleClearResponseCache = useCallback(async () => {
+    setRcClearing(true);
+    setRcClearMsg(null);
+    try {
+      const res = await authenticatedFetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation { clearResponseCache }`
+        })
+      });
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to clear');
+      setRcClearMsg('Cache cleared');
+    } catch (e: any) {
+      setRcClearMsg(e?.message || 'Failed to clear');
+    } finally {
+      setRcClearing(false);
+    }
+  }, []);
+
+  const handleAIDocsSave = useCallback(async (): Promise<boolean> => {
+    if (aiBaseUrl === aiBaseUrlInitial && aiModel === aiModelInitial && !aiApiKey) {
+      return true;
+    }
+    setAiError(null);
+    try {
+      const res = await authenticatedFetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation Set($input:SetAIDocsConfigInput!) { setAIDocsConfig(input:$input) }`,
+          variables: {
+            input: {
+              provider: 'OPENAI',
+              baseUrl: aiBaseUrl || null,
+              model: aiModel || null,
+              apiKey: aiApiKey || null
+            }
+          }
+        })
+      });
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to save');
+      setAiApiKey('');
+      setAiKeySet(true);
+      setAiBaseUrlInitial(aiBaseUrl || '');
+      setAiModelInitial(aiModel || '');
+      return true;
+    } catch (e: any) {
+      setAiError(e?.message || 'Failed to save');
+      return false;
+    }
+  }, [aiApiKey, aiBaseUrl, aiModel, aiBaseUrlInitial, aiModelInitial]);
+
+  const handleGenerateDocs = useCallback(async () => {
+    setGenBusy(true);
+    setGenMsg(null);
+    try {
+      const res = await authenticatedFetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation { generateDocsFromSDL(options: { publish: true }) { created updated } }`
+        })
+      });
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0]?.message || 'Generation failed');
+      setGenMsg(
+        `Generated: ${json.data.generateDocsFromSDL.created} created, ${json.data.generateDocsFromSDL.updated} updated`
+      );
+    } catch (e: any) {
+      setGenMsg(e?.message || 'Failed to generate');
+    } finally {
+      setGenBusy(false);
+    }
+  }, []);
+
+  const handleGenerationComplete = useCallback((result: { totalDocuments: number; totalServices: number }) => {
+    setGenMsg(`Generated: ${result.totalDocuments} documents for ${result.totalServices} services`);
+  }, []);
+
+  const handleGenerationError = useCallback((message: string) => {
+    setGenMsg(message);
+  }, []);
+
+  const handleAuditSave = useCallback(async (): Promise<boolean> => {
+    if (auditRetention === null || auditRetention === auditInitial) {
+      return true;
+    }
+    setAuditError(null);
+    try {
+      const res = await authenticatedFetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation UpdateRetention($days: Int!) { updateAuditLogRetentionDays(days: $days) }`,
+          variables: { days: auditRetention }
+        })
+      });
+      const json = await res.json();
+      if (json.errors) {
+        throw new Error(json.errors[0]?.message || 'Update failed');
+      }
+      setAuditInitial(auditRetention);
+      return true;
+    } catch (e: any) {
+      setAuditError(e?.message || 'Failed to update retention');
+      return false;
+    }
+  }, [auditRetention, auditInitial]);
+
+  const handleDocsModeSave = useCallback(async (): Promise<boolean> => {
+    if (docsMode === null || docsMode === docsModeInitial) {
+      return true;
+    }
+    setDocsModeError(null);
+    try {
+      const res = await authenticatedFetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation SetDocsMode($mode: PublicDocumentationMode!) { setPublicDocumentationMode(mode: $mode) }`,
+          variables: { mode: docsMode }
+        })
+      });
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0]?.message || 'Update failed');
+      setDocsModeInitial(docsMode);
+      return true;
+    } catch (e: any) {
+      setDocsModeError(e?.message || 'Failed to update mode');
+      return false;
+    }
+  }, [docsMode, docsModeInitial]);
+
+  const handleEnforceSave = useCallback(async (): Promise<boolean> => {
+    if (enforceDownstream === null || enforceDownstream === enforceDownstreamInitial) {
+      return true;
+    }
+    setEnforceSaving(true);
+    setEnforceError(null);
+    try {
+      const res = await authenticatedFetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation Set($enabled:Boolean!){ setEnforceDownstreamAuth(enabled:$enabled) }`,
+          variables: { enabled: enforceDownstream }
+        })
+      });
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to save');
+      setEnforceDownstreamInitial(enforceDownstream);
+      return true;
+    } catch (e: any) {
+      setEnforceError(e?.message || 'Failed to save');
+      return false;
+    } finally {
+      setEnforceSaving(false);
+    }
+  }, [enforceDownstream, enforceDownstreamInitial]);
+
+  const handleVoyagerSave = useCallback(async (): Promise<boolean> => {
+    if (graphqlVoyagerEnabled === null || graphqlVoyagerEnabled === graphqlVoyagerInitial) {
+      return true;
+    }
+    setVoyagerSaving(true);
+    setVoyagerError(null);
+    try {
+      const res = await authenticatedFetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation Set($enabled:Boolean!){ setGraphQLVoyagerEnabled(enabled:$enabled) }`,
+          variables: { enabled: graphqlVoyagerEnabled }
+        })
+      });
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to save');
+      setGraphqlVoyagerInitial(graphqlVoyagerEnabled);
+      return true;
+    } catch (e: any) {
+      setVoyagerError(e?.message || 'Failed to save');
+      return false;
+    } finally {
+      setVoyagerSaving(false);
+    }
+  }, [graphqlVoyagerEnabled, graphqlVoyagerInitial]);
+
+  const handlePlaygroundSave = useCallback(async (): Promise<boolean> => {
+    if (graphqlPlaygroundEnabled === null || graphqlPlaygroundEnabled === graphqlPlaygroundInitial) {
+      return true;
+    }
+    setPlaygroundSaving(true);
+    setPlaygroundError(null);
+    try {
+      const res = await authenticatedFetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation Set($enabled:Boolean!){ setGraphQLPlaygroundEnabled(enabled:$enabled) }`,
+          variables: { enabled: graphqlPlaygroundEnabled }
+        })
+      });
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to save');
+      setGraphqlPlaygroundInitial(graphqlPlaygroundEnabled);
+      return true;
+    } catch (e: any) {
+      setPlaygroundError(e?.message || 'Failed to save');
+      return false;
+    } finally {
+      setPlaygroundSaving(false);
+    }
+  }, [graphqlPlaygroundEnabled, graphqlPlaygroundInitial]);
+
+  const handleLatencySave = useCallback(async (): Promise<boolean> => {
+    if (latencyTrackingEnabled === null || latencyTrackingEnabled === latencyTrackingInitial) {
+      return true;
+    }
+    setLatencySaving(true);
+    setLatencyError(null);
+    try {
+      const res = await authenticatedFetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `mutation Set($enabled:Boolean!){ setLatencyTrackingEnabled(enabled:$enabled) }`,
+          variables: { enabled: latencyTrackingEnabled }
+        })
+      });
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0]?.message || 'Failed to save');
+      setLatencyTrackingInitial(latencyTrackingEnabled);
+      return true;
+    } catch (e: any) {
+      setLatencyError(e?.message || 'Failed to save');
+      return false;
+    } finally {
+      setLatencySaving(false);
+    }
+  }, [latencyTrackingEnabled, latencyTrackingInitial]);
+
+  const resetEnforceDownstream = useCallback(() => {
+    if (enforceDownstreamInitial !== null) {
+      setEnforceDownstream(enforceDownstreamInitial);
+    }
+  }, [enforceDownstreamInitial]);
+
+  const resetVoyager = useCallback(() => {
+    if (graphqlVoyagerInitial !== null) {
+      setGraphqlVoyagerEnabled(graphqlVoyagerInitial);
+    }
+  }, [graphqlVoyagerInitial]);
+
+  const resetPlayground = useCallback(() => {
+    if (graphqlPlaygroundInitial !== null) {
+      setGraphqlPlaygroundEnabled(graphqlPlaygroundInitial);
+    }
+  }, [graphqlPlaygroundInitial]);
+
+  const resetLatency = useCallback(() => {
+    if (latencyTrackingInitial !== null) {
+      setLatencyTrackingEnabled(latencyTrackingInitial);
+    }
+  }, [latencyTrackingInitial]);
+
+  const featureToggleItems: FeatureToggleCardProps[] = [
+    {
+      id: 'enforce-downstream-auth',
+      icon: <IconShield size={20} />,
+      title: 'Downstream Service Authentication',
+      headline: 'Require authentication for downstream service calls',
+      helperText:
+        'All requests routed through the gateway must include either an Application API key or an authenticated user session before reaching downstream services.',
+      value: enforceDownstream,
+      loading: auditLoading,
+      error: enforceError,
+      onChange: (value) => setEnforceDownstream(value),
+      actions:
+        enforceDownstreamInitial !== null && enforceDownstream !== enforceDownstreamInitial ? (
+          <Group spacing="sm">
+            <Button variant="subtle" size="xs" disabled={enforceSaving} onClick={resetEnforceDownstream}>
+              Reset to saved value
+            </Button>
+          </Group>
+        ) : undefined,
+      info: 'Use this enforcement to prevent anonymous traffic from reaching private services through the gateway.',
+      disabled: enforceDownstream === null || enforceSaving
+    },
+    {
+      id: 'graphql-voyager',
+      icon: <IconInfoCircle size={20} />,
+      title: 'GraphQL Relationship Diagram',
+      headline: 'Enable GraphQL Voyager',
+      helperText:
+        'Serve an interactive diagram of your GraphQL schema so developers can explore type relationships at the /voyager endpoint.',
+      value: graphqlVoyagerEnabled,
+      loading: auditLoading && graphqlVoyagerEnabled === null,
+      error: voyagerError,
+      onChange: (value) => setGraphqlVoyagerEnabled(value),
+      actions:
+        graphqlVoyagerInitial !== null && graphqlVoyagerEnabled !== graphqlVoyagerInitial ? (
+          <Group spacing="sm">
+            <Button variant="subtle" size="xs" disabled={voyagerSaving} onClick={resetVoyager}>
+              Reset to saved value
+            </Button>
+          </Group>
+        ) : undefined,
+      info: 'Enable when teams need to explore schemas visually and disable in locked-down environments to reduce surface area.',
+      disabled: graphqlVoyagerEnabled === null || voyagerSaving
+    },
+    {
+      id: 'graphql-playground',
+      icon: <IconDatabase size={20} />,
+      title: 'GraphQL Playground',
+      headline: 'Enable GraphQL Playground',
+      helperText:
+        'Expose the in-browser GraphQL query console at the /playground endpoint for rapid debugging and exploration.',
+      value: graphqlPlaygroundEnabled,
+      loading: auditLoading && graphqlPlaygroundEnabled === null,
+      error: playgroundError,
+      onChange: (value) => setGraphqlPlaygroundEnabled(value),
+      actions:
+        graphqlPlaygroundInitial !== null && graphqlPlaygroundEnabled !== graphqlPlaygroundInitial ? (
+          <Group spacing="sm">
+            <Button variant="subtle" size="xs" disabled={playgroundSaving} onClick={resetPlayground}>
+              Reset to saved value
+            </Button>
+          </Group>
+        ) : undefined,
+      info: 'Great for development and onboarding sessions. Disable it in production to keep tooling limited to authorized workflows.',
+      disabled: graphqlPlaygroundEnabled === null || playgroundSaving
+    },
+    {
+      id: 'latency-tracking',
+      icon: <IconClock size={20} />,
+      title: 'Request Latency Tracking',
+      headline: 'Enable latency metrics collection',
+      helperText:
+        'Capture detailed performance timings for every GraphQL operation so you can chart trends, detect regressions, and power SLO dashboards.',
+      value: latencyTrackingEnabled,
+      loading: auditLoading && latencyTrackingEnabled === null,
+      error: latencyError,
+      onChange: (value) => setLatencyTrackingEnabled(value),
+      actions:
+        latencyTrackingInitial !== null && latencyTrackingEnabled !== latencyTrackingInitial ? (
+          <Group spacing="sm">
+            <Button variant="subtle" size="xs" disabled={latencySaving} onClick={resetLatency}>
+              Reset to saved value
+            </Button>
+          </Group>
+        ) : undefined,
+      info: `Metrics retention matches your audit log policy (${auditRetention || 90} days). Disabling stops new measurements but keeps historical data for reference.`,
+      disabled: latencyTrackingEnabled === null || latencySaving
+    }
+  ];
+
+  const featureToggleDirty =
+    (enforceDownstream !== null && enforceDownstream !== enforceDownstreamInitial) ||
+    (graphqlVoyagerEnabled !== null && graphqlVoyagerEnabled !== graphqlVoyagerInitial) ||
+    (graphqlPlaygroundEnabled !== null && graphqlPlaygroundEnabled !== graphqlPlaygroundInitial) ||
+    (latencyTrackingEnabled !== null && latencyTrackingEnabled !== latencyTrackingInitial);
+
+  const aiConfigDirty = aiBaseUrl !== aiBaseUrlInitial || aiModel !== aiModelInitial || !!aiApiKey;
+
+  const docsModeDirty = docsMode !== docsModeInitial;
+  const auditDirty = auditRetention !== auditInitial;
+
+  const hasAnyChanges = featureToggleDirty || hasResponseCacheChanges || aiConfigDirty || docsModeDirty || auditDirty;
+
+  const handleSaveAll = useCallback(async () => {
+    if (!hasAnyChanges) {
+      return;
+    }
+    setSaveError(null);
+    setSaveMessage(null);
+    setIsSavingAll(true);
+    const results = await Promise.all([
+      handleEnforceSave(),
+      handleVoyagerSave(),
+      handlePlaygroundSave(),
+      handleLatencySave(),
+      handleResponseCacheSave(),
+      handleAIDocsSave(),
+      handleDocsModeSave(),
+      handleAuditSave()
+    ]);
+    const failed = results.filter((success) => !success).length;
+    if (failed === 0) {
+      setSaveMessage('All changes saved successfully.');
+    } else if (failed === results.length) {
+      setSaveError('Failed to save changes. Check the sections above for errors.');
+    } else {
+      setSaveError('Some settings failed to save. Check the sections above for details.');
+    }
+    setIsSavingAll(false);
+  }, [
+    auditDirty,
+    hasAnyChanges,
+    handleAIDocsSave,
+    handleAuditSave,
+    handleDocsModeSave,
+    handleEnforceSave,
+    handleLatencySave,
+    handlePlaygroundSave,
+    handleResponseCacheSave,
+    handleVoyagerSave
+  ]);
+
+  const handleResetAll = useCallback(() => {
+    setSaveError(null);
+    setSaveMessage(null);
+    resetEnforceDownstream();
+    resetVoyager();
+    resetPlayground();
+    resetLatency();
+    handleResponseCacheReset();
+    setAiBaseUrl(aiBaseUrlInitial);
+    setAiModel(aiModelInitial);
+    setAiApiKey('');
+    if (docsModeInitial !== null) {
+      setDocsMode(docsModeInitial);
+    }
+    if (auditInitial !== null) {
+      setAuditRetention(auditInitial);
+    }
+  }, [
+    auditInitial,
+    aiBaseUrlInitial,
+    aiModelInitial,
+    docsModeInitial,
+    handleResponseCacheReset,
+    resetEnforceDownstream,
+    resetLatency,
+    resetPlayground,
+    resetVoyager
+  ]);
+
   return (
-    <Stack spacing="lg">
+    <Stack spacing="xl">
       <Group spacing="sm">
         <IconSettings size={24} />
         <Title order={2}>Gateway Settings</Title>
       </Group>
 
-      <Card shadow="sm" p="lg" radius="md" withBorder>
-        <Stack spacing="md">
-          <Group spacing="sm">
-            <IconDatabase size={20} />
-            <Text weight={500} size="md">
-              Response Cache
-            </Text>
-          </Group>
-          {rcLoading ? (
-            <Group>
-              <Loader size="sm" /> <Text size="sm">Loading settings...</Text>
-            </Group>
-          ) : rcError ? (
-            <Alert
-              color="red"
-              title="Failed to load"
-              icon={<IconInfoCircle size={16} />}
-            >
-              {rcError}
-            </Alert>
-          ) : (
-            <>
-              <Group position="apart">
-                <div>
-                  <Text weight={500} size="sm">
-                    Enable Response Cache
-                  </Text>
-                  <Text size="xs" color="dimmed">
-                    Cache GraphQL responses in Redis to speed up repeated
-                    queries
-                  </Text>
-                </div>
-                <Switch
-                  checked={!!rcEnabled}
-                  onChange={(e) => setRcEnabled(e.currentTarget.checked)}
-                  onLabel="ON"
-                  offLabel="OFF"
-                />
-              </Group>
+      <Group position="apart" align="center">
+        <Text size="sm" color="dimmed">
+          Make changes across sections and save them together.
+        </Text>
+        <Group spacing="sm">
+          <Button variant="subtle" disabled={!hasAnyChanges || isSavingAll} onClick={handleResetAll}>
+            Reset All
+          </Button>
+          <Button onClick={handleSaveAll} loading={isSavingAll} disabled={!hasAnyChanges}>
+            Save All Changes
+          </Button>
+        </Group>
+      </Group>
 
-              <NumberInput
-                label="Default TTL (ms)"
-                description="Time-to-live for cached responses. 0 disables TTL (not recommended)."
-                min={0}
-                max={86_400_000}
-                value={rcTtlMs === null ? undefined : rcTtlMs}
-                onChange={(val) =>
-                  setRcTtlMs(
-                    typeof val === 'number'
-                      ? Math.max(0, Math.min(86_400_000, val))
-                      : rcTtlMs
-                  )
-                }
-              />
+      {saveError && (
+        <Alert color="red" icon={<IconInfoCircle size={16} />}>
+          {saveError}
+        </Alert>
+      )}
+      {!saveError && saveMessage && (
+        <Alert color="green" icon={<IconInfoCircle size={16} />}>
+          {saveMessage}
+        </Alert>
+      )}
 
-              <Group position="apart">
-                <div>
-                  <Text weight={500} size="sm">
-                    Include extension metadata
-                  </Text>
-                  <Text size="xs" color="dimmed">
-                    When enabled, cache also stores GraphQL extensions metadata
-                  </Text>
-                </div>
-                <Switch
-                  checked={!!rcIncludeExt}
-                  onChange={(e) => setRcIncludeExt(e.currentTarget.checked)}
-                  onLabel="ON"
-                  offLabel="OFF"
-                />
-              </Group>
+      <FeatureTogglesSection items={featureToggleItems} />
 
-              <Select
-                label="Cache scope"
-                description="Global: shared across users and keys. Per-session: varies by user/session."
-                value={rcScope ?? undefined}
-                onChange={(v) => setRcScope((v as any) || rcScope)}
-                data={[
-                  { value: 'global', label: 'Global' },
-                  { value: 'per-session', label: 'Per-session' },
-                ]}
-              />
+      <ResponseCacheCard
+        loading={rcLoading}
+        error={rcError}
+        enabled={rcEnabled}
+        onEnabledChange={setRcEnabled}
+        ttlMs={rcTtlMs}
+        onTtlChange={setRcTtlMs}
+        includeExtensions={rcIncludeExt}
+        onIncludeExtensionsChange={setRcIncludeExt}
+        scope={rcScope}
+        onScopeChange={setRcScope}
+        ttlPerType={rcTtlPerType}
+        onTtlPerTypeChange={setRcTtlPerType}
+        ttlPerCoordinate={rcTtlPerCoord}
+        onTtlPerCoordinateChange={setRcTtlPerCoord}
+        clearing={rcClearing}
+        onClearCache={handleClearResponseCache}
+        clearMessage={rcClearMsg}
+        ttlError={rcTtlErr}
+        onTtlErrorChange={setRcTtlErr}
+      />
 
-              <Stack spacing={4}>
-                <Text size="sm">TTL per Type (JSON)</Text>
-                <textarea
-                  style={{
-                    width: '100%',
-                    minHeight: 120,
-                    padding: 8,
-                    fontFamily: 'monospace',
-                  }}
-                  placeholder={'{\n  "User": 500,\n  "Post": 1000\n}'}
-                  value={
-                    Object.keys(rcTtlPerType || {}).length
-                      ? JSON.stringify(rcTtlPerType, null, 2)
-                      : ''
-                  }
-                  onChange={(e) => {
-                    setRcTtlErr(null);
-                    try {
-                      const text = e.target.value;
-                      if (!text.trim()) {
-                        setRcTtlPerType({});
-                        return;
-                      }
-                      const parsed = JSON.parse(text);
-                      setRcTtlPerType(parsed || {});
-                    } catch (err: any) {
-                      setRcTtlErr('Invalid JSON for TTL per Type');
-                    }
-                  }}
-                />
-              </Stack>
+      <AIDocsCard
+        loading={aiLoading}
+        error={aiError}
+        provider={aiProvider}
+        onProviderChange={setAiProvider}
+        baseUrl={aiBaseUrl}
+        onBaseUrlChange={setAiBaseUrl}
+        model={aiModel}
+        onModelChange={setAiModel}
+        apiKey={aiApiKey}
+        onApiKeyChange={setAiApiKey}
+        keyStored={aiKeySet}
+        generating={genBusy}
+        onGenerate={handleGenerateDocs}
+        generationMessage={genMsg}
+        onGenerationComplete={handleGenerationComplete}
+        onGenerationError={handleGenerationError}
+      />
 
-              <Stack spacing={4}>
-                <Text size="sm">TTL per Schema Coordinate (JSON)</Text>
-                <textarea
-                  style={{
-                    width: '100%',
-                    minHeight: 120,
-                    padding: 8,
-                    fontFamily: 'monospace',
-                  }}
-                  placeholder={
-                    '{\n  "Query.lazy": 10000,\n  "User.friends": 5000\n}'
-                  }
-                  value={
-                    Object.keys(rcTtlPerCoord || {}).length
-                      ? JSON.stringify(rcTtlPerCoord, null, 2)
-                      : ''
-                  }
-                  onChange={(e) => {
-                    setRcTtlErr(null);
-                    try {
-                      const text = e.target.value;
-                      if (!text.trim()) {
-                        setRcTtlPerCoord({});
-                        return;
-                      }
-                      const parsed = JSON.parse(text);
-                      setRcTtlPerCoord(parsed || {});
-                    } catch (err: any) {
-                      setRcTtlErr('Invalid JSON for TTL per Schema Coordinate');
-                    }
-                  }}
-                />
-              </Stack>
+      <Stack spacing="lg">
+        <SessionRefreshCard autoRefreshEnabled={autoRefreshEnabled} onToggle={handleAutoRefreshToggle} />
+        <SessionStatusCard
+          timeToExpiry={timeToExpiry}
+          autoRefreshEnabled={autoRefreshEnabled}
+          isRefreshing={isRefreshing}
+          onManualRefresh={handleManualRefresh}
+        />
+        <HowItWorksCard />
+      </Stack>
 
-              <Group spacing="sm">
-                <Button
-                  size="xs"
-                  loading={rcSaving}
-                  disabled={
-                    rcSaving ||
-                    !!rcTtlErr ||
-                    (rcEnabled === rcEnabledInitial &&
-                      rcTtlMs === rcTtlInitial &&
-                      rcIncludeExt === rcIncludeExtInitial &&
-                      rcScope === rcScopeInitial &&
-                      JSON.stringify(rcTtlPerType) ===
-                        JSON.stringify(rcTtlPerTypeInitial) &&
-                      JSON.stringify(rcTtlPerCoord) ===
-                        JSON.stringify(rcTtlPerCoordInitial))
-                  }
-                  onClick={async () => {
-                    setRcSaving(true);
-                    setRcError(null);
-                    try {
-                      // Save only changed values via separate mutations
-                      const ops: Promise<any>[] = [];
-                      if (
-                        rcEnabled !== rcEnabledInitial &&
-                        rcEnabled !== null
-                      ) {
-                        ops.push(
-                          authenticatedFetch('/graphql', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              query: `mutation Set($enabled:Boolean!){ setResponseCacheEnabled(enabled:$enabled) }`,
-                              variables: { enabled: rcEnabled },
-                            }),
-                          }).then((r) => r.json())
-                        );
-                      }
-                      if (rcTtlMs !== rcTtlInitial && rcTtlMs !== null) {
-                        ops.push(
-                          authenticatedFetch('/graphql', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              query: `mutation Set($ttlMs:Int!){ setResponseCacheTtlMs(ttlMs:$ttlMs) }`,
-                              variables: { ttlMs: rcTtlMs },
-                            }),
-                          }).then((r) => r.json())
-                        );
-                      }
-                      if (
-                        rcIncludeExt !== rcIncludeExtInitial &&
-                        rcIncludeExt !== null
-                      ) {
-                        ops.push(
-                          authenticatedFetch('/graphql', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              query: `mutation Set($enabled:Boolean!){ setResponseCacheIncludeExtensions(enabled:$enabled) }`,
-                              variables: { enabled: rcIncludeExt },
-                            }),
-                          }).then((r) => r.json())
-                        );
-                      }
-                      if (rcScope !== rcScopeInitial && rcScope) {
-                        ops.push(
-                          authenticatedFetch('/graphql', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              query: `mutation Set($scope:String!){ setResponseCacheScope(scope:$scope) }`,
-                              variables: { scope: rcScope },
-                            }),
-                          }).then((r) => r.json())
-                        );
-                      }
-                      if (
-                        JSON.stringify(rcTtlPerType) !==
-                        JSON.stringify(rcTtlPerTypeInitial)
-                      ) {
-                        ops.push(
-                          authenticatedFetch('/graphql', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              query: `mutation Set($map: JSON!){ setResponseCacheTtlPerType(map:$map) }`,
-                              variables: { map: rcTtlPerType },
-                            }),
-                          }).then((r) => r.json())
-                        );
-                      }
-                      if (
-                        JSON.stringify(rcTtlPerCoord) !==
-                        JSON.stringify(rcTtlPerCoordInitial)
-                      ) {
-                        ops.push(
-                          authenticatedFetch('/graphql', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              query: `mutation Set($map: JSON!){ setResponseCacheTtlPerSchemaCoordinate(map:$map) }`,
-                              variables: { map: rcTtlPerCoord },
-                            }),
-                          }).then((r) => r.json())
-                        );
-                      }
-                      const results = await Promise.all(ops);
-                      const err = results.find((j) => j?.errors?.length);
-                      if (err)
-                        throw new Error(
-                          err.errors[0]?.message || 'Failed to save'
-                        );
+      <PublicDocsModeCard
+        loading={auditLoading}
+        error={docsModeError}
+        value={docsMode}
+        onChange={setDocsMode}
+        onReset={() => docsModeInitial && setDocsMode(docsModeInitial)}
+        showReset={docsModeInitial !== null && docsMode !== docsModeInitial}
+      />
 
-                      // Update initials
-                      setRcEnabledInitial(rcEnabled);
-                      setRcTtlInitial(rcTtlMs);
-                      setRcIncludeExtInitial(rcIncludeExt);
-                      setRcScopeInitial(rcScope);
-                      setRcTtlPerTypeInitial(rcTtlPerType);
-                      setRcTtlPerCoordInitial(rcTtlPerCoord);
-                    } catch (e: any) {
-                      setRcError(e?.message || 'Failed to save');
-                    } finally {
-                      setRcSaving(false);
-                    }
-                  }}
-                >
-                  Save
-                </Button>
-                {(rcEnabled !== rcEnabledInitial ||
-                  rcTtlMs !== rcTtlInitial ||
-                  rcIncludeExt !== rcIncludeExtInitial ||
-                  rcScope !== rcScopeInitial ||
-                  JSON.stringify(rcTtlPerType) !==
-                    JSON.stringify(rcTtlPerTypeInitial) ||
-                  JSON.stringify(rcTtlPerCoord) !==
-                    JSON.stringify(rcTtlPerCoordInitial)) && (
-                  <Button
-                    variant="subtle"
-                    size="xs"
-                    disabled={rcSaving}
-                    onClick={() => {
-                      setRcEnabled(rcEnabledInitial);
-                      setRcTtlMs(rcTtlInitial);
-                      setRcIncludeExt(rcIncludeExtInitial);
-                      setRcScope(rcScopeInitial);
-                      setRcTtlPerType(rcTtlPerTypeInitial);
-                      setRcTtlPerCoord(rcTtlPerCoordInitial);
-                    }}
-                  >
-                    Reset
-                  </Button>
-                )}
-                <Button
-                  variant="light"
-                  size="xs"
-                  loading={rcClearing}
-                  onClick={async () => {
-                    setRcClearing(true);
-                    setRcClearMsg(null);
-                    try {
-                      const res = await authenticatedFetch('/graphql', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          query: `mutation { clearResponseCache }`,
-                        }),
-                      });
-                      const json = await res.json();
-                      if (json.errors)
-                        throw new Error(
-                          json.errors[0]?.message || 'Failed to clear'
-                        );
-                      setRcClearMsg('Cache cleared');
-                    } catch (e: any) {
-                      setRcClearMsg(e?.message || 'Failed to clear');
-                    } finally {
-                      setRcClearing(false);
-                    }
-                  }}
-                >
-                  Clear Cache
-                </Button>
-              </Group>
-              {rcClearMsg && (
-                <Alert color="blue" icon={<IconInfoCircle size={16} />}>
-                  {' '}
-                  {rcClearMsg}{' '}
-                </Alert>
-              )}
-              {rcTtlErr && (
-                <Alert color="red" icon={<IconInfoCircle size={16} />}>
-                  {' '}
-                  {rcTtlErr}{' '}
-                </Alert>
-              )}
-              <Alert
-                icon={<IconInfoCircle size={16} />}
-                color="blue"
-                variant="light"
-              >
-                <Text size="xs">
-                  Response cache reduces load and latency by caching operation
-                  results in Redis. Changes apply within seconds without
-                  restart. Use per-session scope when results depend on user
-                  identity or permissions.
-                </Text>
-              </Alert>
-            </>
-          )}
-        </Stack>
-      </Card>
-
-      <Card shadow="sm" p="lg" radius="md" withBorder>
-        <Stack spacing="md">
-          <Group position="apart">
-            <div>
-              <Text weight={500} size="md">
-                Automatic Session Refresh
-              </Text>
-              <Text size="sm" color="dimmed">
-                Keep your session active in the background
-              </Text>
-            </div>
-            <Switch
-              checked={autoRefreshEnabled}
-              onChange={(event) =>
-                handleAutoRefreshToggle(event.currentTarget.checked)
-              }
-              size="lg"
-              onLabel="ON"
-              offLabel="OFF"
-            />
-          </Group>
-
-          <Alert
-            icon={<IconInfoCircle size={16} />}
-            color="blue"
-            variant="light"
-          >
-            <Text size="sm">
-              When enabled, your session will be automatically refreshed 2
-              minutes before expiry. This keeps you logged in for up to 7 days
-              without interruption.
-            </Text>
-          </Alert>
-
-          {autoRefreshEnabled && (
-            <Group spacing="xs">
-              <IconShield size={16} color="green" />
-              <Text size="sm" color="green">
-                Auto-refresh is active - your session will be maintained
-                automatically
-              </Text>
-            </Group>
-          )}
-
-          {!autoRefreshEnabled && (
-            <Group spacing="xs">
-              <IconClock size={16} color="orange" />
-              <Text size="sm" color="orange">
-                Manual mode - you'll need to refresh your session manually or
-                re-login when it expires
-              </Text>
-            </Group>
-          )}
-        </Stack>
-      </Card>
-
-      <Card shadow="sm" p="lg" radius="md" withBorder>
-        <Stack spacing="md">
-          <Group spacing="sm">
-            <IconRobot size={20} />
-            <Text weight={500} size="md">
-              AI Doc Generation
-            </Text>
-          </Group>
-          {aiLoading ? (
-            <Group>
-              <Loader size="sm" />{' '}
-              <Text size="sm">Loading AI configuration...</Text>
-            </Group>
-          ) : (
-            <>
-              {aiError && (
-                <Alert
-                  color="red"
-                  title="Error"
-                  icon={<IconInfoCircle size={16} />}
-                >
-                  {aiError}
-                </Alert>
-              )}
-              <Select
-                label="Provider"
-                value={aiProvider}
-                data={[{ value: 'OPENAI', label: 'OpenAI compatible' }]}
-                onChange={(val) => setAiProvider((val as any) || 'OPENAI')}
-              />
-              <NumberInput
-                label="Model (as text)"
-                description="For OpenAI-compatible APIs, set model id."
-                value={undefined}
-                styles={{ input: { display: 'none' } }}
-              />
-              <Stack spacing={4}>
-                <Text size="sm">Model</Text>
-                <input
-                  value={aiModel}
-                  onChange={(e) => setAiModel(e.target.value)}
-                  placeholder="gpt-5-mini"
-                  style={{
-                    padding: 8,
-                    border: '1px solid #e5e7eb',
-                    borderRadius: 6,
-                  }}
-                />
-              </Stack>
-              <Stack spacing={4}>
-                <Text size="sm">Base URL (optional)</Text>
-                <input
-                  value={aiBaseUrl}
-                  onChange={(e) => setAiBaseUrl(e.target.value)}
-                  placeholder="https://api.openai.com/v1"
-                  style={{
-                    padding: 8,
-                    border: '1px solid #e5e7eb',
-                    borderRadius: 6,
-                  }}
-                />
-              </Stack>
-              <Stack spacing={4}>
-                <Text size="sm">
-                  API Key{' '}
-                  {aiKeySet && (
-                    <Badge color="green" ml={8}>
-                      Stored
-                    </Badge>
-                  )}
-                </Text>
-                <input
-                  value={aiApiKey}
-                  onChange={(e) => setAiApiKey(e.target.value)}
-                  placeholder={aiKeySet ? '•••••••••••••••••••••' : 'sk-...'}
-                  type="password"
-                  style={{
-                    padding: 8,
-                    border: '1px solid #e5e7eb',
-                    borderRadius: 6,
-                  }}
-                />
-              </Stack>
-              <Group spacing="sm">
-                <Button
-                  size="xs"
-                  loading={aiSaving}
-                  onClick={async () => {
-                    setAiSaving(true);
-                    setAiError(null);
-                    try {
-                      const res = await authenticatedFetch('/graphql', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          query: `mutation Set($input:SetAIDocsConfigInput!) { setAIDocsConfig(input:$input) }`,
-                          variables: {
-                            input: {
-                              provider: 'OPENAI',
-                              baseUrl: aiBaseUrl || null,
-                              model: aiModel || null,
-                              apiKey: aiApiKey || null,
-                            },
-                          },
-                        }),
-                      });
-                      const json = await res.json();
-                      if (json.errors)
-                        throw new Error(
-                          json.errors[0]?.message || 'Failed to save'
-                        );
-                      setAiApiKey('');
-                      setAiKeySet(true);
-                    } catch (e: any) {
-                      setAiError(e?.message || 'Failed to save');
-                    } finally {
-                      setAiSaving(false);
-                    }
-                  }}
-                >
-                  Save
-                </Button>
-                <Button
-                  variant="light"
-                  size="xs"
-                  loading={genBusy}
-                  disabled={genBusy}
-                  onClick={async () => {
-                    setGenBusy(true);
-                    setGenMsg(null);
-                    try {
-                      const res = await authenticatedFetch('/graphql', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          query: `mutation { generateDocsFromSDL(options: { publish: true }) { created updated } }`,
-                        }),
-                      });
-                      const json = await res.json();
-                      if (json.errors)
-                        throw new Error(
-                          json.errors[0]?.message || 'Generation failed'
-                        );
-                      setGenMsg(
-                        `Generated: ${json.data.generateDocsFromSDL.created} created, ${json.data.generateDocsFromSDL.updated} updated`
-                      );
-                    } catch (e: any) {
-                      setGenMsg(e?.message || 'Failed to generate');
-                    } finally {
-                      setGenBusy(false);
-                    }
-                  }}
-                >
-                  Seed docs from services
-                </Button>
-              </Group>
-
-              {/* Real-time progress updates during generation */}
-              <DocumentGenerationProgress
-                isGenerating={genBusy}
-                onComplete={(result) => {
-                  setGenMsg(
-                    `Generated: ${result.totalDocuments} documents for ${result.totalServices} services`
-                  );
-                }}
-                onError={(error) => {
-                  setGenMsg(error);
-                }}
-              />
-
-              {genMsg && !genBusy && (
-                <Alert color="blue" icon={<IconInfoCircle size={16} />}>
-                  {genMsg}
-                </Alert>
-              )}
-              <Alert
-                icon={<IconInfoCircle size={16} />}
-                color="blue"
-                variant="light"
-              >
-                <Text size="xs">
-                  Seeding reads each registered service SDL and creates an
-                  overview page. Add an API key to enable future LLM-powered
-                  enrichment.
-                </Text>
-              </Alert>
-            </>
-          )}
-        </Stack>
-      </Card>
-
-      <Card shadow="sm" p="lg" radius="md" withBorder>
-        <Stack spacing="md">
-          <Group spacing="sm">
-            <IconShield size={20} />
-            <Text weight={500} size="md">
-              Enforce Downstream Service Authentication
-            </Text>
-          </Group>
-          {auditLoading ? (
-            <Group>
-              <Loader size="sm" /> <Text size="sm">Loading setting...</Text>
-            </Group>
-          ) : enforceError ? (
-            <Alert
-              color="red"
-              title="Failed to load"
-              icon={<IconInfoCircle size={16} />}
-            >
-              {enforceError}
-            </Alert>
-          ) : (
-            <>
-              <Group position="apart">
-                <div>
-                  <Text weight={500} size="sm">
-                    Require authentication for downstream service calls
-                  </Text>
-                  <Text size="xs" color="dimmed">
-                    When enabled, all gateway requests to downstream services
-                    require either an Application API key or a user
-                    session/token.
-                  </Text>
-                </div>
-                <Switch
-                  checked={!!enforceDownstream}
-                  onChange={(e) =>
-                    setEnforceDownstream(e.currentTarget.checked)
-                  }
-                  onLabel="ON"
-                  offLabel="OFF"
-                />
-              </Group>
-              <Group spacing="sm">
-                <Button
-                  size="xs"
-                  loading={enforceSaving}
-                  disabled={
-                    enforceSaving ||
-                    enforceDownstream === null ||
-                    enforceDownstream === enforceDownstreamInitial
-                  }
-                  onClick={async () => {
-                    if (enforceDownstream === null) return;
-                    setEnforceSaving(true);
-                    setEnforceError(null);
-                    try {
-                      const res = await authenticatedFetch('/graphql', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          query: `mutation Set($enabled:Boolean!){ setEnforceDownstreamAuth(enabled:$enabled) }`,
-                          variables: { enabled: enforceDownstream },
-                        }),
-                      });
-                      const json = await res.json();
-                      if (json.errors)
-                        throw new Error(
-                          json.errors[0]?.message || 'Failed to save'
-                        );
-                      setEnforceDownstreamInitial(enforceDownstream);
-                    } catch (e: any) {
-                      setEnforceError(e?.message || 'Failed to save');
-                    } finally {
-                      setEnforceSaving(false);
-                    }
-                  }}
-                >
-                  Save
-                </Button>
-                {enforceDownstreamInitial !== null &&
-                  enforceDownstream !== enforceDownstreamInitial && (
-                    <Button
-                      variant="subtle"
-                      size="xs"
-                      disabled={enforceSaving}
-                      onClick={() =>
-                        setEnforceDownstream(enforceDownstreamInitial!)
-                      }
-                    >
-                      Reset
-                    </Button>
-                  )}
-              </Group>
-            </>
-          )}
-        </Stack>
-      </Card>
-
-      <Card shadow="sm" p="lg" radius="md" withBorder>
-        <Stack spacing="md">
-          <Group spacing="sm">
-            <IconInfoCircle size={20} />
-            <Text weight={500} size="md">
-              GraphQL Relationship Diagram
-            </Text>
-          </Group>
-          {auditLoading ? (
-            <Group>
-              <Loader size="sm" /> <Text size="sm">Loading setting...</Text>
-            </Group>
-          ) : voyagerError ? (
-            <Alert
-              color="red"
-              title="Failed to load"
-              icon={<IconInfoCircle size={16} />}
-            >
-              {voyagerError}
-            </Alert>
-          ) : (
-            <>
-              <Group position="apart">
-                <div>
-                  <Text weight={500} size="sm">
-                    Enable GraphQL Voyager
-                  </Text>
-                  <Text size="xs" color="dimmed">
-                    When enabled, provides an interactive GraphQL schema
-                    visualization at /voyager endpoint.
-                  </Text>
-                </div>
-                <Switch
-                  checked={!!graphqlVoyagerEnabled}
-                  onChange={(e) =>
-                    setGraphqlVoyagerEnabled(e.currentTarget.checked)
-                  }
-                  onLabel="ON"
-                  offLabel="OFF"
-                />
-              </Group>
-              <Group spacing="sm">
-                <Button
-                  size="xs"
-                  loading={voyagerSaving}
-                  disabled={
-                    voyagerSaving ||
-                    graphqlVoyagerEnabled === null ||
-                    graphqlVoyagerEnabled === graphqlVoyagerInitial
-                  }
-                  onClick={async () => {
-                    if (graphqlVoyagerEnabled === null) return;
-                    setVoyagerSaving(true);
-                    setVoyagerError(null);
-                    try {
-                      const res = await authenticatedFetch('/graphql', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          query: `mutation Set($enabled:Boolean!){ setGraphQLVoyagerEnabled(enabled:$enabled) }`,
-                          variables: { enabled: graphqlVoyagerEnabled },
-                        }),
-                      });
-                      const json = await res.json();
-                      if (json.errors)
-                        throw new Error(
-                          json.errors[0]?.message || 'Failed to save'
-                        );
-                      setGraphqlVoyagerInitial(graphqlVoyagerEnabled);
-                    } catch (e: any) {
-                      setVoyagerError(e?.message || 'Failed to save');
-                    } finally {
-                      setVoyagerSaving(false);
-                    }
-                  }}
-                >
-                  Save
-                </Button>
-                {graphqlVoyagerInitial !== null &&
-                  graphqlVoyagerEnabled !== graphqlVoyagerInitial && (
-                    <Button
-                      variant="subtle"
-                      size="xs"
-                      disabled={voyagerSaving}
-                      onClick={() =>
-                        setGraphqlVoyagerEnabled(graphqlVoyagerInitial!)
-                      }
-                    >
-                      Reset
-                    </Button>
-                  )}
-              </Group>
-              <Alert
-                icon={<IconInfoCircle size={16} />}
-                color="blue"
-                variant="light"
-              >
-                <Text size="xs">
-                  GraphQL Voyager provides an interactive visualization of your
-                  GraphQL schema, showing relationships between types. Access it
-                  at <code>/voyager</code> when enabled.
-                </Text>
-              </Alert>
-            </>
-          )}
-        </Stack>
-      </Card>
-
-      <Card shadow="sm" p="lg" radius="md" withBorder>
-        <Stack spacing="md">
-          <Text weight={500} size="md">
-            GraphQL Playground Settings
-          </Text>
-          {graphqlPlaygroundEnabled === null ? (
-            <Group>
-              <Loader size="sm" /> <Text size="sm">Loading setting...</Text>
-            </Group>
-          ) : playgroundError ? (
-            <Alert
-              color="red"
-              title="Failed to load"
-              icon={<IconInfoCircle size={16} />}
-            >
-              {playgroundError}
-            </Alert>
-          ) : (
-            <>
-              <Group position="apart">
-                <div>
-                  <Text weight={500} size="sm">
-                    Enable GraphQL Playground
-                  </Text>
-                  <Text size="xs" color="dimmed">
-                    When enabled, provides an interactive GraphQL query
-                    interface at /playground endpoint.
-                  </Text>
-                </div>
-                <Switch
-                  checked={!!graphqlPlaygroundEnabled}
-                  onChange={(e) =>
-                    setGraphqlPlaygroundEnabled(e.currentTarget.checked)
-                  }
-                  onLabel="ON"
-                  offLabel="OFF"
-                />
-              </Group>
-              <Group spacing="sm">
-                <Button
-                  size="xs"
-                  loading={playgroundSaving}
-                  disabled={
-                    playgroundSaving ||
-                    graphqlPlaygroundEnabled === null ||
-                    graphqlPlaygroundEnabled === graphqlPlaygroundInitial
-                  }
-                  onClick={async () => {
-                    if (graphqlPlaygroundEnabled === null) return;
-                    setPlaygroundSaving(true);
-                    setPlaygroundError(null);
-                    try {
-                      const res = await authenticatedFetch('/graphql', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          query: `mutation Set($enabled:Boolean!){ setGraphQLPlaygroundEnabled(enabled:$enabled) }`,
-                          variables: { enabled: graphqlPlaygroundEnabled },
-                        }),
-                      });
-                      const json = await res.json();
-                      if (json.errors)
-                        throw new Error(
-                          json.errors[0]?.message || 'Failed to save'
-                        );
-                      setGraphqlPlaygroundInitial(graphqlPlaygroundEnabled);
-                    } catch (e: any) {
-                      setPlaygroundError(e?.message || 'Failed to save');
-                    } finally {
-                      setPlaygroundSaving(false);
-                    }
-                  }}
-                >
-                  Save
-                </Button>
-                {graphqlPlaygroundInitial !== null &&
-                  graphqlPlaygroundEnabled !== graphqlPlaygroundInitial && (
-                    <Button
-                      variant="subtle"
-                      size="xs"
-                      disabled={playgroundSaving}
-                      onClick={() =>
-                        setGraphqlPlaygroundEnabled(graphqlPlaygroundInitial!)
-                      }
-                    >
-                      Reset
-                    </Button>
-                  )}
-              </Group>
-              <Alert
-                icon={<IconInfoCircle size={16} />}
-                color="blue"
-                variant="light"
-              >
-                <Text size="xs">
-                  GraphQL Playground provides an interactive query interface for
-                  testing GraphQL operations. Access it at{' '}
-                  <code>/playground</code> when enabled.
-                </Text>
-              </Alert>
-            </>
-          )}
-        </Stack>
-      </Card>
-
-      <Card shadow="sm" p="lg" radius="md" withBorder>
-        <Stack spacing="md">
-          <Group spacing="sm">
-            <IconClock size={20} />
-            <Text weight={500} size="md">
-              Request Latency Tracking
-            </Text>
-          </Group>
-          {latencyTrackingEnabled === null ? (
-            <Group>
-              <Loader size="sm" /> <Text size="sm">Loading setting...</Text>
-            </Group>
-          ) : latencyError ? (
-            <Alert
-              color="red"
-              title="Failed to load"
-              icon={<IconInfoCircle size={16} />}
-            >
-              {latencyError}
-            </Alert>
-          ) : (
-            <>
-              <Group position="apart">
-                <div>
-                  <Text weight={500} size="sm">
-                    Enable Request Latency Tracking
-                  </Text>
-                  <Text size="xs" color="dimmed">
-                    When enabled, collects performance metrics for all GraphQL
-                    operations. This data is used for monitoring, analytics, and
-                    performance optimization.
-                  </Text>
-                </div>
-                <Switch
-                  checked={!!latencyTrackingEnabled}
-                  onChange={(e) =>
-                    setLatencyTrackingEnabled(e.currentTarget.checked)
-                  }
-                  onLabel="ON"
-                  offLabel="OFF"
-                />
-              </Group>
-              <Group spacing="sm">
-                <Button
-                  size="xs"
-                  loading={latencySaving}
-                  disabled={
-                    latencySaving ||
-                    latencyTrackingEnabled === null ||
-                    latencyTrackingEnabled === latencyTrackingInitial
-                  }
-                  onClick={async () => {
-                    if (latencyTrackingEnabled === null) return;
-                    setLatencySaving(true);
-                    setLatencyError(null);
-                    try {
-                      const res = await authenticatedFetch('/graphql', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          query: `mutation Set($enabled:Boolean!){ setLatencyTrackingEnabled(enabled:$enabled) }`,
-                          variables: { enabled: latencyTrackingEnabled },
-                        }),
-                      });
-                      const json = await res.json();
-                      if (json.errors)
-                        throw new Error(
-                          json.errors[0]?.message || 'Failed to save'
-                        );
-                      setLatencyTrackingInitial(latencyTrackingEnabled);
-                    } catch (e: any) {
-                      setLatencyError(e?.message || 'Failed to save');
-                    } finally {
-                      setLatencySaving(false);
-                    }
-                  }}
-                >
-                  Save
-                </Button>
-                {latencyTrackingInitial !== null &&
-                  latencyTrackingEnabled !== latencyTrackingInitial && (
-                    <Button
-                      variant="subtle"
-                      size="xs"
-                      disabled={latencySaving}
-                      onClick={() =>
-                        setLatencyTrackingEnabled(latencyTrackingInitial!)
-                      }
-                    >
-                      Reset
-                    </Button>
-                  )}
-              </Group>
-              <Alert
-                icon={<IconInfoCircle size={16} />}
-                color="blue"
-                variant="light"
-              >
-                <Text size="xs">
-                  Latency tracking collects response times, error rates, and
-                  operation metrics. Data retention follows the same schedule as
-                  audit logs ({auditRetention || 90} days). Disabling this will
-                  stop new data collection but preserve existing data.
-                </Text>
-              </Alert>
-            </>
-          )}
-        </Stack>
-      </Card>
-
-      <Card shadow="sm" p="lg" radius="md" withBorder>
-        <Stack spacing="md">
-          <Text weight={500} size="md">
-            Current Session Status
-          </Text>
-
-          <Group position="apart">
-            <Text size="sm">Time until expiry:</Text>
-            <Badge
-              color={
-                timeToExpiry && timeToExpiry > 10
-                  ? 'green'
-                  : timeToExpiry && timeToExpiry > 5
-                    ? 'yellow'
-                    : 'red'
-              }
-            >
-              {timeToExpiry ? `${timeToExpiry} minutes` : 'Unknown'}
-            </Badge>
-          </Group>
-
-          <Group position="apart">
-            <Text size="sm">Auto-refresh status:</Text>
-            <Badge color={autoRefreshEnabled ? 'green' : 'gray'}>
-              {autoRefreshEnabled ? 'Enabled' : 'Disabled'}
-            </Badge>
-          </Group>
-
-          <Divider />
-
-          <Group spacing="sm">
-            <Button
-              variant="light"
-              size="sm"
-              onClick={handleManualRefresh}
-              loading={isRefreshing}
-              disabled={!timeToExpiry || timeToExpiry <= 0}
-            >
-              Refresh Session Now
-            </Button>
-            <Text size="xs" color="dimmed">
-              Manually extend your session by 15 minutes
-            </Text>
-          </Group>
-        </Stack>
-      </Card>
-
-      <Card shadow="sm" p="lg" radius="md" withBorder>
-        <Stack spacing="md">
-          <Group spacing="sm">
-            <IconDatabase size={20} />
-            <Text weight={500} size="md">
-              Audit Log Retention
-            </Text>
-          </Group>
-          {auditLoading ? (
-            <Group>
-              <Loader size="sm" />{' '}
-              <Text size="sm">Loading current retention...</Text>
-            </Group>
-          ) : auditError ? (
-            <Alert
-              color="red"
-              title="Failed to load"
-              icon={<IconInfoCircle size={16} />}
-            >
-              {' '}
-              {auditError}{' '}
-            </Alert>
-          ) : (
-            <>
-              <NumberInput
-                label="Retention (days)"
-                description="How long audit log entries are kept before eligible for cleanup"
-                min={1}
-                max={1825}
-                value={auditRetention === null ? undefined : auditRetention}
-                onChange={(val) =>
-                  setAuditRetention(
-                    typeof val === 'number' ? val : auditRetention
-                  )
-                }
-              />
-              <Group spacing="sm">
-                <Button
-                  size="xs"
-                  disabled={
-                    auditSaving ||
-                    auditRetention === null ||
-                    auditRetention === auditInitial
-                  }
-                  loading={auditSaving}
-                  onClick={async () => {
-                    if (auditRetention === null) return;
-                    setAuditSaving(true);
-                    setAuditError(null);
-                    try {
-                      const res = await authenticatedFetch('/graphql', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          query: `mutation UpdateRetention($days: Int!) { updateAuditLogRetentionDays(days: $days) }`,
-                          variables: { days: auditRetention },
-                        }),
-                      });
-                      const json = await res.json();
-                      if (json.errors) {
-                        throw new Error(
-                          json.errors[0]?.message || 'Update failed'
-                        );
-                      }
-                      setAuditInitial(auditRetention);
-                    } catch (e: any) {
-                      setAuditError(e?.message || 'Failed to update retention');
-                    } finally {
-                      setAuditSaving(false);
-                    }
-                  }}
-                >
-                  Save
-                </Button>
-                {auditInitial !== null && auditRetention !== auditInitial && (
-                  <Button
-                    variant="subtle"
-                    size="xs"
-                    disabled={auditSaving}
-                    onClick={() => setAuditRetention(auditInitial)}
-                  >
-                    Reset
-                  </Button>
-                )}
-              </Group>
-              <Alert
-                icon={<IconInfoCircle size={16} />}
-                color="blue"
-                variant="light"
-              >
-                <Text size="xs">
-                  Increasing retention increases storage usage. The cleanup job
-                  runs periodically based on configured cleanup interval;
-                  changes apply to newly written logs immediately.
-                </Text>
-              </Alert>
-            </>
-          )}
-        </Stack>
-      </Card>
-
-      <Card shadow="sm" p="lg" radius="md" withBorder>
-        <Stack spacing="md">
-          <Group spacing="sm">
-            <IconInfoCircle size={20} />
-            <Text weight={500} size="md">
-              Public Documentation Mode
-            </Text>
-          </Group>
-          {auditLoading ? (
-            <Group>
-              <Loader size="sm" />{' '}
-              <Text size="sm">Loading current mode...</Text>
-            </Group>
-          ) : docsModeError ? (
-            <Alert
-              color="red"
-              title="Failed to load"
-              icon={<IconInfoCircle size={16} />}
-            >
-              {docsModeError}
-            </Alert>
-          ) : (
-            <>
-              <Select
-                label="Mode"
-                description="Controls visibility of published API documentation pages"
-                value={docsMode ?? undefined}
-                onChange={(val) => setDocsMode((val as any) || docsMode)}
-                data={[
-                  {
-                    value: 'DISABLED',
-                    label: 'Disabled (hidden from all users)',
-                  },
-                  {
-                    value: 'PREVIEW',
-                    label: 'Preview (only authenticated users)',
-                  },
-                  { value: 'ENABLED', label: 'Enabled (publicly accessible)' },
-                ]}
-              />
-              <Group spacing="sm">
-                <Button
-                  size="xs"
-                  loading={docsModeSaving}
-                  disabled={
-                    docsModeSaving ||
-                    docsMode === null ||
-                    docsMode === docsModeInitial
-                  }
-                  onClick={async () => {
-                    if (docsMode === null) return;
-                    setDocsModeSaving(true);
-                    setDocsModeError(null);
-                    try {
-                      const res = await authenticatedFetch('/graphql', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          query: `mutation SetDocsMode($mode: PublicDocumentationMode!) { setPublicDocumentationMode(mode: $mode) }`,
-                          variables: { mode: docsMode },
-                        }),
-                      });
-                      const json = await res.json();
-                      if (json.errors)
-                        throw new Error(
-                          json.errors[0]?.message || 'Update failed'
-                        );
-                      setDocsModeInitial(docsMode);
-                    } catch (e: any) {
-                      setDocsModeError(e?.message || 'Failed to update mode');
-                    } finally {
-                      setDocsModeSaving(false);
-                    }
-                  }}
-                >
-                  Save
-                </Button>
-                {docsModeInitial !== null && docsMode !== docsModeInitial && (
-                  <Button
-                    variant="subtle"
-                    size="xs"
-                    disabled={docsModeSaving}
-                    onClick={() => setDocsMode(docsModeInitial)}
-                  >
-                    Reset
-                  </Button>
-                )}
-              </Group>
-              <Alert
-                icon={<IconInfoCircle size={16} />}
-                color="blue"
-                variant="light"
-              >
-                <Text size="xs">
-                  <strong>DISABLED:</strong> No documentation pages are served.{' '}
-                  <strong>PREVIEW:</strong> Accessible only to authenticated
-                  users. <strong>ENABLED:</strong> Publicly accessible without
-                  authentication.
-                </Text>
-              </Alert>
-            </>
-          )}
-        </Stack>
-      </Card>
-
-      <Card shadow="sm" p="lg" radius="md" withBorder>
-        <Stack spacing="md">
-          <Text weight={500} size="md">
-            How It Works
-          </Text>
-
-          <Stack spacing="xs">
-            <Text size="sm">
-              • <strong>Access Tokens:</strong> Valid for 15 minutes
-            </Text>
-            <Text size="sm">
-              • <strong>Refresh Tokens:</strong> Valid for 7 days
-            </Text>
-            <Text size="sm">
-              • <strong>Auto-refresh:</strong> Triggers 2 minutes before token
-              expiry
-            </Text>
-            <Text size="sm">
-              • <strong>Maximum Session:</strong> Up to 7 days with auto-refresh
-              enabled
-            </Text>
-          </Stack>
-
-          <Alert
-            icon={<IconInfoCircle size={16} />}
-            color="yellow"
-            variant="light"
-          >
-            <Text size="sm">
-              <strong>Security Note:</strong> Short-lived access tokens (15
-              minutes) provide better security while automatic refresh ensures
-              convenience. You can disable auto-refresh if you prefer manual
-              control over your session duration.
-            </Text>
-          </Alert>
-        </Stack>
-      </Card>
+      <AuditRetentionCard
+        loading={auditLoading}
+        error={auditError}
+        value={auditRetention}
+        onChange={setAuditRetention}
+        onReset={() => auditInitial !== null && setAuditRetention(auditInitial)}
+        showReset={auditInitial !== null && auditRetention !== auditInitial}
+      />
     </Stack>
   );
 };

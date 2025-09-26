@@ -11,15 +11,19 @@ import {
   PermissionOperationType,
   ServicePermission,
 } from '../../entities/service-permission.entity';
-import { Service, ServiceStatus, SubscriptionTransport } from '../../entities/service.entity';
+import {
+  Service,
+  ServiceStatus,
+  SubscriptionTransport,
+} from '../../entities/service.entity';
 import { UserServiceRole } from '../../entities/user-service-role.entity';
 import { log } from '../../utils/logger';
 import { User } from '../users/user.entity';
 import {
   DEFAULT_PERMISSION_TEMPLATES,
+  LOCAL_SERVICE_URL,
   PERMISSION_KEY_PREFIX,
   PERMISSION_PROFILE_TTL_MS,
-  LOCAL_SERVICE_URL,
   setLocalServiceId,
 } from './permission.constants';
 import {
@@ -58,7 +62,10 @@ export class PermissionService {
   private readonly serviceRepo: Repository<Service>;
   private readonly userRepo: Repository<User>;
 
-  private readonly profileCache = new Map<string, PermissionProfileCacheEntry>();
+  private readonly profileCache = new Map<
+    string,
+    PermissionProfileCacheEntry
+  >();
   private readonly operationIndex = new Map<string, Set<string>>();
   private readonly permissionCache = new Map<string, ServicePermission>();
 
@@ -1368,10 +1375,7 @@ export class PermissionService {
       return;
     }
 
-    const invalid = permissions.filter(
-      (perm) =>
-  perm.serviceId !== serviceId
-    );
+    const invalid = permissions.filter((perm) => perm.serviceId !== serviceId);
 
     if (invalid.length) {
       throw new Error(

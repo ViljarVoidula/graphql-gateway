@@ -1,8 +1,23 @@
-import { Arg, Ctx, Directive, Field, ID, InputType, Mutation, ObjectType, Query, Resolver } from 'type-graphql';
+import {
+  Arg,
+  Ctx,
+  Directive,
+  Field,
+  ID,
+  InputType,
+  Mutation,
+  ObjectType,
+  Query,
+  Resolver,
+} from 'type-graphql';
 import { Service } from 'typedi';
 import { YogaContext } from '../../auth/session.config';
 import { ServiceKey } from '../../entities/service-key.entity';
-import { Service as ServiceEntity, ServiceStatus, SubscriptionTransport } from '../../entities/service.entity';
+import {
+  Service as ServiceEntity,
+  ServiceStatus,
+  SubscriptionTransport,
+} from '../../entities/service.entity';
 import { ServiceRegistryService } from './service-registry.service';
 
 @ObjectType()
@@ -70,6 +85,9 @@ class RegisterServiceInput {
   @Field({ defaultValue: false })
   useMsgPack: boolean;
 
+  @Field({ defaultValue: false, nullable: true })
+  enablePermissionChecks?: boolean;
+
   @Field({ defaultValue: true })
   externally_accessible?: boolean;
 
@@ -106,6 +124,9 @@ class UpdateServiceInput {
   @Field({ nullable: true })
   useMsgPack?: boolean;
 
+  @Field({ nullable: true })
+  enablePermissionChecks?: boolean;
+
   @Field(() => ServiceStatus, { nullable: true })
   status?: ServiceStatus;
 
@@ -129,21 +150,31 @@ export class ServiceRegistryResolver {
   @Query(() => [ServiceEntity])
   async myServices(@Ctx() ctx: YogaContext): Promise<ServiceEntity[]> {
     if (!ctx.user) throw new Error('User not authenticated');
-    return this.serviceRegistryService.getServicesByOwnerIncludingInactive(ctx.user.id);
+    return this.serviceRegistryService.getServicesByOwnerIncludingInactive(
+      ctx.user.id
+    );
   }
 
   @Query(() => ServiceEntity, { nullable: true })
-  async service(@Arg('id', () => ID) id: string): Promise<ServiceEntity | null> {
+  async service(
+    @Arg('id', () => ID) id: string
+  ): Promise<ServiceEntity | null> {
     return this.serviceRegistryService.getServiceById(id);
   }
 
   @Query(() => [ServiceKey])
-  async serviceKeys(@Arg('serviceId', () => ID) serviceId: string, @Ctx() ctx: YogaContext): Promise<ServiceKey[]> {
+  async serviceKeys(
+    @Arg('serviceId', () => ID) serviceId: string,
+    @Ctx() ctx: YogaContext
+  ): Promise<ServiceKey[]> {
     // Check if user owns the service or is admin
     const service = await this.serviceRegistryService.getServiceById(serviceId);
     if (!service) throw new Error('Service not found');
 
-    if (service.ownerId !== ctx.user?.id && !ctx.user?.permissions?.includes('admin')) {
+    if (
+      service.ownerId !== ctx.user?.id &&
+      !ctx.user?.permissions?.includes('admin')
+    ) {
       throw new Error('Not authorized to view keys for this service');
     }
 
@@ -172,7 +203,7 @@ export class ServiceRegistryResolver {
     const serviceData = {
       ...input,
       externally_accessible: input.externally_accessible !== false,
-      ownerId
+      ownerId,
     };
 
     // Prevent registering internal pseudo endpoints
@@ -180,7 +211,8 @@ export class ServiceRegistryResolver {
       throw new Error('Cannot register internal gateway endpoints');
     }
 
-    const { service, hmacKey } = await this.serviceRegistryService.registerService(serviceData);
+    const { service, hmacKey } =
+      await this.serviceRegistryService.registerService(serviceData);
 
     // Trigger schema reload
     if ((ctx as any).schemaLoader) {
@@ -190,7 +222,7 @@ export class ServiceRegistryResolver {
     return {
       service,
       hmacKey,
-      success: true
+      success: true,
     };
   }
 
@@ -200,7 +232,11 @@ export class ServiceRegistryResolver {
     @Arg('input') input: UpdateServiceInput,
     @Ctx() ctx: YogaContext
   ): Promise<boolean> {
-    const service = await this.serviceRegistryService.updateService(id, input, ctx.user?.id);
+    const service = await this.serviceRegistryService.updateService(
+      id,
+      input,
+      ctx.user?.id
+    );
 
     if ((ctx as any).schemaLoader) {
       await (ctx as any).schemaLoader.reload();
@@ -210,13 +246,19 @@ export class ServiceRegistryResolver {
   }
 
   @Mutation(() => Boolean)
-  async removeService(@Arg('id', () => ID) id: string, @Ctx() ctx: YogaContext): Promise<boolean> {
+  async removeService(
+    @Arg('id', () => ID) id: string,
+    @Ctx() ctx: YogaContext
+  ): Promise<boolean> {
     const svc = await this.serviceRegistryService.getServiceById(id);
     if (svc?.url === 'internal://gateway') {
       throw new Error('Cannot remove internal gateway service');
     }
 
-    const success = await this.serviceRegistryService.removeService(id, ctx.user?.id);
+    const success = await this.serviceRegistryService.removeService(
+      id,
+      ctx.user?.id
+    );
 
     if (success && (ctx as any).schemaLoader) {
       await (ctx as any).schemaLoader.reload();
@@ -230,11 +272,14 @@ export class ServiceRegistryResolver {
     @Arg('serviceId', () => ID) serviceId: string,
     @Ctx() ctx: YogaContext
   ): Promise<ServiceKeyRotationResult> {
-    const result = await this.serviceRegistryService.rotateServiceKey(serviceId, ctx.user?.id);
+    const result = await this.serviceRegistryService.rotateServiceKey(
+      serviceId,
+      ctx.user?.id
+    );
 
     return {
       ...result,
-      success: true
+      success: true,
     };
   }
 
@@ -256,7 +301,7 @@ export class ServiceRegistryResolver {
     }
 
     const service = await this.serviceRegistryService.updateService(serviceId, {
-      ownerId: newOwnerId
+      ownerId: newOwnerId,
     });
 
     return !!service;
@@ -275,7 +320,7 @@ export class ServiceRegistryResolver {
     @Arg('externally_accessible') externally_accessible: boolean
   ): Promise<boolean> {
     const service = await this.serviceRegistryService.updateService(serviceId, {
-      externally_accessible
+      externally_accessible,
     });
 
     return !!service;

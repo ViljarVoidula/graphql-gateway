@@ -17,7 +17,7 @@ import {
   TextInput,
   ThemeIcon,
   Title,
-  Tooltip
+  Tooltip,
 } from '@mantine/core';
 import { showNotification } from '@mantine/notifications';
 import { useDelete, useList } from '@refinedev/core';
@@ -29,7 +29,7 @@ import {
   IconRefresh,
   IconSearch,
   IconServer,
-  IconTrash
+  IconTrash,
 } from '@tabler/icons-react';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -37,11 +37,13 @@ import { useNavigate } from 'react-router-dom';
 export const ServiceList: React.FC = () => {
   const navigate = useNavigate();
   const [searchValue, setSearchValue] = React.useState('');
-  const [statusFilter, setStatusFilter] = React.useState<'all' | 'active' | 'inactive' | 'maintenance'>('all');
+  const [statusFilter, setStatusFilter] = React.useState<
+    'all' | 'active' | 'inactive' | 'maintenance'
+  >('all');
   const [serviceToDelete, setServiceToDelete] = React.useState<any>(null);
 
   const { data, isLoading, isError, error, refetch } = useList({
-    resource: 'services'
+    resource: 'services',
   });
 
   const { mutate: deleteService, isLoading: isDeleting } = useDelete();
@@ -49,8 +51,14 @@ export const ServiceList: React.FC = () => {
   const services = data?.data || [];
 
   const filteredServices = services
-    .filter((service: any) => service.name.toLowerCase().includes(searchValue.toLowerCase()))
-    .filter((service: any) => (statusFilter === 'all' ? true : service.status?.toLowerCase() === statusFilter));
+    .filter((service: any) =>
+      service.name.toLowerCase().includes(searchValue.toLowerCase())
+    )
+    .filter((service: any) =>
+      statusFilter === 'all'
+        ? true
+        : service.status?.toLowerCase() === statusFilter
+    );
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -75,7 +83,7 @@ export const ServiceList: React.FC = () => {
     deleteService(
       {
         resource: 'services',
-        id: serviceToDelete.id
+        id: serviceToDelete.id,
       },
       {
         onSuccess: () => {
@@ -87,9 +95,9 @@ export const ServiceList: React.FC = () => {
             title: 'Error',
             message: error.message || 'Failed to delete service',
             color: 'red',
-            icon: <IconAlertCircle />
+            icon: <IconAlertCircle />,
           });
-        }
+        },
       }
     );
   };
@@ -98,7 +106,12 @@ export const ServiceList: React.FC = () => {
     <>
       <Box p="xl" style={{ backgroundColor: '#fafafa', minHeight: '100vh' }}>
         <Stack spacing="xl">
-          <Paper p="xl" radius="lg" withBorder style={{ backgroundColor: 'white' }}>
+          <Paper
+            p="xl"
+            radius="lg"
+            withBorder
+            style={{ backgroundColor: 'white' }}
+          >
             <Group position="apart" align="center">
               <Group spacing="md">
                 <ThemeIcon size="xl" radius="md" variant="light" color="green">
@@ -113,7 +126,11 @@ export const ServiceList: React.FC = () => {
                   </Text>
                 </div>
               </Group>
-              <Button size="md" leftIcon={<IconPlus size={16} />} onClick={() => navigate('/services/create')}>
+              <Button
+                size="md"
+                leftIcon={<IconPlus size={16} />}
+                onClick={() => navigate('/services/create')}
+              >
                 Register Service
               </Button>
             </Group>
@@ -125,7 +142,13 @@ export const ServiceList: React.FC = () => {
             </Alert>
           )}
 
-          <Card shadow="xs" p="xl" radius="lg" withBorder style={{ backgroundColor: 'white' }}>
+          <Card
+            shadow="xs"
+            p="xl"
+            radius="lg"
+            withBorder
+            style={{ backgroundColor: 'white' }}
+          >
             <Group position="apart">
               <TextInput
                 placeholder="Search services by name..."
@@ -141,46 +164,123 @@ export const ServiceList: React.FC = () => {
                     { value: 'all', label: 'All Statuses' },
                     { value: 'active', label: 'Active' },
                     { value: 'inactive', label: 'Inactive' },
-                    { value: 'maintenance', label: 'Maintenance' }
+                    { value: 'maintenance', label: 'Maintenance' },
                   ]}
                   value={statusFilter}
-                  onChange={(v: string | null) => setStatusFilter((v as any) ?? 'all')}
+                  onChange={(v: string | null) =>
+                    setStatusFilter((v as any) ?? 'all')
+                  }
                   label="Filter by Status"
                   clearable={false}
                   style={{ minWidth: 180 }}
                   size="md"
                 />
-                <Button variant="light" size="md" leftIcon={<IconRefresh size={16} />} onClick={() => refetch()}>
+                <Button
+                  variant="light"
+                  size="md"
+                  leftIcon={<IconRefresh size={16} />}
+                  onClick={() => refetch()}
+                >
                   Refresh
                 </Button>
               </Group>
             </Group>
           </Card>
 
-          <Card shadow="xs" radius="lg" withBorder style={{ backgroundColor: 'white' }}>
+          <Card
+            shadow="xs"
+            radius="lg"
+            withBorder
+            style={{ backgroundColor: 'white' }}
+          >
             <LoadingOverlay visible={isLoading} />
-            <Table highlightOnHover verticalSpacing="md" style={{ backgroundColor: 'white' }}>
+            <Table
+              highlightOnHover
+              verticalSpacing="md"
+              style={{ backgroundColor: 'white' }}
+            >
               <thead>
                 <tr>
-                  <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Service</th>
-                  <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>URL</th>
-                  <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Status</th>
-                  <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Security</th>
-                  <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Features</th>
-                  <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Created</th>
-                  <th style={{ fontWeight: 600, fontSize: '14px', color: '#495057' }}>Actions</th>
+                  <th
+                    style={{
+                      fontWeight: 600,
+                      fontSize: '14px',
+                      color: '#495057',
+                    }}
+                  >
+                    Service
+                  </th>
+                  <th
+                    style={{
+                      fontWeight: 600,
+                      fontSize: '14px',
+                      color: '#495057',
+                    }}
+                  >
+                    URL
+                  </th>
+                  <th
+                    style={{
+                      fontWeight: 600,
+                      fontSize: '14px',
+                      color: '#495057',
+                    }}
+                  >
+                    Status
+                  </th>
+                  <th
+                    style={{
+                      fontWeight: 600,
+                      fontSize: '14px',
+                      color: '#495057',
+                    }}
+                  >
+                    Security
+                  </th>
+                  <th
+                    style={{
+                      fontWeight: 600,
+                      fontSize: '14px',
+                      color: '#495057',
+                    }}
+                  >
+                    Features
+                  </th>
+                  <th
+                    style={{
+                      fontWeight: 600,
+                      fontSize: '14px',
+                      color: '#495057',
+                    }}
+                  >
+                    Created
+                  </th>
+                  <th
+                    style={{
+                      fontWeight: 600,
+                      fontSize: '14px',
+                      color: '#495057',
+                    }}
+                  >
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {filteredServices.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '3rem' }}>
+                    <td
+                      colSpan={7}
+                      style={{ textAlign: 'center', padding: '3rem' }}
+                    >
                       <Center>
                         <Stack align="center" spacing="md">
                           <IconServer size={48} color="#ced4da" />
                           <div>
                             <Text size="lg" weight={500} color="dimmed">
-                              {isLoading ? 'Loading services...' : 'No services found'}
+                              {isLoading
+                                ? 'Loading services...'
+                                : 'No services found'}
                             </Text>
                             {!isLoading && searchValue && (
                               <Text size="sm" color="dimmed" mt="xs">
@@ -198,7 +298,12 @@ export const ServiceList: React.FC = () => {
                       <td>
                         <div>
                           <Group spacing="sm">
-                            <ThemeIcon size="sm" radius="md" variant="light" color="green">
+                            <ThemeIcon
+                              size="sm"
+                              radius="md"
+                              variant="light"
+                              color="green"
+                            >
                               <IconServer size={16} />
                             </ThemeIcon>
                             <div>
@@ -215,18 +320,31 @@ export const ServiceList: React.FC = () => {
                         </div>
                       </td>
                       <td>
-                        <Text size="sm" color="blue" style={{ fontFamily: 'monospace' }} lineClamp={1}>
+                        <Text
+                          size="sm"
+                          color="blue"
+                          style={{ fontFamily: 'monospace' }}
+                          lineClamp={1}
+                        >
                           {service.url}
                         </Text>
                       </td>
                       <td>
-                        <Badge color={getStatusColor(service.status)} variant="filled" size="sm">
+                        <Badge
+                          color={getStatusColor(service.status)}
+                          variant="filled"
+                          size="sm"
+                        >
                           {service.status || 'Unknown'}
                         </Badge>
                       </td>
                       <td>
                         <Group spacing="xs">
-                          <Badge color={service.enableHMAC ? 'green' : 'gray'} variant="light" size="xs">
+                          <Badge
+                            color={service.enableHMAC ? 'green' : 'gray'}
+                            variant="light"
+                            size="xs"
+                          >
                             HMAC
                           </Badge>
                         </Group>
@@ -243,11 +361,18 @@ export const ServiceList: React.FC = () => {
                               Batching
                             </Badge>
                           )}
+                          {service.enablePermissionChecks && (
+                            <Badge color="teal" variant="light" size="xs">
+                              Perms
+                            </Badge>
+                          )}
                         </Group>
                       </td>
                       <td>
                         <Text size="sm" color="dimmed">
-                          {service.createdAt ? new Date(service.createdAt).toLocaleDateString() : 'N/A'}
+                          {service.createdAt
+                            ? new Date(service.createdAt).toLocaleDateString()
+                            : 'N/A'}
                         </Text>
                       </td>
                       <td>
@@ -257,7 +382,9 @@ export const ServiceList: React.FC = () => {
                               color="blue"
                               variant="light"
                               size="md"
-                              onClick={() => navigate(`/services/${service.id}`)}
+                              onClick={() =>
+                                navigate(`/services/${service.id}`)
+                              }
                             >
                               <IconEye size={16} />
                             </ActionIcon>
@@ -267,13 +394,20 @@ export const ServiceList: React.FC = () => {
                               color="orange"
                               variant="light"
                               size="md"
-                              onClick={() => navigate(`/services/${service.id}/edit`)}
+                              onClick={() =>
+                                navigate(`/services/${service.id}/edit`)
+                              }
                             >
                               <IconEdit size={16} />
                             </ActionIcon>
                           </Tooltip>
                           <Tooltip label="Delete Service">
-                            <ActionIcon color="red" variant="light" size="md" onClick={() => handleDeleteService(service)}>
+                            <ActionIcon
+                              color="red"
+                              variant="light"
+                              size="md"
+                              onClick={() => handleDeleteService(service)}
+                            >
                               <IconTrash size={16} />
                             </ActionIcon>
                           </Tooltip>
@@ -290,7 +424,8 @@ export const ServiceList: React.FC = () => {
             <Paper p="md" radius="md" style={{ backgroundColor: 'white' }}>
               <Group position="center">
                 <Text size="sm" color="dimmed">
-                  Showing {filteredServices.length} of {services.length} services
+                  Showing {filteredServices.length} of {services.length}{' '}
+                  services
                 </Text>
               </Group>
             </Paper>
@@ -299,10 +434,16 @@ export const ServiceList: React.FC = () => {
       </Box>
 
       {/* Delete Confirmation Modal */}
-      <Modal opened={!!serviceToDelete} onClose={() => setServiceToDelete(null)} title="Delete Service" size="md">
+      <Modal
+        opened={!!serviceToDelete}
+        onClose={() => setServiceToDelete(null)}
+        title="Delete Service"
+        size="md"
+      >
         <Stack spacing="md">
           <Alert icon={<IconAlertCircle />} color="red">
-            Are you sure you want to delete this service? This action cannot be undone.
+            Are you sure you want to delete this service? This action cannot be
+            undone.
           </Alert>
 
           {serviceToDelete && (

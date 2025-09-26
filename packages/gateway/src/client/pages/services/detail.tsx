@@ -469,6 +469,17 @@ export const ServiceDetail: React.FC = () => {
                   </Group>
                   <Group position="apart">
                     <Text size="sm" color="dimmed" weight={500}>
+                      Permission Checks
+                    </Text>
+                    <Badge
+                      color={service.enablePermissionChecks ? 'green' : 'gray'}
+                      variant="light"
+                    >
+                      {service.enablePermissionChecks ? 'Enabled' : 'Disabled'}
+                    </Badge>
+                  </Group>
+                  <Group position="apart">
+                    <Text size="sm" color="dimmed" weight={500}>
                       Created
                     </Text>
                     <Text size="sm">
@@ -488,10 +499,12 @@ export const ServiceDetail: React.FC = () => {
             </Grid.Col>
           </Grid>
 
-          <PermissionManagement
-            serviceId={service.id as string}
-            serviceName={service.name}
-          />
+          {service.enablePermissionChecks && (
+            <PermissionManagement
+              serviceId={service.id as string}
+              serviceName={service.name}
+            />
+          )}
 
           {/* Schema Changes Panel */}
           <SchemaChangesPanel serviceId={service.id as string} />

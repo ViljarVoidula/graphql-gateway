@@ -13,7 +13,7 @@ import {
   Text,
   TextInput,
   Textarea,
-  Title
+  Title,
 } from '@mantine/core';
 import { showNotification } from '@mantine/notifications';
 import { useCustomMutation, useOne, useUpdate } from '@refinedev/core';
@@ -31,6 +31,7 @@ interface ServiceFormData {
   timeout: number;
   enableBatching: boolean;
   useMsgPack: boolean;
+  enablePermissionChecks: boolean;
   status?: 'active' | 'inactive' | 'maintenance';
 }
 
@@ -42,10 +43,10 @@ export const ServiceEdit: React.FC = () => {
     data: serviceData,
     isLoading: isLoadingService,
     error: loadError,
-    refetch
+    refetch,
   } = useOne({
     resource: 'services',
-    id: id!
+    id: id!,
   });
   const { mutate: customMutate } = useCustomMutation();
 
@@ -59,7 +60,7 @@ export const ServiceEdit: React.FC = () => {
     formState: { errors },
     watch,
     reset,
-    setValue
+    setValue,
   } = useForm<ServiceFormData>({
     defaultValues: {
       name: '',
@@ -70,8 +71,9 @@ export const ServiceEdit: React.FC = () => {
       timeout: 5000,
       enableBatching: true,
       useMsgPack: false,
-      status: 'active'
-    }
+      enablePermissionChecks: false,
+      status: 'active',
+    },
   });
 
   const watchedValues = watch();
@@ -88,7 +90,8 @@ export const ServiceEdit: React.FC = () => {
         timeout: service.timeout || 5000,
         enableBatching: service.enableBatching ?? true,
         useMsgPack: service.useMsgPack ?? false,
-        status: (service.status as any) || 'active'
+        enablePermissionChecks: service.enablePermissionChecks ?? false,
+        status: (service.status as any) || 'active',
       });
     }
   }, [service, reset]);
@@ -103,7 +106,7 @@ export const ServiceEdit: React.FC = () => {
         method: 'post',
         url: '',
         values: { serviceId: service.id, externally_accessible: next },
-        meta: { operation: 'setServiceExternallyAccessible' }
+        meta: { operation: 'setServiceExternallyAccessible' },
       },
       {
         onSuccess: (res: any) => {
@@ -115,9 +118,11 @@ export const ServiceEdit: React.FC = () => {
           setTogglingExternal(false);
         },
         onError: (err: any) => {
-          setExternalError(err?.message || 'Failed to update external accessibility');
+          setExternalError(
+            err?.message || 'Failed to update external accessibility'
+          );
           setTogglingExternal(false);
-        }
+        },
       }
     );
   };
@@ -127,7 +132,7 @@ export const ServiceEdit: React.FC = () => {
       {
         resource: 'services',
         id: id!,
-        values
+        values,
       },
       {
         onSuccess: () => {
@@ -138,9 +143,9 @@ export const ServiceEdit: React.FC = () => {
             title: 'Error',
             message: error.message || 'Failed to update service',
             color: 'red',
-            icon: <IconAlertCircle />
+            icon: <IconAlertCircle />,
           });
-        }
+        },
       }
     );
   };
@@ -170,7 +175,11 @@ export const ServiceEdit: React.FC = () => {
     return (
       <Stack spacing="lg">
         <Group>
-          <Button variant="subtle" leftIcon={<IconArrowLeft size={16} />} onClick={() => navigate('/services')}>
+          <Button
+            variant="subtle"
+            leftIcon={<IconArrowLeft size={16} />}
+            onClick={() => navigate('/services')}
+          >
             Back to Services
           </Button>
           <Title order={2}>Edit Service</Title>
@@ -185,15 +194,24 @@ export const ServiceEdit: React.FC = () => {
   return (
     <Stack spacing="lg">
       <Group>
-        <Button variant="subtle" leftIcon={<IconArrowLeft size={16} />} onClick={() => navigate('/services')}>
+        <Button
+          variant="subtle"
+          leftIcon={<IconArrowLeft size={16} />}
+          onClick={() => navigate('/services')}
+        >
           Back to Services
         </Button>
         <Title order={2}>Edit Service</Title>
         <Badge color={getStatusColor(service.status)} variant="light">
           {service.status}
         </Badge>
-        <Badge color={service.externally_accessible ? 'blue' : 'gray'} variant="filled">
-          {service.externally_accessible ? 'Externally Accessible' : 'Internal Only'}
+        <Badge
+          color={service.externally_accessible ? 'blue' : 'gray'}
+          variant="filled"
+        >
+          {service.externally_accessible
+            ? 'Externally Accessible'
+            : 'Internal Only'}
         </Badge>
       </Group>
 
@@ -228,14 +246,22 @@ export const ServiceEdit: React.FC = () => {
                 required: 'Service URL is required',
                 pattern: {
                   value: /^https?:\/\/[^\s]+$/,
-                  message: 'Please enter a valid URL'
-                }
+                  message: 'Please enter a valid URL',
+                },
               })}
             />
 
-            <Textarea label="Description" placeholder="Brief description of the service" {...register('description')} />
+            <Textarea
+              label="Description"
+              placeholder="Brief description of the service"
+              {...register('description')}
+            />
 
-            <TextInput label="Version" placeholder="e.g., v1.0.0" {...register('version')} />
+            <TextInput
+              label="Version"
+              placeholder="e.g., v1.0.0"
+              {...register('version')}
+            />
 
             <Divider my="md" />
 
@@ -264,8 +290,14 @@ export const ServiceEdit: React.FC = () => {
               type="hidden"
               {...register('timeout', {
                 required: 'Timeout is required',
-                min: { value: 1000, message: 'Timeout must be at least 1000ms' },
-                max: { value: 30000, message: 'Timeout must be at most 30000ms' }
+                min: {
+                  value: 1000,
+                  message: 'Timeout must be at least 1000ms',
+                },
+                max: {
+                  value: 30000,
+                  message: 'Timeout must be at most 30000ms',
+                },
               })}
             />
 
@@ -283,16 +315,25 @@ export const ServiceEdit: React.FC = () => {
               {...register('useMsgPack')}
             />
 
+            <Switch
+              label="Enable Permission Checks"
+              description="Enforce fine-grained permission rules for this service's root operations"
+              checked={watchedValues.enablePermissionChecks}
+              {...register('enablePermissionChecks')}
+            />
+
             <Select
               label="Status"
               placeholder="Select status"
               data={[
                 { value: 'active', label: 'Active' },
                 { value: 'inactive', label: 'Inactive' },
-                { value: 'maintenance', label: 'Maintenance' }
+                { value: 'maintenance', label: 'Maintenance' },
               ]}
               value={watchedValues.status}
-              onChange={(v: string | null) => setValue('status', (v as any) ?? 'active')}
+              onChange={(v: string | null) =>
+                setValue('status', (v as any) ?? 'active')
+              }
             />
             <input type="hidden" {...register('status')} />
 
@@ -301,10 +342,15 @@ export const ServiceEdit: React.FC = () => {
               <Stack spacing={4} style={{ flex: 1 }}>
                 <Title order={5}>External Accessibility</Title>
                 <Text size="sm" color="dimmed">
-                  Allow this service to be discoverable and whitelisted by applications.
+                  Allow this service to be discoverable and whitelisted by
+                  applications.
                 </Text>
                 {externalError && (
-                  <Alert icon={<IconAlertCircle size={16} />} color="red" mt={4}>
+                  <Alert
+                    icon={<IconAlertCircle size={16} />}
+                    color="red"
+                    mt={4}
+                  >
                     {externalError}
                   </Alert>
                 )}

@@ -299,18 +299,7 @@ const loader = new SchemaLoader(
   [] // Will be populated after database connection
 );
 
-// Try to build an initial local-only schema so early requests have a schema.
-try {
-  if (!loader.schema) {
-    loader.schema = makeEndpointsSchema(loader);
-    log.debug('Built initial local schema before first reload');
-  }
-} catch (e) {
-  log.warn('Failed to build initial local schema; will rely on lazy reload', {
-    operation: 'initialSchemaBuild',
-    error: e instanceof Error ? e : new Error(String(e)),
-  });
-}
+// (Initial local schema build deferred until after PubSub + DI resources are registered)
 
 // Koa application will host the Yoga handler and additional routes
 const app = new Koa();
@@ -400,6 +389,22 @@ const pubSub = createPubSub({
 // Register PubSub instance and GatewayMessagePublisher in DI container
 Container.set('PubSub', pubSub);
 Container.set({ id: 'PubSub', value: pubSub });
+
+// Deferred initial local-only schema build (after DI resources like PubSub are registered)
+try {
+  if (!loader.schema) {
+    loader.schema = makeEndpointsSchema(loader);
+    log.debug('Built initial local schema after DI setup');
+  }
+} catch (e) {
+  log.warn(
+    'Deferred initial local schema build failed; relying on lazy reload',
+    {
+      operation: 'initialSchemaBuild.deferred',
+      error: e instanceof Error ? e : new Error(String(e)),
+    }
+  );
+}
 
 // Runtime response cache config snapshot (updated periodically)
 const responseCacheConfig = {

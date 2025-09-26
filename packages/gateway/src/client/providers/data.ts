@@ -72,6 +72,7 @@ export const dataProvider: DataProvider = {
             timeout
             enableBatching
             useMsgPack
+            enablePermissionChecks
             externally_accessible
             createdAt
             updatedAt
@@ -190,6 +191,7 @@ export const dataProvider: DataProvider = {
             timeout
             enableBatching
             useMsgPack
+            enablePermissionChecks
             externally_accessible
             createdAt
             updatedAt
@@ -286,6 +288,7 @@ export const dataProvider: DataProvider = {
               timeout
               enableBatching
               useMsgPack
+              enablePermissionChecks
               externally_accessible
               createdAt
               updatedAt

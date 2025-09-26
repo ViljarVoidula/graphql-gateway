@@ -78,6 +78,11 @@ export class Service {
   @Column({ default: false })
   useMsgPack!: boolean;
 
+  // Opt-in fine grained permission enforcement (permission guard plugin)
+  @Field()
+  @Column({ default: false })
+  enablePermissionChecks!: boolean;
+
   @Field()
   @Column({ default: true })
   @Index()
