@@ -61,9 +61,6 @@ The gateway uses PostgreSQL for data persistence. Ensure PostgreSQL is running, 
 ```bash
 # Create database and run migrations
 pnpm run migration:run
-
-# Seed initial admin user (optional)
-pnpm run seed:admin
 ```
 
 ### 4. Start the Development Server
@@ -98,13 +95,13 @@ The gateway will be available at:
 - `pnpm run migration:generate` - Generate new migration from entity changes
 - `pnpm run migration:revert` - Revert the last migration
 - `pnpm run migration:show` - Show migration status
-- `pnpm run seed:admin` - Seed initial admin user
 
 ### Testing
 
 - `pnpm test` - Run the test suite with coverage
 - `pnpm run test:watch` - Run tests in watch mode
 - `pnpm run test:setup` - Set up test database
+- `NODE_ENV=test USE_IN_MEMORY_REDIS=1 ./scripts/run-with-env.sh node --test --test-concurrency=1 --test-timeout=60000 --require ts-node/register src/services/users/user.resolver.test.ts` - Run a single test file (example)
 
 ### Documentation
 

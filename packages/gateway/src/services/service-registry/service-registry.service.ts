@@ -11,6 +11,10 @@ import {
 import { keyManager } from '../../security/keyManager';
 import { log } from '../../utils/logger';
 import { User } from '../users/user.entity';
+import {
+  generateDefaultTypePrefix,
+  normalizeTypePrefix,
+} from './type-prefix.util';
 
 @Service()
 export class ServiceRegistryService {
@@ -94,6 +98,8 @@ export class ServiceRegistryService {
     timeout?: number;
     enableBatching?: boolean;
     externally_accessible?: boolean;
+    enableTypePrefix?: boolean;
+    typePrefix?: string | null;
     // New subscription configuration fields
     subscriptionTransport?: any;
     subscriptionPath?: string | null;
@@ -111,8 +117,15 @@ export class ServiceRegistryService {
       throw new Error('Owner not found');
     }
 
+    const enableTypePrefix = !!data.enableTypePrefix;
+    const typePrefix = enableTypePrefix
+      ? normalizeTypePrefix(data.typePrefix, data.name)
+      : null;
+
     const service = this.serviceRepository.create({
       ...data,
+      enableTypePrefix,
+      typePrefix,
       externally_accessible: data.externally_accessible !== false,
       ownerId: owner.id,
       status: ServiceStatus.ACTIVE,
@@ -179,7 +192,35 @@ export class ServiceRegistryService {
       }
     }
 
-    await this.serviceRepository.update(id, data);
+    const payload: Partial<ServiceEntity> = { ...data };
+    const hasTypePrefixField = Object.prototype.hasOwnProperty.call(
+      data,
+      'typePrefix'
+    );
+    const hasEnableTypePrefixField = Object.prototype.hasOwnProperty.call(
+      data,
+      'enableTypePrefix'
+    );
+
+    if (hasEnableTypePrefixField && payload.enableTypePrefix === false) {
+      payload.typePrefix = null;
+    } else if (hasTypePrefixField) {
+      payload.typePrefix = normalizeTypePrefix(
+        payload.typePrefix,
+        data.name ?? service.name
+      );
+      payload.enableTypePrefix = true;
+    } else if (payload.enableTypePrefix === true) {
+      const baseline =
+        service.typePrefix ??
+        generateDefaultTypePrefix(data.name ?? service.name);
+      payload.typePrefix = normalizeTypePrefix(
+        baseline,
+        data.name ?? service.name
+      );
+    }
+
+    await this.serviceRepository.update(id, payload);
 
     // Invalidate cache and trigger gateway reload
     ServiceCacheManager.invalidateServiceCache();

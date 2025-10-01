@@ -17,7 +17,7 @@ services:
     container_name: mongodb
     restart: always
     ports:
-      - '27017:27017'
+      - "27017:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: password
@@ -31,7 +31,7 @@ services:
     image: redis:7.4.1-alpine
     restart: always
     ports:
-      - '26379:6379' # Changed from 16379 to 26379
+      - "26379:6379" # Changed from 16379 to 26379
     volumes:
       - redis:/data
     environment:
@@ -45,7 +45,7 @@ services:
     image: redis:7.4.1-alpine
     restart: always
     ports:
-      - '6379:6379'
+      - "6379:6379"
     volumes:
       - redis:/data
     environment:
@@ -53,17 +53,17 @@ services:
       - REDIS_DISABLE_COMMANDS=FLUSHDB,FLUSHALL
     networks:
       - gateway_net
-  vespa:
-    image: vespaengine/vespa:8.578.22
-    container_name: vespa
-    hostname: vespa-container
-    ports:
-      - '8100:8080' # query / document API
-      - '19071:19071' # config / deploy API
-    healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:19071/state/v1/health']
-      interval: 10s
-      timeout: 5s
-      retries: 30
-    networks:
-      - gateway_net
+  # vespa:
+  #   image: vespaengine/vespa:8.578.22
+  #   container_name: vespa
+  #   hostname: vespa-container
+  #   ports:
+  #     - '8100:8080' # query / document API
+  #     - '19071:19071' # config / deploy API
+  #   healthcheck:
+  #     test: ['CMD', 'curl', '-f', 'http://localhost:19071/state/v1/health']
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 30
+  #   networks:
+  #     - gateway_net

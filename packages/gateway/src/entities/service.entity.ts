@@ -78,6 +78,14 @@ export class Service {
   @Column({ default: false })
   useMsgPack!: boolean;
 
+  @Field()
+  @Column({ default: false })
+  enableTypePrefix!: boolean;
+
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  typePrefix?: string | null;
+
   // Opt-in fine grained permission enforcement (permission guard plugin)
   @Field()
   @Column({ default: false })

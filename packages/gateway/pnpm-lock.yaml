@@ -12,6 +12,9 @@ importers:
 
   .:
     dependencies:
+      '@emotion/react':
+        specifier: ^11.14.0
+        version: 11.14.0(@types/react@18.2.79)(react@18.2.0)
       '@envelop/response-cache-redis':
         specifier: ^4.2.4
         version: 4.2.4(@envelop/core@5.3.0)(graphql@16.11.0)
@@ -42,6 +45,9 @@ importers:
       '@graphql-tools/utils':
         specifier: 10.2.0
         version: 10.2.0(graphql@16.11.0)
+      '@graphql-tools/wrap':
+        specifier: ^11.0.1
+        version: 11.0.1(graphql@16.11.0)
       '@graphql-yoga/plugin-graphql-sse':
         specifier: 3.6.2
         version: 3.6.2(graphql-yoga@5.15.1(graphql@16.11.0))(graphql@16.11.0)
@@ -860,6 +866,12 @@ packages:
     peerDependencies:
       graphql: ^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0
 
+  '@graphql-tools/batch-execute@10.0.1':
+    resolution: {integrity: sha512-MP1odlfq5NZkJylzoeMCbWHqOs58uyxUYOT5L5yb9NTFOCuFj+GUPV5HSX6Hi5vuXPSFfdIe0ypSOoywimRnUg==}
+    engines: {node: '>=20.0.0'}
+    peerDependencies:
+      graphql: ^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0
+
   '@graphql-tools/batch-execute@9.0.17':
     resolution: {integrity: sha512-i7BqBkUP2+ex8zrQrCQTEt6nYHQmIey9qg7CMRRa1hXCY2X8ZCVjxsvbsi7gOLwyI/R3NHxSRDxmzZevE2cPLg==}
     engines: {node: '>=18.0.0'}
@@ -886,6 +898,12 @@ packages:
 
   '@graphql-tools/delegate@11.0.0':
     resolution: {integrity: sha512-I6KnhM5xvSeIf0yqkJVrir+FLbzo0P7WZFO1zp4SYrdXTI5NHIfbBnijHytmWBv6Gs1EXq3/rsdYWUTaBxENVg==}
+    engines: {node: '>=20.0.0'}
+    peerDependencies:
+      graphql: ^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0
+
+  '@graphql-tools/delegate@11.0.1':
+    resolution: {integrity: sha512-S1g4mb6LG6BIfBEUffA6WtVK9E+oilr4hsHz2edd2vg2AOqZDFGDwp7seBgEtG7xLRG5TyqB8B93i3M03rGWFA==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       graphql: ^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0
@@ -971,6 +989,12 @@ packages:
   '@graphql-tools/wrap@10.1.4':
     resolution: {integrity: sha512-7pyNKqXProRjlSdqOtrbnFRMQAVamCmEREilOXtZujxY6kYit3tvWWSjUrcIOheltTffoRh7EQSjpy2JDCzasg==}
     engines: {node: '>=18.0.0'}
+    peerDependencies:
+      graphql: ^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0
+
+  '@graphql-tools/wrap@11.0.1':
+    resolution: {integrity: sha512-V08Vnvt1xhdtDzmyZ9i14mLKREnrGupOTWQSd4tERrJP6HdiMATjk65Ht+ppRSbwDpqVroyR3szitZhnAV2gRw==}
+    engines: {node: '>=20.0.0'}
     peerDependencies:
       graphql: ^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0
 
@@ -8092,6 +8116,14 @@ snapshots:
       graphql: 16.11.0
       tslib: 2.8.1
 
+  '@graphql-tools/batch-execute@10.0.1(graphql@16.11.0)':
+    dependencies:
+      '@graphql-tools/utils': 10.9.1(graphql@16.11.0)
+      '@whatwg-node/promise-helpers': 1.3.2
+      dataloader: 2.2.3
+      graphql: 16.11.0
+      tslib: 2.8.1
+
   '@graphql-tools/batch-execute@9.0.17(graphql@16.11.0)':
     dependencies:
       '@graphql-tools/utils': 10.9.1(graphql@16.11.0)
@@ -8137,6 +8169,19 @@ snapshots:
   '@graphql-tools/delegate@11.0.0(graphql@16.11.0)':
     dependencies:
       '@graphql-tools/batch-execute': 10.0.0(graphql@16.11.0)
+      '@graphql-tools/executor': 1.4.9(graphql@16.11.0)
+      '@graphql-tools/schema': 10.0.25(graphql@16.11.0)
+      '@graphql-tools/utils': 10.9.1(graphql@16.11.0)
+      '@repeaterjs/repeater': 3.0.6
+      '@whatwg-node/promise-helpers': 1.3.2
+      dataloader: 2.2.3
+      dset: 3.1.4
+      graphql: 16.11.0
+      tslib: 2.8.1
+
+  '@graphql-tools/delegate@11.0.1(graphql@16.11.0)':
+    dependencies:
+      '@graphql-tools/batch-execute': 10.0.1(graphql@16.11.0)
       '@graphql-tools/executor': 1.4.9(graphql@16.11.0)
       '@graphql-tools/schema': 10.0.25(graphql@16.11.0)
       '@graphql-tools/utils': 10.9.1(graphql@16.11.0)
@@ -8262,6 +8307,15 @@ snapshots:
   '@graphql-tools/wrap@10.1.4(graphql@16.11.0)':
     dependencies:
       '@graphql-tools/delegate': 10.2.23(graphql@16.11.0)
+      '@graphql-tools/schema': 10.0.25(graphql@16.11.0)
+      '@graphql-tools/utils': 10.9.1(graphql@16.11.0)
+      '@whatwg-node/promise-helpers': 1.3.2
+      graphql: 16.11.0
+      tslib: 2.8.1
+
+  '@graphql-tools/wrap@11.0.1(graphql@16.11.0)':
+    dependencies:
+      '@graphql-tools/delegate': 11.0.1(graphql@16.11.0)
       '@graphql-tools/schema': 10.0.25(graphql@16.11.0)
       '@graphql-tools/utils': 10.9.1(graphql@16.11.0)
       '@whatwg-node/promise-helpers': 1.3.2
@@ -8852,7 +8906,7 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.28.4
       '@mui/core-downloads-tracker': 5.18.0
-      '@mui/system': 5.18.0(@emotion/react@11.13.3(@types/react@18.2.79)(react@18.2.0))(@emotion/styled@11.13.0(@emotion/react@11.13.3(@types/react@18.2.79)(react@18.2.0))(@types/react@18.2.79)(react@18.2.0))(@types/react@18.2.79)(react@18.2.0)
+      '@mui/system': 5.18.0(@emotion/react@11.14.0(@types/react@18.2.79)(react@18.2.0))(@emotion/styled@11.13.0(@emotion/react@11.13.3(@types/react@18.2.79)(react@18.2.0))(@types/react@18.2.79)(react@18.2.0))(@types/react@18.2.79)(react@18.2.0)
       '@mui/types': 7.4.6(@types/react@18.2.79)
       '@mui/utils': 5.17.1(@types/react@18.2.79)(react@18.2.0)
       '@popperjs/core': 2.11.8
@@ -8878,7 +8932,7 @@ snapshots:
     optionalDependencies:
       '@types/react': 18.2.79
 
-  '@mui/styled-engine@5.18.0(@emotion/react@11.13.3(@types/react@18.2.79)(react@18.2.0))(@emotion/styled@11.13.0(@emotion/react@11.13.3(@types/react@18.2.79)(react@18.2.0))(@types/react@18.2.79)(react@18.2.0))(react@18.2.0)':
+  '@mui/styled-engine@5.18.0(@emotion/react@11.14.0(@types/react@18.2.79)(react@18.2.0))(@emotion/styled@11.13.0(@emotion/react@11.13.3(@types/react@18.2.79)(react@18.2.0))(@types/react@18.2.79)(react@18.2.0))(react@18.2.0)':
     dependencies:
       '@babel/runtime': 7.28.4
       '@emotion/cache': 11.14.0
@@ -8887,14 +8941,14 @@ snapshots:
       prop-types: 15.8.1
       react: 18.2.0
     optionalDependencies:
-      '@emotion/react': 11.13.3(@types/react@18.2.79)(react@18.2.0)
+      '@emotion/react': 11.14.0(@types/react@18.2.79)(react@18.2.0)
       '@emotion/styled': 11.13.0(@emotion/react@11.14.0(@types/react@18.2.79)(react@18.2.0))(@types/react@18.2.79)(react@18.2.0)
 
   '@mui/system@5.18.0(@emotion/react@11.13.3(@types/react@18.2.79)(react@18.2.0))(@emotion/styled@11.13.0(@emotion/react@11.13.3(@types/react@18.2.79)(react@18.2.0))(@types/react@18.2.79)(react@18.2.0))(@types/react@18.2.79)(react@18.2.0)':
     dependencies:
       '@babel/runtime': 7.28.4
       '@mui/private-theming': 5.17.1(@types/react@18.2.79)(react@18.2.0)
-      '@mui/styled-engine': 5.18.0(@emotion/react@11.13.3(@types/react@18.2.79)(react@18.2.0))(@emotion/styled@11.13.0(@emotion/react@11.13.3(@types/react@18.2.79)(react@18.2.0))(@types/react@18.2.79)(react@18.2.0))(react@18.2.0)
+      '@mui/styled-engine': 5.18.0(@emotion/react@11.14.0(@types/react@18.2.79)(react@18.2.0))(@emotion/styled@11.13.0(@emotion/react@11.13.3(@types/react@18.2.79)(react@18.2.0))(@types/react@18.2.79)(react@18.2.0))(react@18.2.0)
       '@mui/types': 7.2.24(@types/react@18.2.79)
       '@mui/utils': 5.17.1(@types/react@18.2.79)(react@18.2.0)
       clsx: 2.1.1
@@ -8903,6 +8957,22 @@ snapshots:
       react: 18.2.0
     optionalDependencies:
       '@emotion/react': 11.13.3(@types/react@18.2.79)(react@18.2.0)
+      '@emotion/styled': 11.13.0(@emotion/react@11.14.0(@types/react@18.2.79)(react@18.2.0))(@types/react@18.2.79)(react@18.2.0)
+      '@types/react': 18.2.79
+
+  '@mui/system@5.18.0(@emotion/react@11.14.0(@types/react@18.2.79)(react@18.2.0))(@emotion/styled@11.13.0(@emotion/react@11.13.3(@types/react@18.2.79)(react@18.2.0))(@types/react@18.2.79)(react@18.2.0))(@types/react@18.2.79)(react@18.2.0)':
+    dependencies:
+      '@babel/runtime': 7.28.4
+      '@mui/private-theming': 5.17.1(@types/react@18.2.79)(react@18.2.0)
+      '@mui/styled-engine': 5.18.0(@emotion/react@11.14.0(@types/react@18.2.79)(react@18.2.0))(@emotion/styled@11.13.0(@emotion/react@11.13.3(@types/react@18.2.79)(react@18.2.0))(@types/react@18.2.79)(react@18.2.0))(react@18.2.0)
+      '@mui/types': 7.2.24(@types/react@18.2.79)
+      '@mui/utils': 5.17.1(@types/react@18.2.79)(react@18.2.0)
+      clsx: 2.1.1
+      csstype: 3.1.3
+      prop-types: 15.8.1
+      react: 18.2.0
+    optionalDependencies:
+      '@emotion/react': 11.14.0(@types/react@18.2.79)(react@18.2.0)
       '@emotion/styled': 11.13.0(@emotion/react@11.14.0(@types/react@18.2.79)(react@18.2.0))(@types/react@18.2.79)(react@18.2.0)
       '@types/react': 18.2.79
 

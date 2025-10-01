@@ -366,6 +366,11 @@ export const ServiceList: React.FC = () => {
                               Perms
                             </Badge>
                           )}
+                          {service.enableTypePrefix && (
+                            <Badge color="grape" variant="light" size="xs">
+                              Prefix {service.typePrefix ?? ''}
+                            </Badge>
+                          )}
                         </Group>
                       </td>
                       <td>

@@ -1,5 +1,5 @@
 import { AuthProvider } from '@refinedev/core';
-import { authenticatedFetch, clearAuthData, setAutoRefreshEnabled } from '../utils/auth';
+import { authenticatedFetch, clearAuthData, persistAuthSession } from '../utils/auth';
 
 export const authProvider: AuthProvider = {
   login: async ({ email, password }) => {
@@ -48,17 +48,7 @@ export const authProvider: AuthProvider = {
       const { login: loginData } = result.data;
 
       if (loginData.user && loginData.tokens) {
-        // Store tokens in localStorage
-        localStorage.setItem('accessToken', loginData.tokens.accessToken);
-        localStorage.setItem('refreshToken', loginData.tokens.refreshToken);
-        localStorage.setItem('user', JSON.stringify(loginData.user));
-
-        // Calculate and store token expiry time
-        const expiryTime = Date.now() + loginData.tokens.expiresIn * 1000;
-        localStorage.setItem('tokenExpiry', expiryTime.toString());
-
-        // Enable auto-refresh by default for new sessions
-        setAutoRefreshEnabled(true);
+        persistAuthSession(loginData);
 
         return {
           success: true,

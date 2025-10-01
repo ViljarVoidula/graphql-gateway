@@ -3,12 +3,16 @@ import {
   Arg,
   Ctx,
   Directive,
+  Field,
   FieldResolver,
   ID,
+  InputType,
   Mutation,
+  ObjectType,
   Query,
+  registerEnumType,
   Resolver,
-  Root,
+  Root
 } from 'type-graphql';
 import { Inject, Service } from 'typedi';
 import { Repository } from 'typeorm';
@@ -21,22 +25,56 @@ import {
   deleteSession,
   saveSession,
   SESSION_COOKIE_NAME,
-  YogaContext,
+  YogaContext
 } from '../../auth/session.config';
-import {
-  AuditCategory,
-  AuditEventType,
-  AuditSeverity,
-} from '../../entities/audit-log.entity';
+import { AuditCategory, AuditEventType, AuditSeverity } from '../../entities/audit-log.entity';
 import { Service as ServiceEntity } from '../../entities/service.entity';
 import { Session } from '../../entities/session.entity';
 import { log } from '../../utils/logger';
 import { AuditLogService } from '../audit/audit-log.service';
+import { ConfigurationService } from '../config/configuration.service';
 import { SessionService } from '../sessions/session.service';
 import { LoginInput } from './login.input';
 import { UserUpdateInput } from './user-update.input';
 import { User } from './user.entity';
 import { UserInput } from './user.input';
+
+export enum InitialSetupStage {
+  WELCOME = 'WELCOME',
+  ADMIN = 'ADMIN',
+  SETTINGS = 'SETTINGS',
+  SERVICES = 'SERVICES',
+  DONE = 'DONE'
+}
+
+registerEnumType(InitialSetupStage, { name: 'InitialSetupStage' });
+
+@ObjectType()
+class InitialSetupStatus {
+  @Field()
+  needsInitialAdmin!: boolean;
+
+  @Field()
+  hasAnyUsers!: boolean;
+
+  @Field()
+  setupComplete!: boolean;
+
+  @Field(() => InitialSetupStage)
+  lastCompletedStage!: InitialSetupStage;
+
+  @Field(() => InitialSetupStage)
+  nextStage!: InitialSetupStage;
+}
+
+@InputType()
+class InitializeAdminInput {
+  @Field()
+  email!: string;
+
+  @Field()
+  password!: string;
+}
 
 @Service()
 @Resolver(User)
@@ -46,8 +84,89 @@ export class UserResolver {
     @Inject() private readonly sessionService: SessionService,
     @Inject() private readonly jwtService: JWTService,
     @Inject('ServiceRepository')
-    private readonly serviceRepository: Repository<ServiceEntity>
+    private readonly serviceRepository: Repository<ServiceEntity>,
+    @Inject()
+    private readonly configurationService: ConfigurationService
   ) {}
+
+  private stageStringToEnum(stage: 'welcome' | 'admin' | 'settings' | 'services' | 'done'): InitialSetupStage {
+    switch (stage) {
+      case 'admin':
+        return InitialSetupStage.ADMIN;
+      case 'settings':
+        return InitialSetupStage.SETTINGS;
+      case 'services':
+        return InitialSetupStage.SERVICES;
+      case 'done':
+        return InitialSetupStage.DONE;
+      default:
+        return InitialSetupStage.WELCOME;
+    }
+  }
+
+  private stageEnumToString(stage: InitialSetupStage): 'welcome' | 'admin' | 'settings' | 'services' | 'done' {
+    switch (stage) {
+      case InitialSetupStage.ADMIN:
+        return 'admin';
+      case InitialSetupStage.SETTINGS:
+        return 'settings';
+      case InitialSetupStage.SERVICES:
+        return 'services';
+      case InitialSetupStage.DONE:
+        return 'done';
+      default:
+        return 'welcome';
+    }
+  }
+
+  @Query(() => InitialSetupStatus)
+  async initialSetupStatus(): Promise<InitialSetupStatus> {
+    const userCount = await this.userRepository.count();
+    const hasAnyUsers = userCount > 0;
+    const needsInitialAdmin = userCount === 0;
+    const serviceCount = await this.serviceRepository.count();
+    const hasAnyServices = serviceCount > 0;
+
+    const state = await this.configurationService.getInitialSetupState();
+    let lastStep = state.lastStep;
+    let setupComplete = state.completed;
+
+    if (!hasAnyUsers) {
+      lastStep = 'welcome';
+      setupComplete = false;
+    } else {
+      // Setup completion is now explicit - only complete when stage is marked as 'done'
+      // Don't automatically complete just because services exist
+      setupComplete = state.completed;
+
+      if (state.completed) {
+        lastStep = 'done';
+      } else if (lastStep === 'done' && !state.completed) {
+        // Safety: if lastStep is 'done' but not marked complete, revert to services
+        lastStep = 'services';
+      }
+    }
+
+    const lastCompletedStage = this.stageStringToEnum(lastStep);
+    let nextStage: InitialSetupStage;
+    if (setupComplete) {
+      nextStage = InitialSetupStage.DONE;
+    } else if (needsInitialAdmin) {
+      nextStage = InitialSetupStage.ADMIN;
+    } else if (lastStep === 'admin') {
+      nextStage = InitialSetupStage.SETTINGS;
+    } else {
+      nextStage = InitialSetupStage.SERVICES;
+    }
+
+    return {
+      needsInitialAdmin,
+      hasAnyUsers,
+      setupComplete,
+      lastCompletedStage,
+      nextStage
+    };
+  }
 
   @Query((_returns) => [User])
   @Directive('@authz(rules: ["isAdmin"])')
@@ -57,10 +176,7 @@ export class UserResolver {
 
   @Query((_returns) => User, { nullable: true })
   @Directive('@authz(rules: ["isAuthenticated"])')
-  async user(
-    @Arg('id', () => ID) id: string,
-    @Ctx() context: YogaContext
-  ): Promise<User | null> {
+  async user(@Arg('id', () => ID) id: string, @Ctx() context: YogaContext): Promise<User | null> {
     return this.userRepository.findOneBy({ id });
   }
 
@@ -71,21 +187,109 @@ export class UserResolver {
     return this.userRepository.findOneBy({ id: context.user.id });
   }
 
+  @Mutation(() => AuthResponse)
+  async initializeAdminAccount(@Arg('input') input: InitializeAdminInput, @Ctx() context: YogaContext): Promise<AuthResponse> {
+    const existingUsers = await this.userRepository.count();
+    if (existingUsers > 0) {
+      throw new GraphQLError('Initial admin already exists.');
+    }
+
+    const email = input.email.trim().toLowerCase();
+    const password = input.password.trim();
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new GraphQLError('Please provide a valid email address.');
+    }
+
+    if (password.length < 12) {
+      throw new GraphQLError('Password must be at least 12 characters long.');
+    }
+
+    const containsLetter = /[A-Za-z]/.test(password);
+    const containsDigit = /\d/.test(password);
+    if (!containsLetter || !containsDigit) {
+      throw new GraphQLError('Password must include letters and numbers.');
+    }
+
+    const user = this.userRepository.create({
+      email,
+      permissions: ['admin', 'user'],
+      isEmailVerified: true,
+      failedLoginAttempts: 0
+    });
+    user.setPassword(password);
+    const saved = await this.userRepository.save(user);
+
+    try {
+      await this.configurationService.markInitialSetupStage('admin');
+    } catch (error) {
+      log.warn('Failed to record initial setup admin stage', {
+        operation: 'initialSetup',
+        error: error instanceof Error ? error : new Error(String(error))
+      });
+    }
+
+    const audit = new AuditLogService();
+    try {
+      await audit.log(AuditEventType.USER_LOGIN, {
+        userId: saved.id,
+        action: 'admin_bootstrap',
+        category: AuditCategory.AUTHENTICATION,
+        severity: AuditSeverity.INFO,
+        success: true,
+        metadata: { email }
+      } as any);
+    } catch (error) {
+      log.debug('Failed to record initial admin bootstrap audit event', {
+        operation: 'initialSetup',
+        error: error instanceof Error ? error : new Error(String(error))
+      });
+    }
+
+    return this.login({ email, password }, context);
+  }
+
+  @Mutation(() => InitialSetupStatus)
+  @Directive('@authz(rules: ["isAdmin"])')
+  async updateInitialSetupStage(@Arg('stage', () => InitialSetupStage) stage: InitialSetupStage): Promise<InitialSetupStatus> {
+    const target = this.stageEnumToString(stage);
+
+    if (target === 'welcome' || target === 'admin') {
+      throw new GraphQLError('Stage transition is not allowed for this operation.');
+    }
+
+    if (target === 'services') {
+      const userCount = await this.userRepository.count();
+      if (userCount === 0) {
+        throw new GraphQLError('Create an admin user before configuring services.');
+      }
+    }
+
+    if (target === 'done') {
+      const userCount = await this.userRepository.count();
+      if (userCount === 0) {
+        throw new GraphQLError('Create an admin user before completing setup.');
+      }
+      // Service registration is now optional during onboarding
+    }
+
+    await this.configurationService.markInitialSetupStage(target);
+    return this.initialSetupStatus();
+  }
+
   @Mutation((_returns) => User)
   async createUser(@Arg('data') data: UserInput): Promise<User> {
     try {
       const normalizedEmail = data.email.trim().toLowerCase();
       const existingUser = await this.userRepository.findOneBy({
-        email: normalizedEmail,
+        email: normalizedEmail
       });
       if (existingUser) {
         throw new Error('User with this email already exists');
       }
 
-      const requestedPermissions =
-        data.permissions && data.permissions.length > 0
-          ? data.permissions
-          : ['user'];
+      const requestedPermissions = data.permissions && data.permissions.length > 0 ? data.permissions : ['user'];
       const normalizedPermissions = Array.from(
         new Set(
           requestedPermissions
@@ -93,13 +297,12 @@ export class UserResolver {
             .filter((permission) => permission.length > 0)
         )
       );
-      const finalPermissions =
-        normalizedPermissions.length > 0 ? normalizedPermissions : ['user'];
+      const finalPermissions = normalizedPermissions.length > 0 ? normalizedPermissions : ['user'];
 
       const user = this.userRepository.create({
         email: normalizedEmail,
         permissions: finalPermissions,
-        isEmailVerified: data.isEmailVerified ?? false,
+        isEmailVerified: data.isEmailVerified ?? false
       });
       user.setPassword(data.password);
       const savedUser = await this.userRepository.save(user);
@@ -113,10 +316,7 @@ export class UserResolver {
   }
 
   @Mutation((_returns) => AuthResponse)
-  async login(
-    @Arg('data') data: LoginInput,
-    @Ctx() context: YogaContext
-  ): Promise<AuthResponse> {
+  async login(@Arg('data') data: LoginInput, @Ctx() context: YogaContext): Promise<AuthResponse> {
     const request = (context as any).request;
     const ipAddress =
       request?.headers?.get('x-forwarded-for') ||
@@ -138,7 +338,7 @@ export class UserResolver {
           success: false,
           ipAddress,
           userAgent,
-          riskScore: 5,
+          riskScore: 5
         } as any);
         throw new GraphQLError('Invalid email or password');
       }
@@ -153,11 +353,9 @@ export class UserResolver {
           success: false,
           ipAddress,
           userAgent,
-          riskScore: 70,
+          riskScore: 70
         });
-        throw new GraphQLError(
-          'Account is temporarily locked due to failed login attempts'
-        );
+        throw new GraphQLError('Account is temporarily locked due to failed login attempts');
       }
 
       const isPasswordValid = await user.comparePassword(data.password);
@@ -171,18 +369,15 @@ export class UserResolver {
           userId: user.id,
           metadata: {
             email: user.email,
-            failedAttempts: user.failedLoginAttempts,
+            failedAttempts: user.failedLoginAttempts
           },
           category: AuditCategory.AUTHENTICATION,
-          severity:
-            user.failedLoginAttempts >= 5
-              ? AuditSeverity.HIGH
-              : AuditSeverity.LOW,
+          severity: user.failedLoginAttempts >= 5 ? AuditSeverity.HIGH : AuditSeverity.LOW,
           action: 'login',
           success: false,
           ipAddress,
           userAgent,
-          riskScore: Math.min(10 + user.failedLoginAttempts * 10, 90),
+          riskScore: Math.min(10 + user.failedLoginAttempts * 10, 90)
         });
         throw new GraphQLError('Invalid email or password');
       }
@@ -201,7 +396,7 @@ export class UserResolver {
         isAuthenticated: true,
         loginTime: new Date(),
         lastActivity: new Date(),
-        permissions: user.permissions || ['user'],
+        permissions: user.permissions || ['user']
       };
 
       await saveSession(sessionId, sessionData);
@@ -215,19 +410,14 @@ export class UserResolver {
         );
       }
 
-      await this.sessionService.createSession(
-        user.id,
-        sessionId,
-        ipAddress,
-        userAgent
-      );
+      await this.sessionService.createSession(user.id, sessionId, ipAddress, userAgent);
 
       // Generate JWT tokens
       const tokens = this.jwtService.generateTokens({
         userId: user.id,
         email: user.email,
         permissions: user.permissions || ['user'],
-        sessionId,
+        sessionId
       });
 
       await audit.log(AuditEventType.USER_LOGIN, {
@@ -241,7 +431,7 @@ export class UserResolver {
         success: true,
         ipAddress,
         userAgent,
-        riskScore: 0,
+        riskScore: 0
       });
       return { user, tokens, sessionId };
     } catch (error) {
@@ -267,10 +457,7 @@ export class UserResolver {
       // Clear cookie
       const response = (context as any).response;
       if (response && response.headers) {
-        response.headers.set(
-          'Set-Cookie',
-          `${SESSION_COOKIE_NAME}=; HttpOnly; Secure; SameSite=Strict; Max-Age=0; Path=/`
-        );
+        response.headers.set('Set-Cookie', `${SESSION_COOKIE_NAME}=; HttpOnly; Secure; SameSite=Strict; Max-Age=0; Path=/`);
       }
 
       // Audit log
@@ -282,7 +469,7 @@ export class UserResolver {
           category: AuditCategory.AUTHENTICATION,
           severity: AuditSeverity.INFO,
           success: true,
-          metadata: { reason: 'user_logout', sessionToken: context.sessionId },
+          metadata: { reason: 'user_logout', sessionToken: context.sessionId }
         } as any);
       } catch {}
       return true;
@@ -307,10 +494,7 @@ export class UserResolver {
       // Clear current session cookie
       const response = (context as any).response;
       if (response && response.headers) {
-        response.headers.set(
-          'Set-Cookie',
-          `${SESSION_COOKIE_NAME}=; HttpOnly; Secure; SameSite=Strict; Max-Age=0; Path=/`
-        );
+        response.headers.set('Set-Cookie', `${SESSION_COOKIE_NAME}=; HttpOnly; Secure; SameSite=Strict; Max-Age=0; Path=/`);
       }
 
       try {
@@ -321,7 +505,7 @@ export class UserResolver {
           category: AuditCategory.AUTHENTICATION,
           severity: AuditSeverity.INFO,
           success: true,
-          metadata: { reason: 'user_logout_all' },
+          metadata: { reason: 'user_logout_all' }
         } as any);
       } catch {}
       return true;
@@ -333,10 +517,7 @@ export class UserResolver {
 
   @FieldResolver(() => [Session])
   @Directive('@authz(rules: ["canAccessUserData"])')
-  async sessions(
-    @Root() user: User,
-    @Ctx() context: YogaContext
-  ): Promise<Session[]> {
+  async sessions(@Root() user: User, @Ctx() context: YogaContext): Promise<Session[]> {
     return this.sessionService.getUserActiveSessions(user.id);
   }
 
@@ -347,29 +528,23 @@ export class UserResolver {
   }
 
   @Mutation((_returns) => RefreshTokenResponse)
-  async refreshToken(
-    @Arg('data') data: RefreshTokenInput
-  ): Promise<RefreshTokenResponse> {
+  async refreshToken(@Arg('data') data: RefreshTokenInput): Promise<RefreshTokenResponse> {
     try {
       // Verify refresh token
-      const refreshPayload = this.jwtService.verifyRefreshToken(
-        data.refreshToken
-      );
+      const refreshPayload = this.jwtService.verifyRefreshToken(data.refreshToken);
       if (!refreshPayload) {
         throw new GraphQLError('Invalid or expired refresh token');
       }
 
       // Validate session still exists
-      const sessionData = await this.sessionService.findActiveSession(
-        refreshPayload.sessionId
-      );
+      const sessionData = await this.sessionService.findActiveSession(refreshPayload.sessionId);
       if (!sessionData || !sessionData.isActive) {
         throw new GraphQLError('Session no longer active');
       }
 
       // Get user and validate
       const user = await this.userRepository.findOneBy({
-        id: refreshPayload.userId,
+        id: refreshPayload.userId
       });
       if (!user) {
         throw new GraphQLError('User not found');
@@ -380,12 +555,12 @@ export class UserResolver {
         userId: user.id,
         email: user.email,
         permissions: user.permissions || ['user'],
-        sessionId: refreshPayload.sessionId,
+        sessionId: refreshPayload.sessionId
       });
 
       return {
         tokens,
-        user,
+        user
       };
     } catch (error) {
       if (error instanceof GraphQLError) {
@@ -414,7 +589,7 @@ export class UserResolver {
       // Check if email is being changed and if it's already taken
       if (data.email && data.email !== user.email) {
         const existingUser = await this.userRepository.findOneBy({
-          email: data.email,
+          email: data.email
         });
         if (existingUser) {
           throw new GraphQLError('User with this email already exists');
@@ -458,10 +633,7 @@ export class UserResolver {
 
   @Mutation((_returns) => Boolean)
   @Directive('@authz(rules: ["isAdmin"])')
-  async deleteUser(
-    @Arg('id', () => ID) id: string,
-    @Ctx() context: YogaContext
-  ): Promise<boolean> {
+  async deleteUser(@Arg('id', () => ID) id: string, @Ctx() context: YogaContext): Promise<boolean> {
     try {
       const user = await this.userRepository.findOneBy({ id });
       if (!user) {
@@ -471,7 +643,7 @@ export class UserResolver {
       // Prevent deletion of the last admin user
       if (user.permissions.includes('admin')) {
         const adminCount = await this.userRepository.count({
-          where: { permissions: 'admin' },
+          where: { permissions: 'admin' }
         });
         if (adminCount <= 1) {
           throw new GraphQLError('Cannot delete the last admin user');

@@ -32,6 +32,8 @@ interface ServiceFormData {
   enableBatching: boolean;
   useMsgPack: boolean;
   enablePermissionChecks: boolean;
+  enableTypePrefix: boolean;
+  typePrefix?: string | null;
   status?: 'active' | 'inactive' | 'maintenance';
 }
 
@@ -72,6 +74,8 @@ export const ServiceEdit: React.FC = () => {
       enableBatching: true,
       useMsgPack: false,
       enablePermissionChecks: false,
+      enableTypePrefix: false,
+      typePrefix: '',
       status: 'active',
     },
   });
@@ -91,10 +95,40 @@ export const ServiceEdit: React.FC = () => {
         enableBatching: service.enableBatching ?? true,
         useMsgPack: service.useMsgPack ?? false,
         enablePermissionChecks: service.enablePermissionChecks ?? false,
+        enableTypePrefix: service.enableTypePrefix ?? false,
+        typePrefix: service.typePrefix ?? '',
         status: (service.status as any) || 'active',
       });
     }
   }, [service, reset]);
+
+  const deriveTypePrefix = React.useCallback((name: string) => {
+    const tokens = (name || '').split(/[^a-zA-Z0-9]+/).filter(Boolean);
+    let candidate = tokens
+      .map((token) => token.charAt(0).toUpperCase() + token.slice(1).toLowerCase())
+      .join('');
+    if (!candidate) candidate = 'Service';
+    if (!/^[A-Za-z_]/.test(candidate)) {
+      candidate = `Svc${candidate}`;
+    }
+    if (!candidate.endsWith('_')) {
+      candidate = `${candidate}_`;
+    }
+    return candidate.slice(0, 64);
+  }, []);
+
+  React.useEffect(() => {
+    if (watchedValues.enableTypePrefix) {
+      const current = watchedValues.typePrefix?.trim();
+      if (!current) {
+        setValue('typePrefix', deriveTypePrefix(watchedValues.name || service?.name || ''), {
+          shouldDirty: false,
+          shouldTouch: false,
+          shouldValidate: false,
+        });
+      }
+    }
+  }, [watchedValues.enableTypePrefix, watchedValues.typePrefix, watchedValues.name, service?.name, setValue, deriveTypePrefix]);
 
   const toggleExternallyAccessible = () => {
     if (!service) return;
@@ -128,11 +162,21 @@ export const ServiceEdit: React.FC = () => {
   };
 
   const onSubmit = (values: ServiceFormData) => {
+    const payload: ServiceFormData = {
+      ...values,
+      typePrefix: values.enableTypePrefix
+        ? values.typePrefix?.trim() || undefined
+        : undefined
+    };
+    if (!values.enableTypePrefix) {
+      (payload as any).typePrefix = null;
+    }
+
     updateService(
       {
         resource: 'services',
         id: id!,
-        values,
+        values: payload,
       },
       {
         onSuccess: () => {
@@ -321,6 +365,36 @@ export const ServiceEdit: React.FC = () => {
               checked={watchedValues.enablePermissionChecks}
               {...register('enablePermissionChecks')}
             />
+
+            <Switch
+              label="Enable Prefix for Type Resolution"
+              description="Automatically prefix remote types to avoid naming conflicts"
+              checked={watchedValues.enableTypePrefix}
+              {...register('enableTypePrefix')}
+            />
+
+            {(() => {
+              const field = register('typePrefix');
+              return (
+                <TextInput
+                  label="Type Prefix"
+                  placeholder="e.g., Users_"
+                  description="Applies to non-root types when prefixing is enabled"
+                  name={field.name}
+                  ref={field.ref}
+                  disabled={!watchedValues.enableTypePrefix}
+                  value={watchedValues.typePrefix ?? ''}
+                  onChange={(event) => {
+                    field.onChange(event);
+                    setValue('typePrefix', event.currentTarget.value, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    });
+                  }}
+                  onBlur={field.onBlur}
+                />
+              );
+            })()}
 
             <Select
               label="Status"

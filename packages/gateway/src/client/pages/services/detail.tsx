@@ -469,6 +469,20 @@ export const ServiceDetail: React.FC = () => {
                   </Group>
                   <Group position="apart">
                     <Text size="sm" color="dimmed" weight={500}>
+                      Type Prefixing
+                    </Text>
+                    {service.enableTypePrefix ? (
+                      <Badge color="grape" variant="light">
+                        {service.typePrefix}
+                      </Badge>
+                    ) : (
+                      <Badge color="gray" variant="light">
+                        Disabled
+                      </Badge>
+                    )}
+                  </Group>
+                  <Group position="apart">
+                    <Text size="sm" color="dimmed" weight={500}>
                       Permission Checks
                     </Text>
                     <Badge

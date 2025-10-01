@@ -30,6 +30,7 @@ interface LoadedEndpoint {
   url: string;
   sdl: string;
   useMsgPack?: boolean; // capability flag sourced from Service table
+  typePrefix?: string; // optional type prefix applied during stitching
 }
 
 interface EndpointCache {
@@ -90,15 +91,22 @@ export class SchemaLoader {
           const now = Date.now();
           const cachedSchema = schemaCache.get(url);
 
-          // Helper function to get useMsgPack flag from service table
-          const getUseMsgPackFlag = async (): Promise<boolean | undefined> => {
+          const serviceRepo = dataSource.getRepository(Service);
+          let serviceRecord: Service | null | undefined;
+          const getServiceRecord = async (): Promise<Service | null> => {
+            if (serviceRecord !== undefined) return serviceRecord;
             try {
-              const serviceRepo = dataSource.getRepository(Service);
-              const svc = await serviceRepo.findOne({ where: { url } });
-              return svc?.useMsgPack;
-            } catch {
-              return undefined;
+              serviceRecord = await serviceRepo.findOne({ where: { url } });
+            } catch (error) {
+              log.warn('Failed to fetch service metadata for endpoint', {
+                operation: 'schemaLoader.fetchServiceMeta',
+                error:
+                  error instanceof Error ? error : new Error(String(error)),
+                metadata: { url },
+              });
+              serviceRecord = null;
             }
+            return serviceRecord;
           };
 
           const forceBypass =
@@ -117,8 +125,17 @@ export class SchemaLoader {
               }
             );
             if (cachedSchema) {
-              const useMsgPack = await getUseMsgPackFlag();
-              loadedEndpoints.push({ url, sdl: cachedSchema.sdl, useMsgPack });
+              const svc = await getServiceRecord();
+              const useMsgPack = svc?.useMsgPack;
+              const typePrefix = svc?.enableTypePrefix
+                ? svc.typePrefix ?? undefined
+                : undefined;
+              loadedEndpoints.push({
+                url,
+                sdl: cachedSchema.sdl,
+                useMsgPack,
+                typePrefix,
+              });
             }
             return;
           }
@@ -177,13 +194,12 @@ export class SchemaLoader {
 
             const sdl = printSchema(buildClientSchema(data));
             // fetch useMsgPack from service table (best effort)
-            let useMsgPack: boolean | undefined;
-            try {
-              const serviceRepo = dataSource.getRepository(Service);
-              const svc = await serviceRepo.findOne({ where: { url } });
-              useMsgPack = svc?.useMsgPack;
-            } catch {}
-            loadedEndpoints.push({ url, sdl, useMsgPack });
+            const svc = await getServiceRecord();
+            const useMsgPack = svc?.useMsgPack;
+            const typePrefix = svc?.enableTypePrefix
+              ? svc.typePrefix ?? undefined
+              : undefined;
+            loadedEndpoints.push({ url, sdl, useMsgPack, typePrefix });
 
             // Health success (record + unconditional promotion of any INACTIVE services with this URL)
             healthMonitor.recordSuccess(url);
@@ -229,9 +245,8 @@ export class SchemaLoader {
 
             // Persist change if SDL differs from saved service.sdl
             try {
-              const serviceRepo = dataSource.getRepository(Service);
               const changeRepo = dataSource.getRepository(SchemaChange);
-              const service = await serviceRepo.findOne({ where: { url } });
+              const service = await getServiceRecord();
               if (service) {
                 const diff = diffSchemas(service.sdl, sdl);
                 if (diff) {
@@ -314,8 +329,17 @@ export class SchemaLoader {
               log.warn(
                 `Using expired cached schema for ${url} (age: ${Math.round(cacheAge / 1000)}s)`
               );
-              const useMsgPack = await getUseMsgPackFlag();
-              loadedEndpoints.push({ url, sdl: cachedSchema.sdl, useMsgPack });
+              const svc = await getServiceRecord();
+              const useMsgPack = svc?.useMsgPack;
+              const typePrefix = svc?.enableTypePrefix
+                ? svc.typePrefix ?? undefined
+                : undefined;
+              loadedEndpoints.push({
+                url,
+                sdl: cachedSchema.sdl,
+                useMsgPack,
+                typePrefix,
+              });
             } else {
               log.warn(
                 `No cached schema available for ${url}, skipping service`

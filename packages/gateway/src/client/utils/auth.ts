@@ -131,6 +131,35 @@ export const clearAuthData = (): void => {
   localStorage.removeItem('tokenExpiry');
 };
 
+interface PersistAuthPayload {
+  user: {
+    id: string;
+    email: string;
+    permissions?: string[];
+  };
+  tokens: {
+    accessToken: string;
+    refreshToken: string;
+    expiresIn: number;
+    tokenType?: string;
+  };
+}
+
+export const persistAuthSession = (payload: PersistAuthPayload): void => {
+  if (!payload?.tokens || !payload?.user) {
+    throw new Error('Missing authentication payload.');
+  }
+
+  localStorage.setItem('accessToken', payload.tokens.accessToken);
+  localStorage.setItem('refreshToken', payload.tokens.refreshToken);
+  localStorage.setItem('user', JSON.stringify(payload.user));
+
+  const expiryTime = Date.now() + payload.tokens.expiresIn * 1000;
+  localStorage.setItem('tokenExpiry', expiryTime.toString());
+
+  setAutoRefreshEnabled(true);
+};
+
 // Enhanced fetch function with automatic token refresh
 export const authenticatedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
   let token = localStorage.getItem('accessToken');

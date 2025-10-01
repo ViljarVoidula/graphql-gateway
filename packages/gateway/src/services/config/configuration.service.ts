@@ -88,6 +88,17 @@ export class ConfigurationService {
   private readonly RESPONSE_CACHE_SCOPE_KEY = 'responseCache.scope'; // 'global' | 'per-session'
   private readonly RESPONSE_CACHE_TTL_PER_TYPE_KEY = 'responseCache.ttlPerType'; // json: { [TypeName]: number(ms) }
   private readonly RESPONSE_CACHE_TTL_PER_COORD_KEY = 'responseCache.ttlPerSchemaCoordinate'; // json: { ["Type.field"]: number(ms) }
+  private readonly INITIAL_SETUP_STATE_KEY = 'setup.initial.state';
+
+  private sanitizeSetupStage(value: any): 'welcome' | 'admin' | 'settings' | 'services' | 'done' {
+    if (typeof value === 'string') {
+      const normalized = value.toLowerCase();
+      if (normalized === 'admin' || normalized === 'settings' || normalized === 'services' || normalized === 'done') {
+        return normalized as 'admin' | 'settings' | 'services' | 'done';
+      }
+    }
+    return 'welcome';
+  }
 
   /**
    * Returns audit log retention in days. Falls back to env or default if not yet configured.
@@ -390,6 +401,44 @@ export class ConfigurationService {
       metadata: { scope: normalized }
     });
     return normalized;
+  }
+
+  async getInitialSetupState(): Promise<{
+    completed: boolean;
+    lastStep: 'welcome' | 'admin' | 'settings' | 'services' | 'done';
+  }> {
+    const value = await this.load(this.INITIAL_SETUP_STATE_KEY);
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const obj = value as Record<string, unknown>;
+      const stage = this.sanitizeSetupStage(obj.lastStep);
+      const completed = obj.completed === true;
+      return { completed, lastStep: stage };
+    }
+    return { completed: false, lastStep: 'welcome' };
+  }
+
+  async markInitialSetupStage(
+    stage: 'welcome' | 'admin' | 'settings' | 'services' | 'done'
+  ): Promise<{ completed: boolean; lastStep: 'welcome' | 'admin' | 'settings' | 'services' | 'done' }> {
+    const sanitizedStage = this.sanitizeSetupStage(stage);
+    const current = await this.getInitialSetupState();
+
+    if (current.completed && sanitizedStage !== 'done') {
+      return current; // once completed, remain completed unless explicitly set to done again
+    }
+
+    const next = {
+      completed: current.completed || sanitizedStage === 'done',
+      lastStep: sanitizedStage
+    } as const;
+
+    await this.upsert(this.INITIAL_SETUP_STATE_KEY, next as any);
+    gatewayInternalLog.info('Updated initial setup stage', {
+      operation: 'configurationUpdate',
+      metadata: { stage: next.lastStep, completed: next.completed }
+    });
+
+    return next;
   }
 
   /**

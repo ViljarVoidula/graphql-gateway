@@ -8,7 +8,6 @@
     "build:admin": "webpack --mode=production",
     "dev:admin": "webpack serve --mode=development",
     "build": "npm run build:admin && tsc",
-    "seed:admin": "./scripts/run-with-env.sh ts-node src/db/seed-admin.ts",
     "docs:manifest": "ts-node scripts/generate-docs-manifest.ts",
     "docs:introspect": "ts-node scripts/introspect-schema.ts",
     "docs:build": "npm run docs:manifest && npm run docs:introspect && npm run build:admin",
@@ -33,6 +32,7 @@
     "worker:api-key-usage": "ts-node -r tsconfig-paths/register src/workers/api-key-usage-consolidator.ts"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
     "@envelop/response-cache-redis": "^4.2.4",
     "@escape.tech/graphql-armor": "3.1.6",
     "@graphql-authz/core": "1.3.2",
@@ -43,6 +43,7 @@
     "@graphql-tools/stitch": "9.0.4",
     "@graphql-tools/stitching-directives": "4.0.0",
     "@graphql-tools/utils": "10.2.0",
+    "@graphql-tools/wrap": "^11.0.1",
     "@graphql-yoga/plugin-graphql-sse": "3.6.2",
     "@graphql-yoga/plugin-response-cache": "^3.18.0",
     "@graphql-yoga/redis-event-target": "3.0.1",
